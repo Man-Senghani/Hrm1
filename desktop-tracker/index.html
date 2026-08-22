@@ -68,6 +68,23 @@
             </button>
         </div>
 
+        <!-- 🛡️ Checkout Completed Card -->
+        <div id="checkout-completed-section" class="checkout-completed-card" style="display: none;">
+            <div class="completed-icon-wrapper">
+                <span class="material-symbols-outlined">verified</span>
+            </div>
+            <h2 class="completed-title">WORKDAY COMPLETED</h2>
+            <p class="completed-desc">You have ended your workday for today.</p>
+            <div class="completed-info-box">
+                <span class="material-symbols-outlined info-icon">info</span>
+                <p class="completed-info-text">If you want to start or restart the timer, please contact your <strong>HR, Manager, or Admin</strong>.</p>
+            </div>
+            <button id="completed-logout-btn" class="ctrl-btn secondary" style="margin-top: 20px; width: 100%; max-width: 290px;">
+                <span class="material-symbols-outlined">logout</span>
+                LOGOUT
+            </button>
+        </div>
+
         <div class="analytics-footer">
             <div class="footer-node">
                 <p class="node-label">INACTIVE TIME</p>
@@ -75,49 +92,59 @@
             </div>
             <div class="footer-node text-right">
                 <p class="node-label">PROTOCOL VERSION</p>
-                <p class="node-value" id="version-display">V1.1.5 PRO</p>
+                <p class="node-value" id="version-display">V1.2.8 PRO</p>
             </div>
         </div>
 
-        <div class="auth-overlay" id="auth-section">
-            <div class="title-bar" style="position: absolute; top: 12px; left: 24px; right: 24px; margin-bottom: 0;">
+        <div class="auth-overlay" id="auth-section" style="display: none;">
+            <div class="title-bar auth-title-bar">
                 <div class="brand">
                     <span class="material-symbols-outlined text-orange">bolt</span>
-                    <span class="brand-text">FLUID<span class="text-orange">HR</span></span>
+                    <span class="brand-text">FLUID<span class="text-orange">HR</span> TRACKER</span>
                 </div>
                 <div class="window-controls">
                     <button id="auth-minimize-btn" class="win-ctrl"><span class="material-symbols-outlined">remove</span></button>
                     <button id="auth-close-btn" class="win-ctrl"><span class="material-symbols-outlined">close</span></button>
                 </div>
             </div>
-            <div class="auth-card" style="text-align: center;">
-                <div style="width: 64px; height: 64px; border-radius: 50%; background: rgba(0, 167, 107, 0.1); display: flex; align-items: center; justify-content: center; margin: 0 auto 24px; color: #00a76b;">
-                    <span class="material-symbols-outlined" style="font-size: 36px;">bolt</span>
+            <div class="auth-card">
+                <div class="auth-icon-wrapper">
+                    <span class="material-symbols-outlined auth-icon">bolt</span>
                 </div>
-                <h3 style="margin-bottom: 8px; font-weight: 800; color: var(--text-white); letter-spacing: 0.1em;">FLUIDHR TRACKER</h3>
-                <p style="font-size: 11px; font-weight: 600; line-height: 1.6; color: #939084; margin-bottom: 32px; text-transform: uppercase; letter-spacing: 0.05em;">Single Identity Protocol. Please authenticate using the web portal.</p>
-                <button id="web-auth-btn" class="ctrl-btn primary" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                <h3 class="auth-title">FLUIDHR TRACKER</h3>
+                <p class="auth-subtitle">Single Identity Protocol. Please authenticate using the web portal.</p>
+                <button id="web-auth-btn" class="ctrl-btn primary auth-btn">
                     <span class="material-symbols-outlined">open_in_browser</span>
                     SIGN IN WITH WEBSITE
                 </button>
-                <p id="auth-error" style="color: #ff4f00; font-size: 10px; font-weight: 800; margin: 12px 0 0 0; text-transform: uppercase; letter-spacing: 0.1em; display: none;"></p>
+                <p id="auth-error" class="auth-error-msg" style="display: none;"></p>
             </div>
         </div>
 
         <!-- Update Dialog Overlay -->
-        <div class="auth-overlay" id="update-section" style="display: none; z-index: 2000; background: rgba(248, 249, 250, 0.95); justify-content: center; align-items: center; backdrop-filter: blur(10px);">
-            <div class="auth-card" style="max-width: 320px; text-align: center; border: none; box-shadow: none; outline: none;">
-                <div style="width: 56px; height: 56px; border-radius: 50%; background: rgba(0, 167, 107, 0.1); display: flex; align-items: center; justify-content: center; margin: 0 auto 20px; color: #00a76b;">
-                    <span class="material-symbols-outlined" style="font-size: 32px;">system_update_alt</span>
+        <div class="update-overlay" id="update-section" style="display: none;">
+            <div class="title-bar auth-title-bar">
+                <div class="brand">
+                    <span class="material-symbols-outlined text-orange">bolt</span>
+                    <span class="brand-text">FLUID<span class="text-orange">HR</span> TRACKER</span>
                 </div>
-                <h3 style="margin-bottom: 12px; font-weight: 800; color: var(--text-white); letter-spacing: 0.1em;">UPDATE AVAILABLE</h3>
-                <p style="font-size: 11px; font-weight: 600; line-height: 1.6; color: #939084; margin-bottom: 24px; text-transform: uppercase; letter-spacing: 0.05em;">A new version of FluidHR Tracker has been downloaded. Restart now to apply the update?</p>
-                <div style="display: flex; flex-direction: column; gap: 10px;">
-                    <button id="update-restart-btn" class="ctrl-btn primary" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                <div class="window-controls">
+                    <button id="update-minimize-btn" class="win-ctrl"><span class="material-symbols-outlined">remove</span></button>
+                    <button id="update-close-btn" class="win-ctrl"><span class="material-symbols-outlined">close</span></button>
+                </div>
+            </div>
+            <div class="update-card">
+                <div class="update-icon-wrapper">
+                    <span class="material-symbols-outlined update-icon">system_update_alt</span>
+                </div>
+                <h3 class="update-title">UPDATE READY</h3>
+                <p class="update-subtitle">A new version of FluidHR Tracker has been downloaded and is ready to install.</p>
+                <div class="update-btn-group">
+                    <button id="update-restart-btn" class="ctrl-btn primary update-action-btn">
                         <span class="material-symbols-outlined">restart_alt</span>
                         RESTART NOW
                     </button>
-                    <button id="update-later-btn" class="ctrl-btn secondary" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                    <button id="update-later-btn" class="ctrl-btn secondary update-action-btn">
                         <span class="material-symbols-outlined">schedule</span>
                         LATER
                     </button>

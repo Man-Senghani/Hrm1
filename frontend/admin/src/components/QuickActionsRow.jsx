@@ -12,10 +12,11 @@ const QuickActionsRow = ({ role = 'admin', title = 'Quick Actions' }) => {
   const navigate = useNavigate();
   const [isCheckedIn, setIsCheckedIn] = useState(false);
   const [checkInLoading, setCheckInLoading] = useState(false);
+  const [initialChecking, setInitialChecking] = useState(true);
+  const [showTrackerModal, setShowTrackerModal] = useState(false);
   const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'));
   const [hoveredIndex, setHoveredIndex] = useState(null);
   const [checkInHovered, setCheckInHovered] = useState(false);
-  const [showTrackerModal, setShowTrackerModal] = useState(false);
 
   useEffect(() => {
     const observer = new MutationObserver(() => {
@@ -129,7 +130,7 @@ const QuickActionsRow = ({ role = 'admin', title = 'Quick Actions' }) => {
         return;
       }
 
-      // 2. Fallback direct checkout if app is not running
+      // 2. Direct backend clock-out
       try {
         await axios.put('/api/attendance/clock-out', {}, { headers });
       } catch (_) { }

@@ -13,6 +13,7 @@ import {
   ResponsiveContainer, Legend, AreaChart, Area, PieChart, Pie, Cell
 } from 'recharts';
 import TimeTrackerWidget from '@shared/components/TimeTrackerWidget';
+import ViewHolidaysDrawer from '../components/modals/ViewHolidaysDrawer';
 
 // ─── ATTRACTIVE CUSTOM DATE PICKER ─────────────────────────
 export const AttendanceDatePicker = ({ value, onChange, placeholder = 'dd-mm-yyyy' }) => {
@@ -526,6 +527,22 @@ const Attendance = () => {
 
   const [todayLiveStatus, setTodayLiveStatus] = useState(null);
   const [teamLiveSessions, setTeamLiveSessions] = useState([]);
+  const [isHolidaysDrawerOpen, setIsHolidaysDrawerOpen] = useState(false);
+  const [holidays, setHolidays] = useState([]);
+
+  useEffect(() => {
+    const fetchHolidays = async () => {
+      const token = sessionStorage.getItem('token');
+      if (!token) return;
+      try {
+        const res = await axios.get('/api/holidays', { headers: { Authorization: `Bearer ${token}` } });
+        setHolidays(Array.isArray(res.data) ? res.data : []);
+      } catch (err) {
+        console.error('Failed to fetch holidays in Attendance:', err);
+      }
+    };
+    fetchHolidays();
+  }, []);
 
   useEffect(() => {
     if (viewContext === 'employee') return;
@@ -1474,44 +1491,71 @@ const Attendance = () => {
           <Card className="h-full flex flex-col justify-between p-4 shadow-xs transition-colors duration-300 hover:!border-purple-500 dark:hover:!border-purple-400">
             <div>
               <div className="flex items-center justify-between mb-3.5">
-                <h3 className="text-sm font-extrabold text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
-                  <Calendar size={16} className="text-purple-500" />
-                  <span>Upcoming Holidays</span>
+                <h3 className="text-base font-bold text-gray-900 dark:text-white tracking-tight">
+                  Upcoming Holidays
                 </h3>
                 <button
-                  onClick={() => navigate(`/${userRole}/holidays`)}
-                  className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
+                  type="button"
+                  onClick={() => setIsHolidaysDrawerOpen(true)}
+                  className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 hover:underline transition-colors cursor-pointer"
                 >
                   View Calendar
                 </button>
               </div>
 
-              <div className="space-y-2.5">
-                {[
-                  { name: 'raksha-bandhan', date: '28 Aug 2026', day: 'Friday' },
-                  { name: 'Janmashtami', date: '04 Sept 2026', day: 'Friday' },
-                  { name: 'Ganesh Chaturthi', date: '14 Sept 2026', day: 'Monday' },
-                  { name: 'Milad-un-Nabi', date: '15 Sept 2026', day: 'Tuesday' },
-                  { name: 'Gandhi Jayanti', date: '02 Oct 2026', day: 'Friday' }
-                ].map((item, idx) => (
-                  <div
-                    key={idx}
-                    className="flex items-center justify-between p-2.5 rounded-xl border border-slate-100 dark:border-[#203a32] bg-slate-50/50 dark:bg-[#10241e]/50 hover:bg-purple-50/40 dark:hover:bg-purple-950/20 transition-all"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400 flex items-center justify-center shrink-0">
-                        <Calendar size={15} />
-                      </div>
-                      <div>
-                        <p className="text-xs font-extrabold text-slate-800 dark:text-slate-100">{item.date}</p>
-                        <p className="text-[10px] font-bold text-slate-400 dark:text-[#829e92]">{item.day}</p>
-                      </div>
-                    </div>
-                    <span className="text-xs font-extrabold text-slate-700 dark:text-slate-200">
-                      {item.name}
-                    </span>
+              <div className="space-y-2">
+                {holidays.length > 0 ? (
+                  holidays
+                    .filter(h => {
+                      if (!h || !h.date || h.isActive === false) return false;
+                      const hDate = new Date(h.date);
+                      const today = new Date();
+                      today.setHours(0, 0, 0, 0);
+                      return !isNaN(hDate.getTime()) && hDate >= today;
+                    })
+                    .sort((a, b) => new Date(a.date) - new Date(b.date))
+                    .slice(0, 5)
+                    .map((h, idx) => {
+                      const hDate = new Date(h.date);
+                      const dateStr = hDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+                      const dayStr = hDate.toLocaleDateString('en-GB', { weekday: 'long' });
+
+                      const accentThemes = [
+                        { pillar: 'bg-purple-500 dark:bg-purple-400', iconBg: 'bg-purple-100 dark:bg-purple-950/70 text-purple-600 dark:text-purple-400', bg: 'bg-slate-50/90 dark:bg-[#162420]/80 hover:bg-purple-50/60 dark:hover:bg-[#1e322c]' },
+                        { pillar: 'bg-indigo-500 dark:bg-indigo-400', iconBg: 'bg-indigo-100 dark:bg-indigo-950/70 text-indigo-600 dark:text-indigo-400', bg: 'bg-slate-50/90 dark:bg-[#162420]/80 hover:bg-indigo-50/60 dark:hover:bg-[#1e322c]' },
+                        { pillar: 'bg-pink-500 dark:bg-pink-400', iconBg: 'bg-pink-100 dark:bg-pink-950/70 text-pink-600 dark:text-pink-400', bg: 'bg-slate-50/90 dark:bg-[#162420]/80 hover:bg-pink-50/60 dark:hover:bg-[#1e322c]' },
+                        { pillar: 'bg-emerald-500 dark:bg-emerald-400', iconBg: 'bg-emerald-100 dark:bg-emerald-950/70 text-emerald-600 dark:text-emerald-400', bg: 'bg-slate-50/90 dark:bg-[#162420]/80 hover:bg-emerald-50/60 dark:hover:bg-[#1e322c]' },
+                        { pillar: 'bg-amber-500 dark:bg-amber-400', iconBg: 'bg-amber-100 dark:bg-amber-950/70 text-amber-600 dark:text-amber-400', bg: 'bg-slate-50/90 dark:bg-[#162420]/80 hover:bg-amber-50/60 dark:hover:bg-[#1e322c]' }
+                      ];
+                      const theme = accentThemes[idx % accentThemes.length];
+
+                      return (
+                        <div
+                          key={idx}
+                          onClick={() => setIsHolidaysDrawerOpen(true)}
+                          className={`flex items-center justify-between py-2 px-3 rounded-xl transition-all duration-200 cursor-pointer hover:shadow-md hover:translate-x-0.5 ${theme.bg}`}
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <div className={`w-1.5 h-6 rounded-full shrink-0 ${theme.pillar}`} />
+                            <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${theme.iconBg}`}>
+                              <Calendar size={14} />
+                            </div>
+                            <div>
+                              <h4 className="text-xs font-black text-gray-900 dark:text-white leading-tight">{dateStr}</h4>
+                              <p className="text-[9px] text-gray-500 dark:text-gray-400 leading-none mt-0.5">{dayStr}</p>
+                            </div>
+                          </div>
+                          <div className="font-bold text-xs text-gray-900 dark:text-white text-right">
+                            {h.name || h.title}
+                          </div>
+                        </div>
+                      );
+                    })
+                ) : (
+                  <div className="text-center py-6 text-gray-400 font-medium text-xs">
+                    No upcoming holidays
                   </div>
-                ))}
+                )}
               </div>
             </div>
           </Card>
@@ -1948,6 +1992,13 @@ const Attendance = () => {
           )}
         </div>
       </Card>
+
+      {/* View Holidays Drawer */}
+      <ViewHolidaysDrawer
+        isOpen={isHolidaysDrawerOpen}
+        onClose={() => setIsHolidaysDrawerOpen(false)}
+        holidays={holidays}
+      />
     </div>
   );
 };

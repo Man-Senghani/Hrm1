@@ -309,7 +309,7 @@ const AdminDashboard = () => {
     );
   }
 
-  const { stats, charts, leaveOverview, payrollSummary, recentJoiners, pendingApprovals, announcements, upcomingCelebrations = [] } = dashboardData;
+  const { stats, charts, leaveOverview, payrollSummary, recruitmentOverview, recentJoiners, pendingApprovals, announcements, upcomingCelebrations = [] } = dashboardData;
   const getGreeting = () => {
     const h = new Date().getHours();
     if (h < 12) return 'Good Morning';
@@ -325,6 +325,14 @@ const AdminDashboard = () => {
     rejected: 0,
     cancelled: 0,
     pending: 0
+  };
+
+  const currentRecOverview = recruitmentOverview?.byPeriod?.[recruitmentPeriod] || recruitmentOverview || {
+    newApplications: 0,
+    shortlisted: 0,
+    interviewsScheduled: 0,
+    offersIssued: 0,
+    hires: 0
   };
 
   return (
@@ -509,12 +517,12 @@ const AdminDashboard = () => {
                         onMouseEnter={() => setHoveredDeptIndex(index)}
                         onMouseLeave={() => setHoveredDeptIndex(null)}
                         className={`flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-lg cursor-pointer transition-all duration-200 ${isHovered
-                          ? 'bg-gray-100 dark:bg-gray-800 scale-105 shadow-xs'
+                          ? 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white scale-105 shadow-xs'
                           : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
                           }`}
                       >
                         <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: COLORS[index % COLORS.length] }}></span>
-                        <span>{entry.name}:</span>
+                        <span className={isHovered ? 'text-gray-900 dark:text-white' : 'text-gray-600 dark:text-gray-300'}>{entry.name}:</span>
                         <span className="text-gray-900 dark:text-white font-bold">{entry.value}</span>
                       </div>
                     );
@@ -580,12 +588,12 @@ const AdminDashboard = () => {
                         onMouseEnter={() => setHoveredGenderIndex(index)}
                         onMouseLeave={() => setHoveredGenderIndex(null)}
                         className={`flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-lg cursor-pointer transition-all duration-200 ${isHovered
-                          ? 'bg-gray-100 dark:bg-gray-800 scale-105 shadow-xs'
+                          ? 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white scale-105 shadow-xs'
                           : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
                           }`}
                       >
                         <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: ['#3b82f6', '#f43f5e', '#f59e0b'][index % 3] }}></span>
-                        <span>{entry.name}:</span>
+                        <span className={isHovered ? 'text-gray-900 dark:text-white' : 'text-gray-600 dark:text-gray-300'}>{entry.name}:</span>
                         <span className="text-gray-900 dark:text-white font-bold">{entry.value}</span>
                       </div>
                     );
@@ -672,13 +680,24 @@ const AdminDashboard = () => {
 
         <Card className="p-6 flex flex-col justify-between hover:!border-[#f59e0b] dark:hover:!border-[#fbbf24] transition-colors duration-300">
           <div>
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="font-bold text-gray-900 dark:text-white">Payroll Summary</h3>
-              <CustomDropdown
-                value={payrollPeriod}
-                onChange={setPayrollPeriod}
-                options={[payrollPeriod]}
-              />
+            <div className="flex justify-between items-center mb-6 gap-2">
+              <h3 className="font-bold text-gray-900 dark:text-white text-base truncate min-w-0">Payroll Summary</h3>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => navigate(`/${pathRole}/payroll`)}
+                  className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-950/40 px-2 py-1 rounded-lg flex items-center gap-0.5 transition-all cursor-pointer whitespace-nowrap"
+                  title="View Payroll Details"
+                >
+                  <span>View</span>
+                  <ChevronRight size={13} strokeWidth={2.5} />
+                </button>
+                <CustomDropdown
+                  value={payrollPeriod}
+                  onChange={setPayrollPeriod}
+                  options={[payrollPeriod]}
+                />
+              </div>
             </div>
             <h2 className="text-[18px] font-black text-gray-900 dark:text-white mb-0.5">{formatCurrency(payrollSummary.total)}</h2>
             <p className="text-xs font-semibold text-gray-500 mb-3">Total Payroll Cost</p>
@@ -699,9 +718,6 @@ const AdminDashboard = () => {
               </div>
             </div>
           </div>
-          <button onClick={() => navigate(`/${pathRole}/payroll`)} className="w-full mt-3 bg-gray-50 hover:bg-gray-100 text-gray-700 font-bold py-2 rounded-xl text-xs transition-colors flex items-center justify-center gap-1.5">
-            View Payroll Details <ChevronRight size={14} />
-          </button>
         </Card>
 
         <Card className="p-4 sm:p-5 flex flex-col justify-between hover:!border-[#8b5cf6] dark:hover:!border-[#a78bfa] transition-colors duration-300">
@@ -716,13 +732,19 @@ const AdminDashboard = () => {
             </div>
             <div className="space-y-2">
               {[
-                { label: 'New Applications', val: '0', icon: FileText, color: 'text-blue-500', bg: 'bg-blue-50 dark:bg-blue-900/30' },
-                { label: 'Shortlisted', val: '0', icon: CheckCircle, color: 'text-indigo-500', bg: 'bg-indigo-50 dark:bg-indigo-900/30' },
-                { label: 'Interviews Scheduled', val: '0', icon: Calendar, color: 'text-orange-500', bg: 'bg-orange-50 dark:bg-orange-900/30' },
-                { label: 'Offers Issued', val: '0', icon: Briefcase, color: 'text-purple-500', bg: 'bg-purple-50 dark:bg-purple-900/30' },
-                { label: 'Hires This Month', val: '0', icon: UserPlus, color: 'text-[#00a76b]', bg: 'bg-green-50 dark:bg-green-900/30' }
+                { label: 'New Applications', val: currentRecOverview.newApplications ?? 0, icon: FileText, color: 'text-blue-500', bg: 'bg-blue-50 dark:bg-blue-900/30' },
+                { label: 'Shortlisted', val: currentRecOverview.shortlisted ?? 0, icon: CheckCircle, color: 'text-indigo-500', bg: 'bg-indigo-50 dark:bg-indigo-900/30' },
+                { label: 'Interviews Scheduled', val: currentRecOverview.interviewsScheduled ?? 0, icon: Calendar, color: 'text-orange-500', bg: 'bg-orange-50 dark:bg-orange-900/30' },
+                { label: 'Offers Issued', val: currentRecOverview.offersIssued ?? 0, icon: Briefcase, color: 'text-purple-500', bg: 'bg-purple-50 dark:bg-purple-900/30' },
+                {
+                  label: recruitmentPeriod === 'This Month' ? 'Hires This Month' : recruitmentPeriod === 'Last Month' ? 'Hires Last Month' : recruitmentPeriod === 'This Year' ? 'Hires This Year' : 'Total Hires',
+                  val: currentRecOverview.hires ?? currentRecOverview.hiresThisMonth ?? 0,
+                  icon: UserPlus,
+                  color: 'text-[#00a76b]',
+                  bg: 'bg-green-50 dark:bg-green-900/30'
+                }
               ].map((r, i) => (
-                <div key={i} className="flex justify-between items-center py-1.5 px-2.5 rounded-lg border border-gray-50 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                <div key={i} className="flex justify-between items-center py-2 px-2.5 rounded-lg border border-gray-50 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
                   <div className="flex items-center gap-2">
                     <div className={`p-1.5 rounded-md ${r.bg} ${r.color}`}>
                       <r.icon size={14} />

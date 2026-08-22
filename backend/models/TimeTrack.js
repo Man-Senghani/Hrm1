@@ -50,6 +50,10 @@ const timeTrackSchema = new mongoose.Schema({
     type: Date,
     default: null
   },
+  idleStart: {
+    type: Date,
+    default: null
+  },
   lastHeartbeat: {
     type: Date,
     default: null

@@ -1,6 +1,6 @@
 {
   "name": "fluidhr-desktop-tracker",
-  "version": "1.1.8",
+  "version": "1.2.8",
   "description": "Premium Time Tracking Node for FluidHR",
   "main": "main.js",
   "scripts": {
@@ -26,7 +26,13 @@
     "nsis": {
       "oneClick": true,
       "perMachine": false,
-      "allowToChangeInstallationDirectory": false
+      "allowToChangeInstallationDirectory": false,
+      "deleteAppDataOnUninstall": true,
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true,
+      "shortcutName": "FluidHR Tracker",
+      "differentialPackage": false,
+      "runAfterFinish": false
     },
     "asarUnpack": [
       "**/node_modules/screenshot-desktop/**/*"

@@ -385,13 +385,12 @@ const EmployeeDashboard = () => {
     const baseTime = timerStatus.activeTime || 0;
 
     if (isRunning) {
-      const startTime = new Date(timerStatus.segmentStart || Date.now()).getTime();
+      const receivedAt = Date.now();
       const interval = setInterval(() => {
-        const elapsed = Math.floor((Date.now() - startTime) / 1000);
-        setTimer(baseTime + Math.max(0, elapsed));
+        const elapsedSincePoll = Math.floor((Date.now() - receivedAt) / 1000);
+        setTimer(baseTime + Math.max(0, elapsedSincePoll));
       }, 1000);
-      const initialElapsed = Math.floor((Date.now() - startTime) / 1000);
-      setTimer(baseTime + Math.max(0, initialElapsed));
+      setTimer(baseTime);
       return () => clearInterval(interval);
     } else {
       setTimer(baseTime);

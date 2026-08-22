@@ -22,6 +22,22 @@ const jobSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
+  shortlisted: {
+    type: Number,
+    default: 0
+  },
+  interviews: {
+    type: Number,
+    default: 0
+  },
+  offers: {
+    type: Number,
+    default: 0
+  },
+  hired: {
+    type: Number,
+    default: 0
+  },
   hiringManager: {
     type: String,
     required: true

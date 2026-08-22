@@ -27,26 +27,28 @@ let lastStartOrResumeTime = 0;
 
 // ── Local Ticking Engine State (for smooth UI updates) ────
 let baseActiveSeconds = 0;
-let segmentStartTime = null;
-let isSessionRunning = false;
 let baseInactiveSeconds = 0;
+let lastAppliedActive = 0;
+let lastAppliedInactive = 0;
+let lastAppliedTime = 0;
+let isSessionRunning = false;
 let idleStartTime = null;
 
 // Local clock loop for smooth UI ticking using real elapsed timestamps
 setInterval(() => {
   if (status === 'ACTIVE' && isSessionRunning) {
-    if (segmentStartTime) {
-      const elapsed = Math.floor((Date.now() - segmentStartTime) / 1000);
-      activeSeconds = baseActiveSeconds + Math.max(0, elapsed);
+    if (lastAppliedTime > 0) {
+      const elapsedSincePoll = Math.floor((Date.now() - lastAppliedTime) / 1000);
+      activeSeconds = lastAppliedActive + Math.max(0, elapsedSincePoll);
     } else {
       activeSeconds += 1;
     }
     updateDisplay();
   } else if (status === 'IDLE') {
     // 🛡️ When IDLE: Active Work Time is strictly frozen, Idle Time calculates from real elapsed timestamps
-    if (idleStartTime) {
-      const idleElapsed = Math.floor((Date.now() - idleStartTime) / 1000);
-      inactiveSeconds = baseInactiveSeconds + Math.max(0, idleElapsed);
+    if (lastAppliedTime > 0) {
+      const elapsedSincePoll = Math.floor((Date.now() - lastAppliedTime) / 1000);
+      inactiveSeconds = lastAppliedInactive + Math.max(0, elapsedSincePoll);
     } else {
       inactiveSeconds += 1;
     }
@@ -103,7 +105,7 @@ if (window.electronAPI?.onSystemIdleStatus) {
         triggerIdle(idleSeconds);
       }
     } else if (idleSeconds < 5) {
-      // Activity detected anywhere on PC
+      // Activity detected anywhere on PC while ACTIVE resets notification flag
       if (status === 'ACTIVE') {
         idleNotificationSent = false;
         isIdle = false;
@@ -131,6 +133,14 @@ async function loadSession() {
     console.error('Failed to get app version:', err);
   }
 
+  // 1. Immediately read stored authToken to preserve login across updates & launches
+  const savedToken = await window.electronAPI.getStoreValue('authToken');
+  if (savedToken) {
+    authToken = savedToken;
+    hideAuthSection();
+  }
+
+  // 2. Discover backend host with quick timeouts
   BACKEND_HOST = 'https://hrm1.onrender.com';
   const candidateHosts = [
     'http://localhost:5000',
@@ -142,7 +152,7 @@ async function loadSession() {
   ];
   for (const host of candidateHosts) {
     try {
-      const res = await fetch(`${host}/api/health`).catch(() => null);
+      const res = await fetch(`${host}/api/health`, { signal: AbortSignal.timeout(300) }).catch(() => null);
       if (res && res.ok) {
         BACKEND_HOST = host;
         console.log(`🔌 Local development backend detected! Connected to ${host}`);
@@ -152,15 +162,15 @@ async function loadSession() {
   }
   API_BASE = `${BACKEND_HOST}/api/time`;
 
-  const savedToken = await window.electronAPI.getStoreValue('authToken');
-  if (!savedToken) {
+  if (!authToken) {
     showAuthSection();
     return;
   }
-  authToken = savedToken;
+
   hideAuthSection();
   await fetchUserProfile();
   initSocket();
+  lastStartOrResumeTime = Date.now();
   await pollSessionStatus();
   startPolling();
   startHeartbeat();
@@ -177,10 +187,6 @@ async function pollSessionStatus() {
     const res = await fetch(`${API_BASE}/status`, {
       headers: { Authorization: `Bearer ${authToken}` }
     });
-    if (res.status === 401) {
-      logout();
-      return;
-    }
     if (!res.ok) return;
     const data = await res.json();
     applyServerState(data);
@@ -190,13 +196,35 @@ async function pollSessionStatus() {
 }
 
 function applyServerState(data) {
+  const serverStatus = String(data?.status || '').toLowerCase();
+
+  if (serverStatus === 'completed') {
+    status = 'COMPLETED';
+    isIdle = false;
+    isSessionRunning = false;
+    stopPolling();
+    stopHeartbeat();
+    stopScreenshotLoop();
+    stopIdleReminderLoop();
+    activeSeconds = data.activeTime ?? activeSeconds;
+    inactiveSeconds = data.idleTime ?? inactiveSeconds;
+    lastAppliedActive = activeSeconds;
+    lastAppliedInactive = inactiveSeconds;
+    lastAppliedTime = 0;
+    updateDisplay();
+    updateUI();
+    return;
+  }
+
   if (!data?.hasActiveSession) {
     status = 'OFFLINE';
     activeSeconds = 0;
     inactiveSeconds = 0;
     isIdle = false;
     isSessionRunning = false;
-    segmentStartTime = null;
+    lastAppliedActive = 0;
+    lastAppliedInactive = 0;
+    lastAppliedTime = 0;
     stopPolling();
     stopHeartbeat();
     stopScreenshotLoop();
@@ -205,43 +233,48 @@ function applyServerState(data) {
     return;
   }
 
-  const serverStatus = String(data.status || '').toLowerCase();
-
   if (serverStatus === 'idle') {
+    // 🛡️ GUARD: If the user explicitly resumed locally within the last 5 seconds,
+    // do NOT let a stale background poll or focus poll overwrite the state back to IDLE!
+    if (Date.now() - lastStartOrResumeTime < 5000) {
+      return;
+    }
+
     status = 'IDLE';
     isIdle = true;
     isSessionRunning = false;
-    segmentStartTime = null;
 
-    if (data.idleTime !== undefined && data.idleTime > 0) {
-      baseInactiveSeconds = Math.max(baseInactiveSeconds, data.idleTime);
-      if (!idleStartTime) {
-        inactiveSeconds = baseInactiveSeconds;
-      }
+    if (data.idleTime !== undefined && data.idleTime >= 0) {
+      inactiveSeconds = data.idleTime;
+      lastAppliedInactive = data.idleTime;
     }
 
-    // 🛡️ When IDLE: Prefer the higher of local committed activeSeconds or server activeTime to prevent backward rewinds
-    if (data.activeTime !== undefined && data.activeTime > 0) {
-      baseActiveSeconds = Math.max(baseActiveSeconds, data.activeTime);
-      activeSeconds = baseActiveSeconds;
+    if (data.activeTime !== undefined && data.activeTime >= 0) {
+      activeSeconds = data.activeTime;
+      lastAppliedActive = data.activeTime;
     }
+    lastAppliedTime = Date.now();
   } else if (serverStatus === 'active' && data.isRunning) {
+    // 🛡️ CRITICAL GUARD: If local state is currently IDLE (awaiting user to click RESUME),
+    // do NOT let a delayed background status poll overwrite IDLE back to ACTIVE!
+    if ((status === 'IDLE' || isIdle) && Date.now() - lastStartOrResumeTime >= 5000) {
+      return;
+    }
+
     status = 'ACTIVE';
     isIdle = false;
     idleNotificationSent = false;
     isSessionRunning = true;
-    idleStartTime = null;
-    baseActiveSeconds = data.activeTime ?? baseActiveSeconds;
-    baseInactiveSeconds = data.idleTime ?? baseInactiveSeconds;
-    inactiveSeconds = baseInactiveSeconds;
-    segmentStartTime = data.segmentStart ? new Date(data.segmentStart).getTime() : segmentStartTime;
 
-    if (segmentStartTime) {
-      const elapsed = Math.floor((Date.now() - segmentStartTime) / 1000);
-      activeSeconds = baseActiveSeconds + Math.max(0, elapsed);
-    } else {
-      activeSeconds = baseActiveSeconds;
+    if (data.activeTime !== undefined && data.activeTime >= 0) {
+      activeSeconds = data.activeTime;
+      lastAppliedActive = data.activeTime;
     }
+    if (data.idleTime !== undefined && data.idleTime >= 0) {
+      inactiveSeconds = data.idleTime;
+      lastAppliedInactive = data.idleTime;
+    }
+    lastAppliedTime = Date.now();
 
     if (!screenshotTimeout) {
       initScreenshotLoop(true);
@@ -250,18 +283,11 @@ function applyServerState(data) {
     status = 'PAUSED';
     isIdle = false;
     isSessionRunning = false;
-    segmentStartTime = null;
-    baseActiveSeconds = data.activeTime ?? baseActiveSeconds;
-    inactiveSeconds = data.idleTime ?? inactiveSeconds;
-    activeSeconds = baseActiveSeconds;
-  } else if (serverStatus === 'completed') {
-    status = 'OFFLINE';
-    isIdle = false;
-    isSessionRunning = false;
-    segmentStartTime = null;
-    baseActiveSeconds = data.activeTime ?? baseActiveSeconds;
-    inactiveSeconds = data.idleTime ?? inactiveSeconds;
-    activeSeconds = baseActiveSeconds;
+    if (data.activeTime !== undefined) activeSeconds = data.activeTime;
+    if (data.idleTime !== undefined) inactiveSeconds = data.idleTime;
+    lastAppliedActive = activeSeconds;
+    lastAppliedInactive = inactiveSeconds;
+    lastAppliedTime = Date.now();
   }
 
   updateDisplay();
@@ -292,22 +318,17 @@ async function sendHeartbeat() {
 async function triggerIdle(idleSeconds = 60) {
   if (!authToken || status !== 'ACTIVE') return;
 
-  // 🚀 OPTIMISTIC UI: Instantly pause active timer and preserve exact active work time
+  // 🚀 OPTIMISTIC UI: Instantly freeze active timer and lock into IDLE state
   status = 'IDLE';
   isIdle = true;
   isSessionRunning = false;
 
-  // Commit current elapsed segment to baseActiveSeconds so it freezes at exact current value
-  if (segmentStartTime) {
-    const elapsed = Math.floor((Date.now() - segmentStartTime) / 1000);
-    baseActiveSeconds += Math.max(0, elapsed);
-    segmentStartTime = null;
-  }
-  activeSeconds = baseActiveSeconds;
-
-  // 🕒 Record exact idle start timestamp (accounting for initial idleSeconds already elapsed)
-  idleStartTime = Date.now() - (idleSeconds * 1000);
-  inactiveSeconds = baseInactiveSeconds + idleSeconds;
+  // 🛡️ Rewind the idle duration from activeSeconds so active time does not count idle period
+  activeSeconds = Math.max(0, activeSeconds - idleSeconds);
+  inactiveSeconds += idleSeconds;
+  lastAppliedActive = activeSeconds;
+  lastAppliedInactive = inactiveSeconds;
+  lastAppliedTime = Date.now();
 
   updateDisplay();
   updateUI();
@@ -326,7 +347,6 @@ async function triggerIdle(idleSeconds = 60) {
     setTimeout(() => syncIndicator?.classList.remove('online'), 2000);
   } catch (err) {
     console.error('[IDLE TRIGGER ERROR]', err.message);
-    idleNotificationSent = false;
   }
 }
 
@@ -349,13 +369,20 @@ async function startSession() {
       const err = await res.json();
       return alert(err.message || 'Unable to start session.');
     }
-    // 🔔 Trigger notification IMMEDIATELY on success (fixes delayed notification bug)
+    const data = await res.json();
     notifyDesktop('Session Started', 'Your tracking session is now active.');
 
-    stopIdleReminderLoop();
+    status = 'ACTIVE';
+    isIdle = false;
+    isSessionRunning = true;
     idleNotificationSent = false;
     lastStartOrResumeTime = Date.now();
-    await pollSessionStatus();
+
+    if (data?.session) {
+      applyServerState(data.session);
+    }
+
+    stopIdleReminderLoop();
     startPolling();
     startHeartbeat();
     initScreenshotLoop(true);
@@ -395,21 +422,18 @@ async function pauseSession() {
 async function resumeSession() {
   if (!authToken) return alert('Please login first.');
 
-  // 🕒 Commit accumulated idle duration to baseInactiveSeconds
-  if (idleStartTime) {
-    const idleDuration = Math.floor((Date.now() - idleStartTime) / 1000);
-    baseInactiveSeconds += Math.max(0, idleDuration);
-    idleStartTime = null;
-  }
-  inactiveSeconds = baseInactiveSeconds;
-
   // 🚀 OPTIMISTIC UI: Instantly clear idle status and banner
   status = 'ACTIVE';
   isIdle = false;
   isSessionRunning = true;
-  segmentStartTime = Date.now(); // 🎯 Start fresh active segment
   idleNotificationSent = false;
   lastStartOrResumeTime = Date.now();
+  lastAppliedActive = activeSeconds;
+  lastAppliedInactive = inactiveSeconds;
+  lastAppliedTime = Date.now();
+
+  stopIdleReminderLoop();
+  updateDisplay();
   updateUI();
 
   try {
@@ -418,18 +442,22 @@ async function resumeSession() {
       headers: { Authorization: `Bearer ${authToken}` }
     });
     if (!res.ok) {
-      const err = await res.json();
-      if (!err.message?.toLowerCase().includes('already')) alert(err.message || 'Unable to resume.');
+      const err = await res.json().catch(() => ({}));
+      if (!err.message?.toLowerCase().includes('already')) {
+        console.warn(err.message || 'Unable to resume.');
+      }
+    } else {
+      const data = await res.json().catch(() => ({}));
+      if (data?.session) {
+        applyServerState(data.session);
+      }
     }
-    stopIdleReminderLoop();
-    await pollSessionStatus();
     startPolling();
     startHeartbeat();
     initScreenshotLoop(true);
-    await notifyDesktop('Session Resumed', 'Your tracking session is now active.');
+    notifyDesktop('Session Resumed', 'Your tracking session is now active.').catch(() => {});
   } catch (err) {
     console.error('[RESUME ERROR]', err);
-    alert('Unable to resume session.');
   }
 }
 
@@ -468,7 +496,13 @@ async function confirmStopSession() {
     stopScreenshotLoop();
     stopIdleReminderLoop();
     idleNotificationSent = false;
-    await pollSessionStatus();
+
+    // 🛡️ Lock into COMPLETED state immediately after checkout
+    status = 'COMPLETED';
+    isIdle = false;
+    isSessionRunning = false;
+    segmentStartTime = null;
+    updateUI();
     await notifyDesktop('Workday Ended', 'You have successfully checked out for today.');
   } catch (err) {
     console.error('[STOP ERROR]', err);
@@ -495,8 +529,33 @@ function setControlState(currentStatus) {
   const pauseBtn = document.getElementById('pause-btn');
   const resumeBtn = document.getElementById('resume-btn');
   const stopBtn = document.getElementById('stop-btn');
+  const logoutBtn = document.getElementById('logout-btn');
   const binaryControls = document.querySelector('.binary-controls');
+  const controlMatrix = document.querySelector('.control-matrix');
+  const timerDisplay = document.querySelector('.timer-display');
+  const completedSection = document.getElementById('checkout-completed-section');
+  const alertEl = document.getElementById('desktop-alert');
+
   if (!startBtn || !pauseBtn || !resumeBtn || !binaryControls) return;
+
+  if (currentStatus === 'COMPLETED') {
+    // 🛡️ WORKDAY COMPLETED / CHECKED OUT:
+    // Hide ALL control buttons (START, PAUSE, RESUME, CHECK OUT, LOGOUT) and the active timer
+    if (controlMatrix) controlMatrix.style.display = 'none';
+    if (timerDisplay) timerDisplay.style.display = 'none';
+    if (alertEl) alertEl.style.display = 'none';
+    if (completedSection) completedSection.style.display = 'flex';
+    if (statusEl) {
+      statusEl.innerText = 'WORKDAY COMPLETED';
+      statusEl.className = 'status-badge status-completed';
+    }
+    return;
+  }
+
+  // Active / Offline / Paused states: restore standard layout
+  if (completedSection) completedSection.style.display = 'none';
+  if (controlMatrix) controlMatrix.style.display = 'block';
+  if (timerDisplay) timerDisplay.style.display = 'flex';
 
   const isActuallyActive = currentStatus === 'ACTIVE' && !isIdle;
 
@@ -504,8 +563,8 @@ function setControlState(currentStatus) {
     startBtn.style.display = 'flex';
     binaryControls.style.display = 'none';
     if (stopBtn) stopBtn.style.display = 'none';
+    if (logoutBtn) logoutBtn.style.display = 'flex';
     if (statusEl) { statusEl.innerText = 'OFFLINE'; statusEl.className = 'status-badge'; }
-    const alertEl = document.getElementById('desktop-alert');
     if (alertEl) alertEl.style.display = 'none';
   } else if (isActuallyActive) {
     startBtn.style.display = 'none';
@@ -513,8 +572,8 @@ function setControlState(currentStatus) {
     pauseBtn.style.display = 'flex';
     resumeBtn.style.display = 'none';
     if (stopBtn) stopBtn.style.display = 'flex';
+    if (logoutBtn) logoutBtn.style.display = 'flex';
     if (statusEl) { statusEl.innerText = 'ACTIVE'; statusEl.className = 'status-badge status-active'; }
-    const alertEl = document.getElementById('desktop-alert');
     if (alertEl) alertEl.style.display = 'none';
   } else {
     startBtn.style.display = 'none';
@@ -522,6 +581,7 @@ function setControlState(currentStatus) {
     pauseBtn.style.display = 'none';
     resumeBtn.style.display = 'flex';
     if (stopBtn) stopBtn.style.display = 'flex';
+    if (logoutBtn) logoutBtn.style.display = 'flex';
     if (statusEl) {
       statusEl.innerText = isIdle ? 'IDLE' : currentStatus;
       statusEl.className = 'status-badge status-idle';
@@ -652,10 +712,6 @@ async function fetchUserProfile() {
     const res = await fetch(`${BACKEND_HOST}/api/auth/me`, {
       headers: { Authorization: `Bearer ${authToken}` }
     });
-    if (res.status === 401) {
-      logout();
-      return;
-    }
     if (!res.ok) return;
     const user = await res.json();
     const nameEl = document.getElementById('display-name');
@@ -719,7 +775,10 @@ function hideAuthSection() {
 }
 
 function redirectToWebLogin() {
-  const loginUrl = `${BACKEND_HOST}/login?desktop=true`;
+  let loginUrl = `${BACKEND_HOST}/login?desktop=true`;
+  if (BACKEND_HOST.includes(':5000')) {
+    loginUrl = 'http://localhost:3000/login?desktop=true';
+  }
   if (window.electronAPI?.openExternal) {
     window.electronAPI.openExternal(loginUrl);
   } else {
@@ -846,6 +905,7 @@ document.getElementById('minimize-btn')?.addEventListener('click', () => window.
 document.getElementById('close-btn')?.addEventListener('click', () => window.electronAPI.closeApp());
 document.getElementById('web-auth-btn')?.addEventListener('click', redirectToWebLogin);
 document.getElementById('logout-btn')?.addEventListener('click', logout);
+document.getElementById('completed-logout-btn')?.addEventListener('click', logout);
 document.getElementById('auth-minimize-btn')?.addEventListener('click', () => window.electronAPI.minimizeApp());
 document.getElementById('auth-close-btn')?.addEventListener('click', () => window.electronAPI.closeApp());
 
@@ -886,6 +946,16 @@ document.getElementById('update-restart-btn')?.addEventListener('click', () => {
 });
 
 document.getElementById('update-later-btn')?.addEventListener('click', () => {
+  const updateSection = document.getElementById('update-section');
+  if (updateSection) {
+    updateSection.style.display = 'none';
+  }
+});
+
+document.getElementById('update-minimize-btn')?.addEventListener('click', () => {
+  window.electronAPI?.minimizeApp();
+});
+document.getElementById('update-close-btn')?.addEventListener('click', () => {
   const updateSection = document.getElementById('update-section');
   if (updateSection) {
     updateSection.style.display = 'none';

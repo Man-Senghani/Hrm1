@@ -621,7 +621,7 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
   const [lastServerSync, setLastServerSync] = useState(0);
 
   const reportActivity = async (type = 'heartbeat') => {
-    if (!token || !isTrackingActive) return;
+    if (!token || !isTrackingActive || isPausedByIdle || trackerRawStatus === 'idle') return;
     const now = Date.now();
     if (now - lastServerSync < 15000) return; // 15s throttle
 

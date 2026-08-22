@@ -1317,6 +1317,13 @@ const LeaveManagement = ({ isChild = false }) => {
         getStatusColor={getStatusColor}
       />
 
+      {/* View Holidays Drawer */}
+      <ViewHolidaysDrawer
+        isOpen={isHolidaysDrawerOpen}
+        onClose={() => setIsHolidaysDrawerOpen(false)}
+        holidays={holidays}
+      />
+
       {confirmDialog.isOpen && (
         <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
           <div className="bg-white dark:bg-[#1e293b] rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-gray-150 dark:border-gray-800 text-center animate-in fade-in zoom-in duration-200">
