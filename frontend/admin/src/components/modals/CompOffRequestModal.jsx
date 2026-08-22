@@ -39,7 +39,7 @@ const CompOffRequestModal = ({ isOpen, onClose }) => {
 
   return createPortal(
     <div className="fixed inset-0 z-[9999] bg-black/40 backdrop-blur-sm" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="fixed right-0 top-0 bottom-0 h-full w-full max-w-sm pl-8 pr-6 py-6 bg-white dark:bg-[#1e293b] shadow-2xl flex flex-col justify-between border-l border-gray-200 dark:border-gray-800">
+      <div className="fixed right-0 top-0 bottom-0 h-full w-full max-w-sm px-6 py-6 bg-white dark:bg-[#1e293b] shadow-2xl flex flex-col justify-between border-l border-gray-200 dark:border-gray-800">
         <div className="flex items-center justify-between pb-3 border-b border-gray-150 dark:border-gray-800 mb-6 shrink-0">
           <h2 className="text-lg font-bold text-gray-900 dark:text-white">Submit Comp-Off Request</h2>
           <button type="button" onClick={onClose} className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded-full transition-colors cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800">
@@ -49,7 +49,7 @@ const CompOffRequestModal = ({ isOpen, onClose }) => {
 
         <div className="flex-1 flex flex-col h-full overflow-hidden">
           
-          <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto pr-1 space-y-4">
+          <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto px-1 py-1 space-y-4">
             <div>
               <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Date Worked (Holiday/Weekend) *</label>
               <CustomDatePicker
@@ -67,7 +67,7 @@ const CompOffRequestModal = ({ isOpen, onClose }) => {
               <textarea 
                 value={formData.reason}
                 onChange={(e) => setFormData({...formData, reason: e.target.value})}
-                className="w-full bg-gray-50 dark:bg-[#0f172a] border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-indigo-500 resize-none outline-none text-gray-900 dark:text-white"
+                className="w-full bg-gray-50 dark:bg-[#0f172a] border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-[#00a76b]/30 focus:border-[#00a76b] resize-none outline-none text-gray-900 dark:text-white transition-all"
                 rows={4}
                 placeholder="Explain why you worked on this day"
                 required

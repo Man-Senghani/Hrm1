@@ -20,10 +20,33 @@ import {
   ChevronDown,
   Camera,
   MapPin,
-  Phone
+  Phone,
+  FileText
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
+
+// Helper to format date strings as DD-MM-YYYY
+const formatDDMMYYYY = (dateStr) => {
+  if (!dateStr) return '';
+  const parts = dateStr.split('-');
+  if (parts.length === 3) {
+    const [year, month, day] = parts;
+    if (year.length === 4) {
+      return `${day.padStart(2, '0')}-${month.padStart(2, '0')}-${year}`;
+    }
+  }
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    return `${day}-${month}-${year}`;
+  } catch (e) {
+    return dateStr;
+  }
+};
 
 const CreateUser = () => {
   const navigate = useNavigate();
@@ -359,404 +382,489 @@ const CreateUser = () => {
   };
 
   return (
-    <div className="animate-fade-in pb-32">
+    <div className="animate-fade-in w-full pb-20 space-y-6">
       {/* TOAST NOTIFICATION */}
       {message.text && (
-        <div className={`fixed top-24 right-8 bg-[#fffefb] border border-[#c5c0b1] shadow-xl p-8 rounded-[8px] flex items-center gap-6 animate-fade-in z-[100] min-w-[400px]`}>
-          <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${message.type === 'success' ? 'bg-[#24a148] text-white' : 'bg-[#00a76b] text-white'}`}>
-            {message.type === 'success' ? <CheckCircle size={28} /> : <AlertTriangle size={28} />}
+        <div className="fixed top-24 right-8 bg-white dark:bg-[#181612] border border-slate-200 dark:border-[#38352e] shadow-2xl p-5 rounded-2xl flex items-center gap-4 animate-fade-in z-[100] min-w-[360px]">
+          <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${message.type === 'success' ? 'bg-emerald-500 text-white' : 'bg-red-500 text-white'}`}>
+            {message.type === 'success' ? <CheckCircle size={22} /> : <AlertTriangle size={22} />}
           </div>
-          <div className="flex-1">
-            <h4 className="zap-caption-upper !text-[#939084] mb-2">{message.type === 'success' ? 'Success' : 'Error'}</h4>
-            <p className="text-[16px] font-bold text-[#201515] leading-tight mb-4">{message.text}</p>
-
+          <div className="flex-1 min-w-0">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-400 mb-0.5">{message.type === 'success' ? 'Success' : 'Error'}</h4>
+            <p className="text-sm font-bold text-slate-900 dark:text-white leading-tight">{message.text}</p>
             {message.employeeId && (
-              <div className="flex items-center gap-3">
-                <div className="px-3 py-1.5 bg-[#eceae3] text-[#201515] rounded-2xl text-[11px] font-bold uppercase tracking-widest flex items-center gap-2">
-                  <Fingerprint size={14} /> {message.employeeId}
-                </div>
-                <div className="px-3 py-1.5 bg-[#24a148] text-white rounded-2xl text-[11px] font-bold uppercase tracking-widest">
+              <div className="flex items-center gap-2 mt-2">
+                <span className="px-2.5 py-0.5 bg-slate-100 dark:bg-[#25201b] text-slate-800 dark:text-slate-200 rounded-md text-[10px] font-extrabold uppercase tracking-wider flex items-center gap-1">
+                  <Fingerprint size={12} /> {message.employeeId}
+                </span>
+                <span className="px-2.5 py-0.5 bg-emerald-500 text-white rounded-md text-[10px] font-extrabold uppercase tracking-wider">
                   {message.status || 'ACTIVE'}
-                </div>
+                </span>
               </div>
             )}
           </div>
-          <button onClick={() => setMessage({ type: '', text: '', employeeId: '', status: '' })} className="self-start text-[#939084] hover:text-[#201515]">
-            <X size={20} />
+          <button onClick={() => setMessage({ type: '', text: '', employeeId: '', status: '' })} className="text-slate-400 hover:text-slate-700 dark:hover:text-white cursor-pointer border-none bg-transparent">
+            <X size={18} />
           </button>
         </div>
       )}
 
-      {/* HEADER */}
-      <div className="mb-12 border-b border-[#eceae3] pb-6">
-        <h1 className="text-3xl md:text-4xl font-extrabold text-slate-900 tracking-tight">Create Employee</h1>
+      {/* TOP HEADER */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-6 border-b border-slate-200/80 dark:border-[#38352e]">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            {nextId && (
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-[#00a76b] dark:text-emerald-400 uppercase tracking-wider flex items-center gap-1">
+                <Fingerprint size={12} className="text-[#00a76b]" /> Next Auto-ID: {nextId}
+              </span>
+            )}
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight">Create Employee</h1>
+          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 font-medium">Add a new team member with profile details, credentials, and verification documents.</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => navigate(-1)}
+          className="px-4 py-2 bg-white dark:bg-[#181612] hover:bg-slate-50 dark:hover:bg-[#201d18] text-slate-700 dark:text-slate-300 font-bold text-xs rounded-xl border border-slate-200/80 dark:border-[#38352e] transition-all shadow-xs flex items-center gap-2 cursor-pointer"
+        >
+          ← Back
+        </button>
       </div>
 
-      <div className="max-w-4xl mx-auto">
-        {/* FORM SIDE */}
-        <div className="zap-card !bg-white dark:!bg-[#13221e] border border-[#eceae3] dark:border-[#1a2d29] p-12">
-          {/* AVATAR UPLOAD SECTION */}
-          <div className="flex flex-col items-center mb-12 border-b border-[#eceae3] pb-12">
-            <div className="relative group">
-              <div className="w-32 h-32 rounded-2xl bg-[#eceae3] border-2 border-dashed border-[#c5c0b1] flex items-center justify-center overflow-hidden transition-all group-hover:border-[#00a76b]">
-                {previewUrl ? (
-                  <img src={previewUrl} alt="Preview" className="w-full h-full object-cover shadow-2xl" />
-                ) : (
-                  <User size={48} className={`${errors.profilePicture ? 'text-red-400' : 'text-[#939084]'} opacity-30`} />
-                )}
+      {/* MASTER FORM LAYOUT */}
+      <form onSubmit={handleSubmit} noValidate>
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          
+          {/* LEFT COLUMN: Profile & Real-time Live Preview Panel */}
+          <div className="lg:col-span-4 space-y-6">
+            <div className="bg-white dark:bg-[#181612] border border-slate-200/80 dark:border-[#38352e] rounded-2xl p-6 shadow-xs flex flex-col items-center text-center">
+              
+              {/* Profile Picture */}
+              <div className="relative group mb-4">
+                <div className="w-32 h-32 rounded-2xl bg-slate-100 dark:bg-[#221e19] border-2 border-dashed border-slate-200 dark:border-[#38352e] flex items-center justify-center overflow-hidden transition-all group-hover:border-[#00a76b]">
+                  {previewUrl ? (
+                    <img src={previewUrl} alt="Preview" className="w-full h-full object-cover" />
+                  ) : (
+                    <User size={48} className={`${errors.profilePicture ? 'text-red-400' : 'text-slate-400 dark:text-slate-600'} opacity-60`} />
+                  )}
+                </div>
+                <label htmlFor="user-photo" className="absolute -bottom-2 -right-2 w-9 h-9 bg-[#00a76b] text-white rounded-xl flex items-center justify-center shadow-md cursor-pointer hover:scale-110 active:scale-95 transition-all">
+                  <Camera size={16} />
+                  <input
+                    id="user-photo"
+                    type="file"
+                    className="hidden"
+                    accept=".jpg,.jpeg,.png,image/jpeg,image/png"
+                    onChange={handleFileChange}
+                  />
+                </label>
               </div>
-              <label htmlFor="user-photo" className="absolute -bottom-3 -right-3 w-10 h-10 bg-[#00a76b] text-white rounded-xl flex items-center justify-center shadow-xl cursor-pointer hover:scale-110 active:scale-95 transition-all">
-                <Camera size={18} />
-                <input
-                  id="user-photo"
-                  type="file"
-                  className="hidden"
-                  accept=".jpg,.jpeg,.png,image/jpeg,image/png"
-                  onChange={handleFileChange}
-                />
-              </label>
+
+              {/* Dynamic Name & Designation */}
+              <h3 className="text-base font-bold text-slate-900 dark:text-white tracking-tight break-words max-w-full">
+                {formData.firstName || formData.middleName || formData.lastName
+                  ? `${formData.firstName} ${formData.middleName ? formData.middleName + ' ' : ''}${formData.lastName}`.trim()
+                  : 'New Employee'}
+              </h3>
+              <p className="text-xs font-semibold text-slate-400 dark:text-slate-400 capitalize mt-0.5">
+                {formData.designation || 'Staff Member'}
+              </p>
+
+              {/* Real-Time Live Data Summary */}
+              <div className="w-full mt-5 pt-5 border-t border-slate-100 dark:border-[#28241e] space-y-3 text-left">
+                <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 dark:text-slate-400 mb-2">Live Employee Card</p>
+
+                <div className="flex justify-between items-center text-xs">
+                  <span className="font-semibold text-slate-500 dark:text-slate-400">System Role</span>
+                  <span className="font-bold text-[#00a76b] uppercase bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-md text-[10px]">
+                    {formData.role || 'employee'}
+                  </span>
+                </div>
+
+                <div className="flex justify-between items-center text-xs">
+                  <span className="font-semibold text-slate-500 dark:text-slate-400">Office Email</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-200 truncate max-w-[170px]" title={formData.email}>
+                    {formData.email || 'Not specified'}
+                  </span>
+                </div>
+
+                <div className="flex justify-between items-center text-xs">
+                  <span className="font-semibold text-slate-500 dark:text-slate-400">Personal Email</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-200 truncate max-w-[170px]" title={formData.personalEmail}>
+                    {formData.personalEmail || 'Not specified'}
+                  </span>
+                </div>
+
+                <div className="flex justify-between items-center text-xs">
+                  <span className="font-semibold text-slate-500 dark:text-slate-400">Phone Number</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-200">
+                    {formData.phone || 'Not specified'}
+                  </span>
+                </div>
+
+                <div className="flex justify-between items-center text-xs">
+                  <span className="font-semibold text-slate-500 dark:text-slate-400">Gender</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-200">{formData.gender}</span>
+                </div>
+
+                <div className="flex justify-between items-center text-xs">
+                  <span className="font-semibold text-slate-500 dark:text-slate-400">Join Date</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-200">{formatDDMMYYYY(formData.joinDate) || 'Today'}</span>
+                </div>
+
+                <div className="flex justify-between items-center text-xs">
+                  <span className="font-semibold text-slate-500 dark:text-slate-400">Date of Birth</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-200">{formatDDMMYYYY(formData.dob) || 'Not selected'}</span>
+                </div>
+
+                {!['hr', 'manager', 'admin'].includes(formData.role) && (
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="font-semibold text-slate-500 dark:text-slate-400">Manager</span>
+                    <span className="font-bold text-slate-800 dark:text-slate-200 truncate max-w-[160px]">
+                      {managers.find(m => m._id === formData.reportingManager)?.name ||
+                       managers.find(m => m._id === formData.reportingManager)?.fullName || 'Not assigned'}
+                    </span>
+                  </div>
+                )}
+
+                <div className="flex flex-col text-xs pt-1">
+                  <span className="font-semibold text-slate-500 dark:text-slate-400 mb-0.5">Address</span>
+                  <span className="font-medium text-slate-700 dark:text-slate-300 text-[11px] leading-relaxed break-words bg-slate-50 dark:bg-[#1f1b16] p-2 rounded-lg border border-slate-100 dark:border-[#2d2822]">
+                    {formData.address || 'No physical address entered yet.'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Document Readiness Badges */}
+              <div className="w-full mt-5 pt-5 border-t border-slate-100 dark:border-[#28241e]">
+                <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 dark:text-slate-400 mb-3 text-left">Document Vault Status</p>
+                <div className="grid grid-cols-3 gap-2">
+                  <div className={`p-2 rounded-xl border text-center text-[10px] font-bold ${adharFile ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400' : 'bg-slate-50 dark:bg-[#221e19] border-slate-200 dark:border-[#38352e] text-slate-400'}`}>
+                    Adhar {adharFile ? '✓' : ''}
+                  </div>
+                  <div className={`p-2 rounded-xl border text-center text-[10px] font-bold ${bankFile ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400' : 'bg-slate-50 dark:bg-[#221e19] border-slate-200 dark:border-[#38352e] text-slate-400'}`}>
+                    Bank {bankFile ? '✓' : ''}
+                  </div>
+                  <div className={`p-2 rounded-xl border text-center text-[10px] font-bold ${panFile ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400' : 'bg-slate-50 dark:bg-[#221e19] border-slate-200 dark:border-[#38352e] text-slate-400'}`}>
+                    PAN {panFile ? '✓' : ''}
+                  </div>
+                </div>
+              </div>
             </div>
-            <p className="zap-caption-upper !text-[#939084] mt-6">Profile Picture <span className="text-xs normal-case opacity-70">(JPG/PNG)</span></p>
-            {errors.profilePicture && <p className="text-red-500 text-sm mt-2 text-center">{errors.profilePicture}</p>}
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-10" noValidate>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-              {/* First Name */}
-              <div className="space-y-4">
-                <label className="zap-caption-upper text-[#201515]">First Name <span className="text-[#ff4f00] ml-1">*</span></label>
-                <div className="relative">
-                  <User size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#939084]" />
+          {/* RIGHT COLUMN: Form Sections */}
+          <div className="lg:col-span-8 space-y-6">
+            
+            {/* SECTION 1: Personal & Work Info */}
+            <div className="bg-white dark:bg-[#181612] border border-slate-200/80 dark:border-[#38352e] rounded-2xl p-6 sm:p-7 shadow-xs space-y-6">
+              <div className="flex items-center gap-2 border-b border-slate-100 dark:border-[#28241e] pb-4">
+                <User size={18} className="text-[#00a76b]" />
+                <h3 className="text-base font-bold text-slate-900 dark:text-white tracking-tight">Personal & Account Information</h3>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {/* First Name */}
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-extrabold text-slate-600 dark:text-slate-300 uppercase tracking-wider">First Name <span className="text-red-500">*</span></label>
                   <input
                     required name="firstName" value={formData.firstName} onChange={handleChange}
-                    className="w-full h-14 pl-12 pr-4 bg-white border border-[#c5c0b1] rounded-2xl text-[15px] font-medium text-[#201515] focus:outline-none focus:border-[#00a76b] transition-all"
-                    placeholder="Enter first name..."
-                    maxLength="20"
+                    className="w-full h-11 px-3.5 bg-white dark:bg-[#1a1714] border border-slate-200 dark:border-[#38352e] rounded-xl text-xs font-semibold text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-[#00a76b] focus:ring-1 focus:ring-[#00a76b] transition-all"
+                    placeholder="First Name" maxLength="20"
                   />
+                  {errors.firstName && <p className="text-red-500 text-[10px] font-semibold">{errors.firstName}</p>}
                 </div>
-                {errors.firstName && <p className="text-red-500 text-sm mt-1">{errors.firstName}</p>}
-              </div>
 
-              {/* Middle Name */}
-              <div className="space-y-4">
-                <label className="zap-caption-upper text-[#201515]">Middle Name</label>
-                <div className="relative">
-                  <User size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#939084]" />
+                {/* Middle Name */}
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-extrabold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Middle Name</label>
                   <input
                     name="middleName" value={formData.middleName} onChange={handleChange}
-                    className={`w-full h-14 pl-12 pr-4 bg-white border ${errors.middleName ? 'border-red-500' : 'border-[#c5c0b1]'} rounded-2xl text-[15px] font-medium text-[#201515] focus:outline-none focus:border-[#ff4f00] transition-all`}
-                    placeholder="Enter middle name (optional)..."
-                    maxLength="20"
+                    className="w-full h-11 px-3.5 bg-white dark:bg-[#1a1714] border border-slate-200 dark:border-[#38352e] rounded-xl text-xs font-semibold text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-[#00a76b] focus:ring-1 focus:ring-[#00a76b] transition-all"
+                    placeholder="Middle Name (Optional)" maxLength="20"
                   />
+                  {errors.middleName && <p className="text-red-500 text-[10px] font-semibold">{errors.middleName}</p>}
                 </div>
-                {errors.middleName && <p className="text-red-500 text-sm mt-1">{errors.middleName}</p>}
-              </div>
 
-              {/* Last Name */}
-              <div className="space-y-4">
-                <label className="zap-caption-upper text-[#201515]">Last Name <span className="text-[#ff4f00] ml-1">*</span></label>
-                <div className="relative">
-                  <User size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#939084]" />
+                {/* Last Name */}
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-extrabold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Last Name <span className="text-red-500">*</span></label>
                   <input
                     required name="lastName" value={formData.lastName} onChange={handleChange}
-                    className="w-full h-14 pl-12 pr-4 bg-white border border-[#c5c0b1] rounded-2xl text-[15px] font-medium text-[#201515] focus:outline-none focus:border-[#00a76b] transition-all"
-                    placeholder="Enter last name..."
-                    maxLength="20"
+                    className="w-full h-11 px-3.5 bg-white dark:bg-[#1a1714] border border-slate-200 dark:border-[#38352e] rounded-xl text-xs font-semibold text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-[#00a76b] focus:ring-1 focus:ring-[#00a76b] transition-all"
+                    placeholder="Last Name" maxLength="20"
                   />
+                  {errors.lastName && <p className="text-red-500 text-[10px] font-semibold">{errors.lastName}</p>}
                 </div>
-                {errors.lastName && <p className="text-red-500 text-sm mt-1">{errors.lastName}</p>}
               </div>
 
-              {/* Email Address */}
-              <div className="space-y-4">
-                <label className="zap-caption-upper text-[#201515]">Office Email Address <span className="text-[#ff4f00] ml-1">*</span></label>
-                <div className="relative">
-                  <Mail size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#939084]" />
-                  <input
-                    required name="email" value={formData.email} onChange={handleChange}
-                    className={`w-full h-14 pl-12 pr-4 bg-white border ${errors.email ? 'border-red-500' : 'border-[#c5c0b1]'} rounded-2xl text-[15px] font-medium text-[#201515] focus:outline-none focus:border-[#ff4f00] transition-all`}
-                    placeholder="email@example.com"
-                  />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Office Email */}
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-extrabold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Office Email <span className="text-red-500">*</span></label>
+                  <div className="relative">
+                    <Mail size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      required name="email" value={formData.email} onChange={handleChange}
+                      className="w-full h-11 pl-10 pr-3.5 bg-white dark:bg-[#1a1714] border border-slate-200 dark:border-[#38352e] rounded-xl text-xs font-semibold text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-[#00a76b] focus:ring-1 focus:ring-[#00a76b] transition-all"
+                      placeholder="email@organization.com"
+                    />
+                  </div>
+                  {errors.email && <p className="text-red-500 text-[10px] font-semibold">{errors.email}</p>}
                 </div>
-                {errors.email && <p className="text-red-500 text-sm mt-1">{errors.email}</p>}
+
+                {/* Personal Email */}
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-extrabold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Personal Email <span className="text-red-500">*</span></label>
+                  <div className="relative">
+                    <Mail size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      required name="personalEmail" value={formData.personalEmail} onChange={handleChange}
+                      className="w-full h-11 pl-10 pr-3.5 bg-white dark:bg-[#1a1714] border border-slate-200 dark:border-[#38352e] rounded-xl text-xs font-semibold text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-[#00a76b] focus:ring-1 focus:ring-[#00a76b] transition-all"
+                      placeholder="personal@gmail.com"
+                    />
+                  </div>
+                  {errors.personalEmail && <p className="text-red-500 text-[10px] font-semibold">{errors.personalEmail}</p>}
+                </div>
+
+                {/* Phone Number */}
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-extrabold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Phone Number <span className="text-red-500">*</span></label>
+                  <div className="relative">
+                    <Phone size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      required name="phone" value={formData.phone} onChange={handleChange}
+                      className="w-full h-11 pl-10 pr-3.5 bg-white dark:bg-[#1a1714] border border-slate-200 dark:border-[#38352e] rounded-xl text-xs font-semibold text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-[#00a76b] focus:ring-1 focus:ring-[#00a76b] transition-all"
+                      placeholder="10-digit phone number" maxLength="10"
+                    />
+                  </div>
+                  {errors.phone && <p className="text-red-500 text-[10px] font-semibold">{errors.phone}</p>}
+                </div>
+
+                {/* Password */}
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-extrabold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Password <span className="text-red-500">*</span></label>
+                  <div className="relative">
+                    <Lock size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      required name="password" value={formData.password} onChange={handleChange} maxLength="20"
+                      type={showPassword ? 'text' : 'password'}
+                      className="w-full h-11 pl-10 pr-10 bg-white dark:bg-[#1a1714] border border-slate-200 dark:border-[#38352e] rounded-xl text-xs font-semibold text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-[#00a76b] focus:ring-1 focus:ring-[#00a76b] transition-all"
+                      placeholder="••••••••"
+                    />
+                    <button
+                      type="button" onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[#00a76b] cursor-pointer border-none bg-transparent"
+                    >
+                      {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                  {errors.password && <p className="text-red-500 text-[10px] font-semibold">{errors.password}</p>}
+                </div>
+              </div>
+            </div>
+
+            {/* SECTION 2: Role & Work Details */}
+            <div className="bg-white dark:bg-[#181612] border border-slate-200/80 dark:border-[#38352e] rounded-2xl p-6 sm:p-7 shadow-xs space-y-6">
+              <div className="flex items-center gap-2 border-b border-slate-100 dark:border-[#28241e] pb-4">
+                <Shield size={18} className="text-[#00a76b]" />
+                <h3 className="text-base font-bold text-slate-900 dark:text-white tracking-tight">Role & Organization Setup</h3>
               </div>
 
-              {/* Personal Email Address */}
-              <div className="space-y-4">
-                <label className="zap-caption-upper text-[#201515]">Personal Email Address <span className="text-[#ff4f00] ml-1">*</span></label>
-                <div className="relative">
-                  <Mail size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#939084]" />
-                  <input
-                    required name="personalEmail" value={formData.personalEmail} onChange={handleChange}
-                    className={`w-full h-14 pl-12 pr-4 bg-white border ${errors.personalEmail ? 'border-red-500' : 'border-[#c5c0b1]'} rounded-2xl text-[15px] font-medium text-[#201515] focus:outline-none focus:border-[#ff4f00] transition-all`}
-                    placeholder="personal@gmail.com"
-                  />
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {/* Role */}
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-extrabold text-slate-600 dark:text-slate-300 uppercase tracking-wider">System Role <span className="text-red-500">*</span></label>
+                  <div className="relative">
+                    <select
+                      required name="role" value={formData.role} onChange={handleChange}
+                      className="w-full h-11 px-3.5 pr-8 bg-white dark:bg-[#1a1714] border border-slate-200 dark:border-[#38352e] rounded-xl text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:border-[#00a76b] focus:ring-1 focus:ring-[#00a76b] appearance-none cursor-pointer"
+                    >
+                      <option value="hr">HR</option>
+                      <option value="manager">Manager</option>
+                      <option value="employee">Employee</option>
+                      <option value="admin">System Admin</option>
+                    </select>
+                    <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                  </div>
                 </div>
-                {errors.personalEmail && <p className="text-red-500 text-sm mt-1">{errors.personalEmail}</p>}
-              </div>
 
-              {/* Phone Number */}
-              <div className="space-y-4">
-                <label className="zap-caption-upper text-[#201515]">Phone Number <span className="text-[#ff4f00] ml-1">*</span></label>
-                <div className="relative">
-                  <Phone size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#939084]" />
-                  <input
-                    required name="phone" value={formData.phone} onChange={handleChange}
-                    className={`w-full h-14 pl-12 pr-4 bg-white border ${errors.phone ? 'border-red-500' : 'border-[#c5c0b1]'} rounded-2xl text-[15px] font-medium text-[#201515] focus:outline-none focus:border-[#ff4f00] transition-all`}
-                    placeholder="Enter 10-digit phone number..."
-                    maxLength="10"
-                  />
-                </div>
-                {errors.phone && <p className="text-red-500 text-sm mt-1">{errors.phone}</p>}
-              </div>
-
-              {/* Password */}
-              <div className="space-y-4">
-                <label className="zap-caption-upper text-[#201515]">Password <span className="text-[#ff4f00] ml-1">*</span></label>
-                <div className="relative">
-                  <Lock size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#939084]" />
-                  <input
-                    required name="password" value={formData.password} onChange={handleChange} maxLength="20"
-                    type={showPassword ? 'text' : 'password'}
-                    className="w-full h-14 pl-12 pr-12 bg-white border border-[#c5c0b1] rounded-2xl text-[15px] font-medium text-[#201515] focus:outline-none focus:border-[#00a76b] transition-all"
-                    placeholder="••••••••"
-                  />
-                  <button
-                    type="button" onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 text-[#939084] hover:text-[#00a76b] transition-all bg-transparent border-none cursor-pointer"
-                  >
-                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                  </button>
-                </div>
-                {errors.password && <p className="text-red-500 text-sm mt-1">{errors.password}</p>}
-              </div>
-
-              {/* System Role */}
-              <div className="space-y-4">
-                <label className="zap-caption-upper text-[#201515]">System Role <span className="text-[#ff4f00] ml-1">*</span></label>
-                <div className="relative">
-                  <Shield size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#939084]" />
-                  <select
-                    required name="role" value={formData.role} onChange={handleChange}
-                    className="w-full h-14 pl-12 pr-12 bg-white border border-[#c5c0b1] rounded-2xl text-[15px] font-bold text-[#201515] focus:outline-none focus:border-[#00a76b] appearance-none cursor-pointer"
-                  >
-                    <option value="hr">HR</option>
-                    <option value="manager">Manager</option>
-                    <option value="employee">Employee</option>
-                    <option value="admin">System Admin</option>
-                  </select>
-                  <ChevronDown size={18} className="absolute right-4 top-1/2 -translate-y-1/2 text-[#939084] pointer-events-none" />
-                </div>
-                {errors.role && <p className="text-red-500 text-sm mt-1">{errors.role}</p>}
-              </div>
-
-              {/* Designation */}
-              <div className="space-y-4">
-                <label className="zap-caption-upper text-[#201515]">Designation</label>
-                <div className="relative">
-                  <Shield size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#939084]" />
+                {/* Designation */}
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-extrabold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Designation</label>
                   <input
                     name="designation" value={formData.designation} onChange={handleChange}
-                    className={`w-full h-14 pl-12 pr-4 bg-white border border-[#c5c0b1] rounded-2xl text-[15px] font-medium text-[#201515] focus:outline-none focus:border-[#ff4f00] transition-all`}
-                    placeholder="Enter designation (e.g. Software Engineer)..."
-                    maxLength="50"
+                    className="w-full h-11 px-3.5 bg-white dark:bg-[#1a1714] border border-slate-200 dark:border-[#38352e] rounded-xl text-xs font-semibold text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-[#00a76b] focus:ring-1 focus:ring-[#00a76b] transition-all"
+                    placeholder="e.g. Software Engineer" maxLength="50"
                   />
                 </div>
-              </div>
 
-              {/* Gender */}
-              <div className="space-y-4">
-                <label className="zap-caption-upper text-[#201515]">Gender <span className="text-[#ff4f00] ml-1">*</span></label>
-                <div className="relative">
-                  <Users size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#939084]" />
-                  <select
-                    required name="gender" value={formData.gender} onChange={handleChange}
-                    className="w-full h-14 pl-12 pr-12 bg-white border border-[#c5c0b1] rounded-2xl text-[15px] font-bold text-[#201515] focus:outline-none focus:border-[#00a76b] appearance-none cursor-pointer"
-                  >
-                    <option value="Male">Male</option>
-                    <option value="Female">Female</option>
-                    <option value="Other">Other</option>
-                  </select>
-                  <ChevronDown size={18} className="absolute right-4 top-1/2 -translate-y-1/2 text-[#939084] pointer-events-none" />
+                {/* Gender */}
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-extrabold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Gender <span className="text-red-500">*</span></label>
+                  <div className="relative">
+                    <select
+                      required name="gender" value={formData.gender} onChange={handleChange}
+                      className="w-full h-11 px-3.5 pr-8 bg-white dark:bg-[#1a1714] border border-slate-200 dark:border-[#38352e] rounded-xl text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:border-[#00a76b] focus:ring-1 focus:ring-[#00a76b] appearance-none cursor-pointer"
+                    >
+                      <option value="Male">Male</option>
+                      <option value="Female">Female</option>
+                      <option value="Other">Other</option>
+                    </select>
+                    <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                  </div>
                 </div>
-                {errors.gender && <p className="text-red-500 text-sm mt-1">{errors.gender}</p>}
-              </div>
 
-              {/* Join Date */}
-              <div className="space-y-4">
-                <label className="zap-caption-upper text-[#201515]">Join Date <span className="text-[#ff4f00] ml-1">*</span></label>
-                <div className="relative">
-                  <Calendar size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#939084] pointer-events-none z-10" />
+                {/* Join Date */}
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-extrabold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Join Date <span className="text-red-500">*</span></label>
                   <input
                     required type="date" name="joinDate" value={formData.joinDate} onChange={handleChange}
-                    className="w-full h-14 pl-12 pr-4 bg-white border border-[#c5c0b1] rounded-2xl text-[15px] font-bold text-[#201515] focus:outline-none focus:border-[#00a76b]"
+                    className="w-full h-11 px-3.5 bg-white dark:bg-[#1a1714] border border-slate-200 dark:border-[#38352e] rounded-xl text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-[#00a76b] focus:ring-1 focus:ring-[#00a76b]"
                   />
+                  {errors.joinDate && <p className="text-red-500 text-[10px] font-semibold">{errors.joinDate}</p>}
                 </div>
-                {errors.joinDate && <p className="text-red-500 text-sm mt-1">{errors.joinDate}</p>}
-              </div>
 
-              {/* Birth Date */}
-              <div className="space-y-4">
-                <label className="zap-caption-upper text-[#201515]">Date of Birth <span className="text-[#ff4f00] ml-1">*</span></label>
-                <div className="relative">
-                  <Calendar size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#939084] pointer-events-none z-10" />
+                {/* Birth Date */}
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-extrabold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Date of Birth <span className="text-red-500">*</span></label>
                   <input
-                    required
-                    type="date"
-                    name="dob"
-                    value={formData.dob}
-                    onChange={handleChange}
-                    max={maxDobDate}
-                    className={`w-full h-14 pl-12 pr-4 bg-white border ${errors.dob ? 'border-red-500' : 'border-[#c5c0b1]'} rounded-2xl text-[15px] font-bold text-[#201515] focus:outline-none focus:border-[#00a76b] transition-all`}
+                    required type="date" name="dob" value={formData.dob} onChange={handleChange} max={maxDobDate}
+                    className="w-full h-11 px-3.5 bg-white dark:bg-[#1a1714] border border-slate-200 dark:border-[#38352e] rounded-xl text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-[#00a76b] focus:ring-1 focus:ring-[#00a76b]"
                   />
+                  {errors.dob && <p className="text-red-500 text-[10px] font-semibold">{errors.dob}</p>}
                 </div>
-                {errors.dob && <p className="text-red-500 text-sm mt-1">{errors.dob}</p>}
+
+                {/* Reporting Manager */}
+                {!['hr', 'manager', 'admin'].includes(formData.role) && (
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-extrabold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Reporting Manager <span className="text-red-500">*</span></label>
+                    <div className="relative">
+                      <select
+                        required name="reportingManager" value={formData.reportingManager} onChange={handleChange}
+                        className="w-full h-11 px-3.5 pr-8 bg-white dark:bg-[#1a1714] border border-slate-200 dark:border-[#38352e] rounded-xl text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:border-[#00a76b] focus:ring-1 focus:ring-[#00a76b] appearance-none cursor-pointer"
+                      >
+                        <option value="">Select Manager</option>
+                        {managers
+                          .filter(m => ['manager', 'admin'].includes(m.role?.toLowerCase()))
+                          .map(m => (
+                            <option key={m._id} value={m._id}>{m.name || m.fullName} ({m.role?.toUpperCase()})</option>
+                          ))}
+                      </select>
+                      <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                    </div>
+                  </div>
+                )}
               </div>
 
-              {/* Reporting Manager */}
-              {!['hr', 'manager', 'admin'].includes(formData.role) && (
-                <div className="space-y-4">
-                  <label className="zap-caption-upper text-[#201515]">Reporting Manager <span className="text-[#ff4f00] ml-1">*</span></label>
-                  <div className="relative">
-                    <Users size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#939084]" />
-                    <select
-                      required name="reportingManager" value={formData.reportingManager} onChange={handleChange}
-                      className="w-full h-14 pl-12 pr-12 bg-white border border-[#c5c0b1] rounded-2xl text-[15px] font-bold text-[#201515] focus:outline-none focus:border-[#00a76b] appearance-none cursor-pointer"
-                    >
-                      <option value="">Select Reporting Manager</option>
-                      {managers
-                        .filter(m => ['manager', 'admin'].includes(m.role?.toLowerCase()))
-                        .map(m => (
-                          <option key={m._id} value={m._id}>{m.name || m.fullName} ({m.role?.toUpperCase()})</option>
-                        ))}
-                    </select>
-                    <ChevronDown size={18} className="absolute right-4 top-1/2 -translate-y-1/2 text-[#939084] pointer-events-none" />
-                  </div>
-                  {errors.reportingManager && <p className="text-red-500 text-sm mt-1">{errors.reportingManager}</p>}
-                </div>
-              )}
-
-              {/* Address */}
-              <div className="space-y-4 col-span-full">
-                <label className="zap-caption-upper text-[#201515]">Physical Address <span className="text-[#ff4f00] ml-1">*</span></label>
+              {/* Physical Address */}
+              <div className="space-y-1.5 pt-2">
+                <label className="text-[11px] font-extrabold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Physical Address <span className="text-red-500">*</span></label>
                 <div className="relative">
-                  <MapPin size={18} className="absolute left-4 top-4 text-[#939084]" />
+                  <MapPin size={16} className="absolute left-3.5 top-3.5 text-slate-400" />
                   <textarea
                     name="address" value={formData.address} onChange={handleChange}
-                    className="w-full h-32 pl-12 pr-4 pt-4 bg-white border border-[#c5c0b1] rounded-2xl text-[15px] font-medium text-[#201515] focus:outline-none focus:border-[#00a76b] transition-all resize-none"
-                    placeholder="Enter physical location address..."
+                    className="w-full h-24 pl-10 pr-3.5 pt-3 bg-white dark:bg-[#1a1714] border border-slate-200 dark:border-[#38352e] rounded-xl text-xs font-semibold text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-[#00a76b] focus:ring-1 focus:ring-[#00a76b] resize-none"
+                    placeholder="Full residential address..."
                   />
-                  <div className="absolute bottom-3 right-4 text-[11px] font-bold text-[#939084]">
+                  <div className="absolute bottom-2.5 right-3 text-[10px] font-bold text-slate-400">
                     {formData.address?.length || 0}/250
                   </div>
                 </div>
-                {errors.address && <p className="text-red-500 text-sm mt-1">{errors.address}</p>}
+                {errors.address && <p className="text-red-500 text-[10px] font-semibold">{errors.address}</p>}
               </div>
             </div>
 
-            {/* DOCUMENT VAULT SECTION */}
-            <div className="pt-10 border-t border-[#eceae3] space-y-8">
-              <h3 className="zap-caption-upper !text-[#201515]">Identity Verification Vault</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {/* SECTION 3: Identity Documents */}
+            <div className="bg-white dark:bg-[#181612] border border-slate-200/80 dark:border-[#38352e] rounded-2xl p-6 sm:p-7 shadow-xs space-y-5">
+              <div className="flex items-center justify-between border-b border-slate-100 dark:border-[#28241e] pb-4">
+                <div className="flex items-center gap-2">
+                  <Fingerprint size={18} className="text-[#00a76b]" />
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white tracking-tight">Identity Verification Documents</h3>
+                </div>
+                <span className="text-[11px] text-slate-400 font-semibold">Accepted formats: JPG, PNG</span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 {/* Adharcard */}
-                <div className={`p-5 rounded-[8px] border-2 border-dashed transition-all flex flex-col justify-between h-full ${adharFile ? 'bg-[#24a148]/5 border-[#24a148]' : 'bg-white border-[#c5c0b1] hover:border-[#00a76b]'}`}>
-                  <div className="flex items-start justify-between mb-6">
-                    <div className="flex items-center gap-4">
-                      <div
-                        className={`w-14 h-14 rounded-2xl flex items-center justify-center overflow-hidden border border-[#eceae3] transition-all shrink-0 ${adharFile ? 'bg-white cursor-pointer hover:scale-105 active:scale-95 shadow-sm' : 'bg-[#eceae3] text-[#939084]'}`}
-                        onClick={() => adharFile && window.open(URL.createObjectURL(adharFile), '_blank')}
-                      >
-                        {adharFile ? (
-                          <img src={URL.createObjectURL(adharFile)} alt="" className="w-full h-full object-cover" />
-                        ) : (
-                          <Info size={24} />
-                        )}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-[15px] font-bold text-[#201515] mb-0.5">Adharcard</p>
-                      </div>
+                <div className={`p-4 rounded-xl border border-dashed transition-all flex flex-col justify-between ${adharFile ? 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-400' : 'bg-slate-50/50 dark:bg-[#1a1714] border-slate-200 dark:border-[#38352e]'}`}>
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="w-9 h-9 rounded-lg bg-white dark:bg-[#25201b] border border-slate-200 dark:border-[#38352e] flex items-center justify-center text-slate-500 shrink-0">
+                      <FileText size={18} />
                     </div>
-                    {adharFile && <span className="text-[10px] font-black text-[#24a148] uppercase tracking-widest bg-[#24a148]/10 px-2 py-1 rounded-2xl">Ready</span>}
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">Adharcard</p>
+                      <p className="text-[10px] text-slate-400 font-semibold">{adharFile ? 'Attached' : 'Required'}</p>
+                    </div>
                   </div>
-                  <label className="zap-btn !h-12 !text-[12px] !bg-[#201515] hover:!bg-[#00a76b] !text-white w-full cursor-pointer flex items-center justify-center transition-colors">
-                    {adharFile ? 'Change Document' : 'Upload Document'}
+                  <label className="h-9 text-xs bg-slate-900 hover:bg-[#00a76b] dark:bg-[#25201b] dark:hover:bg-[#00a76b] text-white font-bold rounded-lg cursor-pointer flex items-center justify-center transition-colors w-full">
+                    {adharFile ? 'Change File' : 'Upload File'}
                     <input type="file" className="hidden" accept=".jpg,.jpeg,.png,image/jpeg,image/png" onChange={(e) => handleDocumentChange(e, setAdharFile, 'Adharcard')} />
                   </label>
                 </div>
 
                 {/* Bank Details */}
-                <div className={`p-5 rounded-[8px] border-2 border-dashed transition-all flex flex-col justify-between h-full ${bankFile ? 'bg-[#24a148]/5 border-[#24a148]' : 'bg-white border-[#c5c0b1] hover:border-[#00a76b]'}`}>
-                  <div className="flex items-start justify-between mb-6">
-                    <div className="flex items-center gap-4">
-                      <div
-                        className={`w-14 h-14 rounded-2xl flex items-center justify-center overflow-hidden border border-[#eceae3] transition-all shrink-0 ${bankFile ? 'bg-white cursor-pointer hover:scale-105 active:scale-95 shadow-sm' : 'bg-[#eceae3] text-[#939084]'}`}
-                        onClick={() => bankFile && window.open(URL.createObjectURL(bankFile), '_blank')}
-                      >
-                        {bankFile ? (
-                          <img src={URL.createObjectURL(bankFile)} alt="" className="w-full h-full object-cover" />
-                        ) : (
-                          <span className="material-symbols-outlined text-[24px]">credit_card</span>
-                        )}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-[15px] font-bold text-[#201515] mb-0.5">Bank Details</p>
-                      </div>
+                <div className={`p-4 rounded-xl border border-dashed transition-all flex flex-col justify-between ${bankFile ? 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-400' : 'bg-slate-50/50 dark:bg-[#1a1714] border-slate-200 dark:border-[#38352e]'}`}>
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="w-9 h-9 rounded-lg bg-white dark:bg-[#25201b] border border-slate-200 dark:border-[#38352e] flex items-center justify-center text-slate-500 shrink-0">
+                      <FileText size={18} />
                     </div>
-                    {bankFile && <span className="text-[10px] font-black text-[#24a148] uppercase tracking-widest bg-[#24a148]/10 px-2 py-1 rounded-2xl">Ready</span>}
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">Bank Details</p>
+                      <p className="text-[10px] text-slate-400 font-semibold">{bankFile ? 'Attached' : 'Required'}</p>
+                    </div>
                   </div>
-                  <label className="zap-btn !h-12 !text-[12px] !bg-[#201515] hover:!bg-[#00a76b] !text-white w-full cursor-pointer flex items-center justify-center transition-colors">
-                    {bankFile ? 'Change Document' : 'Upload Document'}
+                  <label className="h-9 text-xs bg-slate-900 hover:bg-[#00a76b] dark:bg-[#25201b] dark:hover:bg-[#00a76b] text-white font-bold rounded-lg cursor-pointer flex items-center justify-center transition-colors w-full">
+                    {bankFile ? 'Change File' : 'Upload File'}
                     <input type="file" className="hidden" accept=".jpg,.jpeg,.png,image/jpeg,image/png" onChange={(e) => handleDocumentChange(e, setBankFile, 'Bank Details')} />
                   </label>
                 </div>
 
                 {/* PAN Card */}
-                <div className={`p-5 rounded-[8px] border-2 border-dashed transition-all flex flex-col justify-between h-full ${panFile ? 'bg-[#24a148]/5 border-[#24a148]' : 'bg-white border-[#c5c0b1] hover:border-[#00a76b]'}`}>
-                  <div className="flex items-start justify-between mb-6">
-                    <div className="flex items-center gap-4">
-                      <div
-                        className={`w-14 h-14 rounded-2xl flex items-center justify-center overflow-hidden border border-[#eceae3] transition-all shrink-0 ${panFile ? 'bg-white cursor-pointer hover:scale-105 active:scale-95 shadow-sm' : 'bg-[#eceae3] text-[#939084]'}`}
-                        onClick={() => panFile && window.open(URL.createObjectURL(panFile), '_blank')}
-                      >
-                        {panFile ? (
-                          <img src={URL.createObjectURL(panFile)} alt="" className="w-full h-full object-cover" />
-                        ) : (
-                          <span className="material-symbols-outlined text-[24px]">badge</span>
-                        )}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-[15px] font-bold text-[#201515] mb-0.5">Pan Card</p>
-                      </div>
+                <div className={`p-4 rounded-xl border border-dashed transition-all flex flex-col justify-between ${panFile ? 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-400' : 'bg-slate-50/50 dark:bg-[#1a1714] border-slate-200 dark:border-[#38352e]'}`}>
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="w-9 h-9 rounded-lg bg-white dark:bg-[#25201b] border border-slate-200 dark:border-[#38352e] flex items-center justify-center text-slate-500 shrink-0">
+                      <FileText size={18} />
                     </div>
-                    {panFile && <span className="text-[10px] font-black text-[#24a148] uppercase tracking-widest bg-[#24a148]/10 px-2 py-1 rounded-2xl">Ready</span>}
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">PAN Card</p>
+                      <p className="text-[10px] text-slate-400 font-semibold">{panFile ? 'Attached' : 'Required'}</p>
+                    </div>
                   </div>
-                  <label className="zap-btn !h-12 !text-[12px] !bg-[#201515] hover:!bg-[#00a76b] !text-white w-full cursor-pointer flex items-center justify-center transition-colors">
-                    {panFile ? 'Change Document' : 'Upload Document'}
+                  <label className="h-9 text-xs bg-slate-900 hover:bg-[#00a76b] dark:bg-[#25201b] dark:hover:bg-[#00a76b] text-white font-bold rounded-lg cursor-pointer flex items-center justify-center transition-colors w-full">
+                    {panFile ? 'Change File' : 'Upload File'}
                     <input type="file" className="hidden" accept=".jpg,.jpeg,.png,image/jpeg,image/png" onChange={(e) => handleDocumentChange(e, setPanFile, 'PAN Card')} />
                   </label>
                 </div>
               </div>
             </div>
 
-            <div className="pt-10 border-t border-[#c5c0b1] flex flex-col md:flex-row items-center justify-between gap-6">
-              <div className="flex items-center gap-3 text-[#939084] text-[13px] font-medium">
-                <Info size={16} className="text-[#00a76b]" />
-                User records will be distributed across organizational clusters.
+            {/* ACTION BAR */}
+            <div className="bg-white dark:bg-[#181612] border border-slate-200/80 dark:border-[#38352e] rounded-2xl p-5 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 text-xs font-medium">
+                <Info size={16} className="text-[#00a76b] shrink-0" />
+                Employee profile will be registered with assigned role permissions.
               </div>
-              <div className="flex gap-4 w-full md:w-auto">
+              <div className="flex items-center gap-3 w-full sm:w-auto">
+                <button
+                  type="button" onClick={() => navigate(-1)}
+                  className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-[#25201b] dark:hover:bg-[#2d2721] text-slate-700 dark:text-slate-300 font-bold text-xs rounded-xl transition-all cursor-pointer w-full sm:w-auto"
+                >
+                  Cancel
+                </button>
                 <button
                   type="submit" disabled={loading}
-                  className="zap-btn !bg-[#00a76b] !text-white h-14 px-12 min-w-[200px] whitespace-nowrap shadow-lg hover:brightness-110 transition-all font-bold rounded-lg"
+                  className="px-7 py-2.5 bg-[#00a76b] hover:bg-[#00915c] text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer w-full sm:w-auto"
                 >
-                  {loading ? <RefreshCw className="animate-spin mr-3" size={18} /> : <Plus size={18} className="mr-3 text-white" />}
+                  {loading ? <RefreshCw className="animate-spin" size={16} /> : <Plus size={16} />}
                   {loading ? 'Saving...' : 'Save Employee'}
                 </button>
-                <button type="button" onClick={() => navigate(-1)} className="zap-btn zap-btn-light h-14 px-10">Cancel</button>
               </div>
             </div>
-          </form>
+
+          </div>
         </div>
-      </div>
+      </form>
     </div>
   );
 };
