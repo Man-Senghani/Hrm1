@@ -5,10 +5,12 @@ import ErrorBoundary from '@shared/components/ErrorBoundary';
 import { Toaster } from 'react-hot-toast';
 import {
   LayoutDashboard,
+  Users,
   CheckSquare,
   PlusCircle,
   Layers,
   Calendar,
+  CalendarDays,
   MessageSquare,
   Globe,
   Briefcase,
@@ -16,6 +18,9 @@ import {
 } from 'lucide-react';
 
 const ManagerDashboard = lazy(() => import('./pages/ManagerDashboard'));
+const Employees = lazy(() => import('./pages/Employees'));
+const EmployeeDetail = lazy(() => import('./pages/EmployeeDetail'));
+const Attendance = lazy(() => import('./pages/Attendance'));
 const ManagerTasks = lazy(() => import('./pages/ManagerTasks'));
 const TaskCreate = lazy(() => import('./pages/TaskCreate'));
 const ManagerProjects = lazy(() => import('./pages/ManagerProjects'));
@@ -55,9 +60,11 @@ function App() {
 
   const navItems = [
     { label: 'Dashboard', icon: LayoutDashboard, path: '/' },
+    { label: 'My Team', icon: Users, path: '/employees' },
     { label: 'Tasks', icon: CheckSquare, path: '/tasks' },
     { label: 'Create Task', icon: PlusCircle, path: '/tasks/create' },
     { label: 'Projects', icon: Layers, path: '/projects' },
+    { label: 'Team Attendance', icon: CalendarDays, path: '/attendance' },
     { label: 'Leave Approvals', icon: Calendar, path: '/leaves' },
     { label: 'Team Chat', icon: MessageSquare, path: '/chat' },
     { label: 'Company Holidays', icon: Globe, path: '/holidays' },
@@ -78,6 +85,9 @@ function App() {
           <Routes>
             <Route path="/" element={<ManagerDashboard />} />
             <Route path="/dashboard" element={<Navigate to="/" replace />} />
+            <Route path="/employees" element={<Employees />} />
+            <Route path="/employees/view/:id" element={<EmployeeDetail />} />
+            <Route path="/attendance" element={<Attendance />} />
             <Route path="/tasks" element={<ManagerTasks />} />
             <Route path="/tasks/create" element={<TaskCreate />} />
             <Route path="/projects" element={<ManagerProjects />} />

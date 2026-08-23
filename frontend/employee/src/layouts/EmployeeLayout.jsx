@@ -297,13 +297,13 @@ const EmployeeLayout = () => {
 
   const unreadCount = notifications.length;
 
-  // ── SIDEBAR CONTENT ────────────────────────────────────────
+  // ─── SIDEBAR CONTENT ────────────────────────────────────────
   const SidebarContent = ({ mobile = false }) => (
-    <div className="flex flex-col h-full" style={{ backgroundColor: '#071A17', fontFamily: "'Inter', sans-serif" }}>
+    <div className="flex flex-col h-full" style={{ backgroundColor: dark ? '#08100e' : '#ffffff', fontFamily: "'Inter', sans-serif" }}>
       {/* Brand Header */}
       {(!collapsed || mobile) ? (
-        <div className="flex items-center gap-3 px-6 py-5">
-          <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 bg-[#10b981]">
+        <div className="flex items-center gap-3 px-6 py-5 border-b border-[#eceae3] dark:border-[#1a2d29]">
+          <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 bg-[#00a76b]">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="8" />
               <path d="M12 2v2M12 20v2M2 12h2M20 12h2" />
@@ -311,18 +311,18 @@ const EmployeeLayout = () => {
             </svg>
           </div>
           <div className="flex flex-col items-start leading-tight">
-            <span className="font-bold text-[16px] text-white tracking-tight">Fluid HR</span>
-            <span className="text-[10px] font-bold text-[#527068] uppercase tracking-wider">Workforce OS</span>
+            <span className="font-bold text-[16px] text-[#201515] dark:text-white tracking-tight">Fluid HR</span>
+            <span className="text-[10px] font-bold text-[#829e92] dark:text-[#527068] uppercase tracking-wider">Workforce OS</span>
           </div>
           {mobile && (
-            <button onClick={() => setMobileOpen(false)} className="ml-auto p-1 rounded-lg text-[#527068] cursor-pointer bg-transparent border-none hover:text-white">
+            <button onClick={() => setMobileOpen(false)} className="ml-auto p-1 rounded-lg text-[#829e92] cursor-pointer bg-transparent border-none hover:text-[#201515] dark:hover:text-white">
               <X size={20} />
             </button>
           )}
         </div>
       ) : (
-        <div className="flex items-center justify-center py-5">
-          <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 bg-[#10b981]">
+        <div className="flex items-center justify-center py-5 border-b border-[#eceae3] dark:border-[#1a2d29]">
+          <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 bg-[#00a76b]">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="8" />
               <path d="M12 2v2M12 20v2M2 12h2M20 12h2" />
@@ -335,13 +335,13 @@ const EmployeeLayout = () => {
       {/* Nav links */}
       <nav className="flex-1 overflow-y-auto p-3 space-y-4 scrollbar-hide">
         {Object.entries(SIDEBAR_ITEMS).map(([groupName, items]) => (
-          <div key={groupName} className="space-y-2">
+          <div key={groupName} className="space-y-1.5">
             {(!collapsed || mobile) && (
-              <p className="px-4 text-[11px] font-black text-[#527068] uppercase tracking-[0.2em] mb-2 mt-2">
+              <p className="px-3 text-[10px] font-bold text-[#829e92] dark:text-[#527068] uppercase tracking-[0.15em] mb-1.5 mt-1">
                 {groupName}
               </p>
             )}
-            <div className="space-y-1">
+            <div className="space-y-0.5">
               {items.map(item => {
                 const Icon = item.icon;
                 const active = location.pathname === item.path || (item.path !== '/dashboard' && location.pathname.startsWith(item.path + '/')) || (item.path === '/dashboard' && (location.pathname === '/' || location.pathname === '/dashboard'));
@@ -352,10 +352,10 @@ const EmployeeLayout = () => {
                     onClick={() => mobile && setMobileOpen(false)}
                     title={collapsed && !mobile ? item.label : ''}
                     style={{ transition: 'all 200ms ease-in-out' }}
-                    className={`flex items-center h-12 text-[14px] font-medium no-underline rounded-[14px] group ${collapsed && !mobile ? 'justify-center px-0 w-full' : 'px-4 gap-3 w-full'} ${active ? 'text-white bg-[#10b981] shadow-sm' : 'text-[#a3b3af] hover:bg-[#102d29] hover:text-white'}`}
+                    className={`flex items-center h-9 text-[13px] font-semibold no-underline rounded-[6px] group ${collapsed && !mobile ? 'justify-center px-0 w-full' : 'px-3 gap-2.5 w-full'} ${active ? 'text-white bg-[#00a76b] shadow-sm' : 'text-[#475569] dark:text-[#a3b3af] hover:bg-[#eceae3]/50 dark:hover:bg-[#111c18]/60 hover:text-[#00a76b]'}`}
                   >
-                    <div className={`shrink-0 flex items-center justify-center transition-all ${collapsed && !mobile ? 'w-12' : 'w-5'}`}>
-                      <Icon size={20} className={active ? 'text-white' : 'text-[#a3b3af] group-hover:text-white'} style={{ transition: 'color 200ms ease-in-out' }} />
+                    <div className={`shrink-0 flex items-center justify-center transition-all ${collapsed && !mobile ? 'w-8' : 'w-5'}`}>
+                      <Icon size={17} className={active ? 'text-white' : 'text-[#64748b] dark:text-[#829e92] group-hover:text-[#00a76b]'} style={{ transition: 'color 200ms ease-in-out' }} />
                     </div>
                     {(!collapsed || mobile) && <span className="truncate whitespace-nowrap overflow-hidden">{item.label}</span>}
                   </Link>
@@ -367,14 +367,14 @@ const EmployeeLayout = () => {
       </nav>
 
       {/* Collapse button at bottom */}
-      <div className="p-3 mt-auto">
+      <div className="p-3 mt-auto border-t border-[#eceae3] dark:border-[#1a2d29]">
         <button
           onClick={() => setCollapsed(c => !c)}
-          className={`flex items-center h-12 text-[14px] font-medium no-underline rounded-[14px] transition-all w-full bg-transparent border-none cursor-pointer text-[#a3b3af] hover:bg-[#102d29] hover:text-white ${collapsed && !mobile ? 'justify-center px-0' : 'px-4 gap-3'}`}
+          className={`flex items-center h-9 text-[13px] font-semibold no-underline rounded-[6px] transition-all w-full bg-transparent border-none cursor-pointer text-[#475569] dark:text-[#a3b3af] hover:bg-[#eceae3]/50 dark:hover:bg-[#111c18]/60 hover:text-[#00a76b] ${collapsed && !mobile ? 'justify-center px-0' : 'px-3 gap-2.5'}`}
           style={{ transition: 'all 200ms ease-in-out' }}
         >
           <div className="shrink-0 flex items-center justify-center w-5">
-            {collapsed && !mobile ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
+            {collapsed && !mobile ? <ChevronRight size={17} /> : <ChevronLeft size={17} />}
           </div>
           {(!collapsed || mobile) && <span>Collapse</span>}
         </button>
@@ -650,8 +650,8 @@ const EmployeeLayout = () => {
           className="hidden md:flex flex-col border-r flex-shrink-0 transition-all duration-300 ease-in-out relative"
           style={{
             width: collapsed ? '80px' : '280px',
-            borderColor: '#102a26',
-            backgroundColor: '#071A17',
+            borderColor: dark ? '#1a2d29' : '#e2eae7',
+            backgroundColor: dark ? '#08100e' : '#ffffff',
           }}
         >
           <SidebarContent />
@@ -661,8 +661,11 @@ const EmployeeLayout = () => {
         {mobileOpen && (
           <div className="fixed inset-0 z-50 md:hidden">
             <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setMobileOpen(false)} />
-            <aside className="absolute left-0 top-0 bottom-0 w-[280px] border-r animate-slide-in-left"
-              style={{ background: '#071A17', borderColor: '#102a26' }}>
+            <aside className="absolute left-0 top-0 bottom-0 w-[280px] border-r animate-slide-in-left shadow-2xl"
+              style={{
+                backgroundColor: dark ? '#08100e' : '#ffffff',
+                borderColor: dark ? '#1a2d29' : '#e2eae7'
+              }}>
               <SidebarContent mobile />
             </aside>
           </div>
