@@ -1,9 +1,22 @@
 import React, { useEffect, Suspense, lazy } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import EmployeeLayout from './layouts/EmployeeLayout';
+import MainLayout from '@shared/layouts/MainLayout';
 import ErrorBoundary from '@shared/components/ErrorBoundary';
 import { Toaster } from 'react-hot-toast';
-import useAuthStore from '@shared/store/authStore';
+import {
+  LayoutDashboard,
+  Clock,
+  MessageSquare,
+  CalendarDays,
+  Calendar,
+  FolderOpen,
+  Wallet,
+  FileText,
+  Target,
+  Globe,
+  Briefcase,
+  User
+} from 'lucide-react';
 
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Attendance = lazy(() => import('./pages/Attendance'));
@@ -38,48 +51,72 @@ const RouteLoadingFallback = () => (
 );
 
 function App() {
-  const { isAuthenticated } = useAuthStore();
+  const user = JSON.parse(sessionStorage.getItem('user') || '{}');
+  const token = sessionStorage.getItem('token');
 
   useEffect(() => {
-    if (!isAuthenticated) {
+    if (!token) {
       window.location.href = '/';
     }
-  }, [isAuthenticated]);
+  }, [token]);
 
-  if (!isAuthenticated) {
+  if (!token) {
     return null;
   }
 
+  const handleLogout = () => {
+    sessionStorage.clear();
+    window.location.href = '/';
+  };
+
+  const navItems = [
+    { label: 'Dashboard', icon: LayoutDashboard, path: '/' },
+    { label: 'Time Tracker', icon: Clock, path: '/time-tracker' },
+    { label: 'Team Chat', icon: MessageSquare, path: '/chat' },
+    { label: 'My Attendance', icon: CalendarDays, path: '/attendance' },
+    { label: 'My Leave', icon: Calendar, path: '/leave' },
+    { label: 'My Projects', icon: FolderOpen, path: '/projects' },
+    { label: 'My Payslips', icon: Wallet, path: '/payslips' },
+    { label: 'My Documents', icon: FileText, path: '/documents' },
+    { label: 'My Performance', icon: Target, path: '/performance' },
+    { label: 'Company Holidays', icon: Globe, path: '/holidays' },
+    { label: 'Events', icon: Briefcase, path: '/events' },
+    { label: 'My Profile', icon: User, path: '/profile' },
+  ];
+
   return (
     <ErrorBoundary>
-      <Toaster position="top-right" />
+      <Toaster position="bottom-right" toastOptions={{ duration: 3500 }} />
       <ScrollToTop />
-      <Suspense fallback={<RouteLoadingFallback />}>
-        <Routes>
-          {/* Employee portal — all routes live inside EmployeeLayout */}
-          <Route path="/" element={<EmployeeLayout />}>
-            <Route index element={<Dashboard />} />
-            <Route path="dashboard" element={<Dashboard />} />
-            <Route path="time-tracker" element={<TimeTracker />} />
-            <Route path="chat" element={<Chat />} />
-            <Route path="projects" element={<EmployeeProjects />} />
-            <Route path="profile" element={<Profile />} />
-            <Route path="attendance" element={<Attendance />} />
-            <Route path="events" element={<MyEvents />} />
-            <Route path="holidays" element={<Holidays />} />
-            <Route path="leave" element={<LeaveManagement />} />
-            <Route path="payslips" element={<EmployeePayslips />} />
-            <Route path="documents" element={<EmployeeDocuments />} />
-            <Route path="performance" element={<EmployeePerformance />} />
-          </Route>
+      <MainLayout
+        navItems={navItems}
+        userRole="employee"
+        userName={user?.profile?.firstName || user?.name || user?.email || 'Employee'}
+        onLogout={handleLogout}
+      >
+        <Suspense fallback={<RouteLoadingFallback />}>
+          <Routes>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/dashboard" element={<Navigate to="/" replace />} />
+            <Route path="/time-tracker" element={<TimeTracker />} />
+            <Route path="/chat" element={<Chat />} />
+            <Route path="/projects" element={<EmployeeProjects />} />
+            <Route path="/profile" element={<Profile />} />
+            <Route path="/attendance" element={<Attendance />} />
+            <Route path="/events" element={<MyEvents />} />
+            <Route path="/holidays" element={<Holidays />} />
+            <Route path="/leave" element={<LeaveManagement />} />
+            <Route path="/leaves" element={<Navigate to="/leave" replace />} />
+            <Route path="/payslips" element={<EmployeePayslips />} />
+            <Route path="/documents" element={<EmployeeDocuments />} />
+            <Route path="/performance" element={<EmployeePerformance />} />
 
-          {/* Alias for /employee prefix if navigated from legacy links */}
-          <Route path="/employee/*" element={<Navigate to="/" replace />} />
-
-          {/* Catch-all */}
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </Suspense>
+            {/* Fallbacks */}
+            <Route path="/employee/*" element={<Navigate to="/" replace />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </Suspense>
+      </MainLayout>
     </ErrorBoundary>
   );
 }

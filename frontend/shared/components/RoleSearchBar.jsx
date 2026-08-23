@@ -50,7 +50,13 @@ const RoleSearchBar = ({ activeRole }) => {
   const handleNavigate = (path) => {
     setIsOpen(false);
     setQuery('');
-    navigate(path);
+    let cleanPath = path;
+    if (cleanPath.startsWith(`/${activeRole}/`) || cleanPath === `/${activeRole}`) {
+      if (!location.pathname.startsWith(`/${activeRole}`)) {
+        cleanPath = cleanPath.replace(new RegExp(`^/${activeRole}`), '') || '/';
+      }
+    }
+    navigate(cleanPath);
   };
 
   const handleKeyDown = (e) => {

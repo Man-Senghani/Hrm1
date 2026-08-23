@@ -64,7 +64,7 @@ const renderIcon = (iconItem, props) => {
 
 const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
   const [currentTime, setCurrentTime] = useState(new Date());
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(() => typeof window !== 'undefined' ? window.innerWidth >= 768 : true);
   const [isSidebarHovered, setIsSidebarHovered] = useState(false);
   const showExpandedSidebar = isSidebarOpen || isSidebarHovered;
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
@@ -117,10 +117,22 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
   const [isProfileLoading, setIsProfileLoading] = useState(true);
   const [profileError, setProfileError] = useState(null);
 
-  // 🛡️ DYNAMIC ROLE DERIVATION (URL-FIRST)
+  // 🛡️ DYNAMIC ROLE DERIVATION (URL-FIRST OR PROP-FIRST)
   const pathRole = location.pathname.split('/')[1];
   const roleMap = { admin: 'admin', hr: 'hr', manager: 'manager', employee: 'employee' };
-  const activeRole = roleMap[pathRole] ? pathRole : role;
+  const activeRole = userRole || (roleMap[pathRole] ? pathRole : role);
+
+  // Helper to normalize navigation paths across standalone sub-apps and unified admin
+  const handleNav = (targetPath, state) => {
+    if (!targetPath) return;
+    let cleanPath = targetPath;
+    if (cleanPath.startsWith(`/${activeRole}/`) || cleanPath === `/${activeRole}`) {
+      if (!location.pathname.startsWith(`/${activeRole}`)) {
+        cleanPath = cleanPath.replace(new RegExp(`^/${activeRole}`), '') || '/';
+      }
+    }
+    navigate(cleanPath, state);
+  };
   const [unreadChats, setUnreadChats] = useState([]);
   const [isChatPopupOpen, setIsChatPopupOpen] = useState(false);
   const chatRef = useRef(null);
@@ -482,9 +494,9 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
 
     menuItems.forEach(item => {
       const n = item.name.toLowerCase();
-      if (n.includes('dashboard') || n.includes('chat') || n.includes('notifications')) {
+      if (n.includes('dashboard') || n.includes('chat') || n.includes('notifications') || n.includes('overview') || n.includes('time tracker')) {
         categorized['Overview'].push(item);
-      } else if (n.includes('settings') || n.includes('log') || n.includes('create user')) {
+      } else if (n.includes('settings') || n.includes('log') || n.includes('create user') || n.includes('profile')) {
         categorized['Administration'].push(item);
       } else {
         categorized['Workspace'].push(item);
@@ -753,22 +765,22 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
                 <div className="absolute top-[45px] left-4 w-56 bg-white dark:bg-[#0c1512] border border-[#eceae3] dark:border-[#1a2d29] rounded-[20px] shadow-[0_20px_50px_rgba(0,0,0,0.15)] overflow-hidden z-[110] p-2 flex flex-col">
                   {['admin', 'hr'].includes(activeRole) && (
                     <>
-                      <button onClick={() => { setIsQuickActionOpen(false); navigate('/create-user'); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-[#162722] text-xs font-bold text-gray-700 dark:text-slate-300 rounded-xl transition-colors border-none bg-transparent cursor-pointer">
+                      <button onClick={() => { setIsQuickActionOpen(false); handleNav('/create-user'); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-[#162722] text-xs font-bold text-gray-700 dark:text-slate-300 rounded-xl transition-colors border-none bg-transparent cursor-pointer">
                         Add Employee
                       </button>
-                      <button onClick={() => { setIsQuickActionOpen(false); navigate('/leave'); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-[#162722] text-xs font-bold text-gray-700 dark:text-slate-300 rounded-xl transition-colors border-none bg-transparent cursor-pointer">
+                      <button onClick={() => { setIsQuickActionOpen(false); handleNav('/leave'); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-[#162722] text-xs font-bold text-gray-700 dark:text-slate-300 rounded-xl transition-colors border-none bg-transparent cursor-pointer">
                         Apply Leave
                       </button>
-                      <button onClick={() => { setIsQuickActionOpen(false); navigate('/notifications'); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-[#162722] text-xs font-bold text-gray-700 dark:text-slate-300 rounded-xl transition-colors border-none bg-transparent cursor-pointer">
+                      <button onClick={() => { setIsQuickActionOpen(false); handleNav('/notifications'); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-[#162722] text-xs font-bold text-gray-700 dark:text-slate-300 rounded-xl transition-colors border-none bg-transparent cursor-pointer">
                         Create Announcement
                       </button>
-                      <button onClick={() => { setIsQuickActionOpen(false); navigate('/payroll'); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-[#162722] text-xs font-bold text-gray-700 dark:text-slate-300 rounded-xl transition-colors border-none bg-transparent cursor-pointer">
+                      <button onClick={() => { setIsQuickActionOpen(false); handleNav('/payroll'); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-[#162722] text-xs font-bold text-gray-700 dark:text-slate-300 rounded-xl transition-colors border-none bg-transparent cursor-pointer">
                         Generate Payroll
                       </button>
-                      <button onClick={() => { setIsQuickActionOpen(false); navigate('/recruitment'); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-[#162722] text-xs font-bold text-gray-700 dark:text-slate-300 rounded-xl transition-colors border-none bg-transparent cursor-pointer">
+                      <button onClick={() => { setIsQuickActionOpen(false); handleNav('/recruitment'); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-[#162722] text-xs font-bold text-gray-700 dark:text-slate-300 rounded-xl transition-colors border-none bg-transparent cursor-pointer">
                         Schedule Interview
                       </button>
-                      <button onClick={() => { setIsQuickActionOpen(false); navigate('/task-management/create'); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-[#162722] text-xs font-bold text-gray-700 dark:text-slate-300 rounded-xl transition-colors border-none bg-transparent cursor-pointer">
+                      <button onClick={() => { setIsQuickActionOpen(false); handleNav('/task-management/create'); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-[#162722] text-xs font-bold text-gray-700 dark:text-slate-300 rounded-xl transition-colors border-none bg-transparent cursor-pointer">
                         Assign Task
                       </button>
                     </>
@@ -776,34 +788,40 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
 
                   {activeRole === 'manager' && (
                     <>
-                      <button onClick={() => { setIsQuickActionOpen(false); navigate('/task-management/create'); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-[#162722] text-xs font-bold text-gray-700 dark:text-slate-300 rounded-xl transition-colors border-none bg-transparent cursor-pointer">
+                      <button onClick={() => { setIsQuickActionOpen(false); handleNav('/tasks/create'); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-[#162722] text-xs font-bold text-gray-700 dark:text-slate-300 rounded-xl transition-colors border-none bg-transparent cursor-pointer">
                         Assign / Reassign Task
                       </button>
-                      <button onClick={() => { setIsQuickActionOpen(false); navigate('/leave'); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-[#162722] text-xs font-bold text-gray-700 dark:text-slate-300 rounded-xl transition-colors border-none bg-transparent cursor-pointer">
+                      <button onClick={() => { setIsQuickActionOpen(false); handleNav('/leaves'); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-[#162722] text-xs font-bold text-gray-700 dark:text-slate-300 rounded-xl transition-colors border-none bg-transparent cursor-pointer">
                         Approve / Reject Leave
                       </button>
-                      <button onClick={() => { setIsQuickActionOpen(false); navigate('/create-user'); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-[#162722] text-xs font-bold text-gray-700 dark:text-slate-300 rounded-xl transition-colors border-none bg-transparent cursor-pointer">
+                      <button onClick={() => { setIsQuickActionOpen(false); handleNav('/employees'); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-[#162722] text-xs font-bold text-gray-700 dark:text-slate-300 rounded-xl transition-colors border-none bg-transparent cursor-pointer">
                         Add Team Member
                       </button>
-                      <button onClick={() => { setIsQuickActionOpen(false); navigate(`/${activeRole}/events`); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-[#162722] text-xs font-bold text-gray-700 dark:text-slate-300 rounded-xl transition-colors border-none bg-transparent cursor-pointer">
+                      <button onClick={() => { setIsQuickActionOpen(false); handleNav('/events'); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-[#162722] text-xs font-bold text-gray-700 dark:text-slate-300 rounded-xl transition-colors border-none bg-transparent cursor-pointer">
                         Schedule
                       </button>
-                      <button onClick={() => { setIsQuickActionOpen(false); navigate(`/${activeRole}/projects`); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-[#162722] text-xs font-bold text-gray-700 dark:text-slate-300 rounded-xl transition-colors border-none bg-transparent cursor-pointer">
+                      <button onClick={() => { setIsQuickActionOpen(false); handleNav('/projects'); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-[#162722] text-xs font-bold text-gray-700 dark:text-slate-300 rounded-xl transition-colors border-none bg-transparent cursor-pointer">
                         Create Project
                       </button>
-                      <button onClick={() => { setIsQuickActionOpen(false); navigate(`/${activeRole}/reports`); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-[#162722] text-xs font-bold text-gray-700 dark:text-slate-300 rounded-xl transition-colors border-none bg-transparent cursor-pointer">
-                        Generate Report
+                      <button onClick={() => { setIsQuickActionOpen(false); handleNav('/attendance'); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-[#162722] text-xs font-bold text-gray-700 dark:text-slate-300 rounded-xl transition-colors border-none bg-transparent cursor-pointer">
+                        Team Attendance
                       </button>
                     </>
                   )}
 
                   {activeRole === 'employee' && (
                     <>
-                      <button onClick={() => { setIsQuickActionOpen(false); navigate(`/${activeRole}/leave`); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-[#162722] text-xs font-bold text-gray-700 dark:text-slate-300 rounded-xl transition-colors border-none bg-transparent cursor-pointer">
+                      <button onClick={() => { setIsQuickActionOpen(false); handleNav('/leave'); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-[#162722] text-xs font-bold text-gray-700 dark:text-slate-300 rounded-xl transition-colors border-none bg-transparent cursor-pointer">
                         Apply Leave
                       </button>
-                      <button onClick={() => { setIsQuickActionOpen(false); navigate(`/${activeRole}/task-management/create`); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-[#162722] text-xs font-bold text-gray-700 dark:text-slate-300 rounded-xl transition-colors border-none bg-transparent cursor-pointer">
-                        Assign Task
+                      <button onClick={() => { setIsQuickActionOpen(false); handleNav('/time-tracker'); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-[#162722] text-xs font-bold text-gray-700 dark:text-slate-300 rounded-xl transition-colors border-none bg-transparent cursor-pointer">
+                        Time Tracker
+                      </button>
+                      <button onClick={() => { setIsQuickActionOpen(false); handleNav('/projects'); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-[#162722] text-xs font-bold text-gray-700 dark:text-slate-300 rounded-xl transition-colors border-none bg-transparent cursor-pointer">
+                        My Projects
+                      </button>
+                      <button onClick={() => { setIsQuickActionOpen(false); handleNav('/documents'); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-[#162722] text-xs font-bold text-gray-700 dark:text-slate-300 rounded-xl transition-colors border-none bg-transparent cursor-pointer">
+                        My Documents
                       </button>
                     </>
                   )}
@@ -881,7 +899,7 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
                             key={i}
                             onClick={() => {
                               setUnreadChats(prev => prev.filter(chat => chat._id !== c._id));
-                              navigate(`/${activeRole}/chat`, { state: { openChatId: c._id } });
+                              handleNav(`/${activeRole}/chat`, { state: { openChatId: c._id } });
                               setIsChatPopupOpen(false);
                             }}
                             className="p-4 border-b border-[#eceae3] dark:border-[#1a2d29] hover:bg-[#fffdf9] dark:hover:bg-[#162722]/50 transition-all cursor-pointer group"
@@ -912,7 +930,7 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
                     )}
                   </div>
                   <button
-                    onClick={() => { navigate(`/${activeRole}/chat`); setIsChatPopupOpen(false); }}
+                    onClick={() => { handleNav(`/${activeRole}/chat`); setIsChatPopupOpen(false); }}
                     className="w-full py-3 bg-[#eceae3] dark:bg-[#162722] text-[10px] font-black text-[#201515] dark:text-white uppercase tracking-[0.2em] hover:bg-[#c5c0b1] dark:hover:bg-[#111c18] transition-all border-none cursor-pointer"
                   >
                     View All Messages
@@ -997,7 +1015,7 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
                       Mark All Read
                     </button>
                     <button
-                      onClick={() => { navigate(`/${activeRole}/notifications`); setIsNotificationsOpen(false); }}
+                      onClick={() => { handleNav(`/${activeRole}/notifications`); setIsNotificationsOpen(false); }}
                       className="w-1/2 py-3 bg-[#eceae3] dark:bg-[#162722] text-[10px] font-black text-[#201515] dark:text-white uppercase tracking-wider hover:bg-[#c5c0b1] dark:hover:bg-[#111c18] transition-all border-none cursor-pointer"
                     >
                       View All
