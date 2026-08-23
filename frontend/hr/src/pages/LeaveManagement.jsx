@@ -25,6 +25,7 @@ import AddHolidayModal from '../components/modals/AddHolidayModal';
 import CompOffApprovalModal from '../components/modals/CompOffApprovalModal';
 import LeaveEncashmentModal from '../components/modals/LeaveEncashmentModal';
 import ActionConfirmModal from '../components/ActionConfirmModal';
+import EmployeeLeaveManagement from '../components/EmployeeLeaveManagement';
 
 const Leaves = () => {
   const location = useLocation();
@@ -34,7 +35,7 @@ const Leaves = () => {
   const role = sessionStorage.getItem('role');
 
   const [viewMode, setViewMode] = useState(
-    role === 'admin' ? 'hr' : (location.state?.viewMode || (location.state?.tab === 'team' ? 'hr' : 'employee'))
+    ['admin', 'hr'].includes(role) ? (location.state?.viewMode || 'hr') : (location.state?.viewMode || 'employee')
   ); // 'hr' or 'employee'
 
   // Modal states

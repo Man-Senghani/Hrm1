@@ -12,6 +12,7 @@ import QuickActions from '../components/QuickActions';
 
 import EmployeesOnLeaveTodayDrawer from '../components/modals/EmployeesOnLeaveTodayDrawer';
 import UpcomingLeavesDrawer from '../components/modals/UpcomingLeavesDrawer';
+import EmployeeLeaveManagement from '../components/EmployeeLeaveManagement';
 
 const LeaveManagement = () => {
   const [stats, setStats] = useState(null);
