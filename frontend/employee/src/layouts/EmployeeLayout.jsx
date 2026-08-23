@@ -282,7 +282,7 @@ const EmployeeLayout = () => {
       }
     }
     setIsProfileDropdownOpen(false);
-    navigate(`/${targetRole}/dashboard`);
+    window.location.href = `/${targetRole}`;
     window.location.reload();
   };
 

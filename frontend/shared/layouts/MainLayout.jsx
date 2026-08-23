@@ -522,7 +522,7 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
       }
     }
     setIsProfileDropdownOpen(false);
-    navigate(`/${targetRole}/dashboard`);
+    window.location.href = `/${targetRole}`;
     window.location.reload();
   };
 

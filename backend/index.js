@@ -225,9 +225,29 @@ app.use('/api/holidays', require('./routes/holidayRoutes'));
 app.use('/api/on-duty', require('./routes/onDutyRoutes'));
 
 
-// Health check
+// Health and Version Check
 app.get('/health', (req, res) => res.json({ status: 'API is running' }));
 app.get('/api/health', (req, res) => res.json({ status: 'API is running' }));
+app.get('/api/version', (req, res) => {
+  res.json({
+    status: 'ok',
+    version: require('../package.json').version || '1.0.0',
+    environment: process.env.NODE_ENV || 'development',
+    serverTime: new Date().toISOString()
+  });
+});
+
+// Cache configuration for static assets
+const staticOptions = {
+  maxAge: '1y',
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.html')) {
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+    }
+  }
+};
 
 // 🌐 Serve Static Frontend Apps (Multi-SPA Subpaths: /admin, /hr, /employee, /manager)
 const frontends = [
@@ -241,10 +261,11 @@ frontends.forEach(({ prefix, dir }) => {
   const indexPath = path.join(dir, 'index.html');
   if (fs.existsSync(indexPath)) {
     // Serve static assets under the subpath
-    app.use(prefix, express.static(dir));
+    app.use(prefix, express.static(dir, staticOptions));
 
     // Handle client-side routing fallback (SPA) for subpath
     app.get([prefix, `${prefix}/*splat`], (req, res) => {
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
       res.sendFile(indexPath);
     });
   }
@@ -255,8 +276,9 @@ const LOGIN_DIST = path.join(__dirname, '../frontend/login/dist');
 const LOGIN_INDEX = path.join(LOGIN_DIST, 'index.html');
 
 if (fs.existsSync(LOGIN_INDEX)) {
-  app.use(express.static(LOGIN_DIST));
+  app.use(express.static(LOGIN_DIST, staticOptions));
   app.get(['/', '/login', '/forgot-password', '/reset-password'], (req, res) => {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.sendFile(LOGIN_INDEX);
   });
 }

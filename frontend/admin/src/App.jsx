@@ -93,8 +93,7 @@ const ProtectedRoute = ({ children, allowedRole }) => {
   const role = sessionStorage.getItem('role');
 
   if (!token) {
-    window.location.href = '/';
-    return null;
+    return <Navigate to="/login" replace />;
   }
 
   // ROLE SPECIFIC CHECK (ADMIN OVERRIDE)
@@ -112,18 +111,6 @@ const ProtectedRoute = ({ children, allowedRole }) => {
   }
 
   return children;
-};
-
-// ROOT REDIRECT LOGIC: Redirect to root login if not authenticated
-const RootRedirect = () => {
-  React.useEffect(() => {
-    const token = sessionStorage.getItem('token');
-    if (!token) {
-      window.location.href = '/';
-    }
-  }, []);
-
-  return null;
 };
 
 const App = () => {
@@ -196,7 +183,6 @@ const App = () => {
       <Suspense fallback={<RouteLoadingFallback />}>
         <Routes>
           {/* PUBLIC ROUTES */}
-          <Route path="/" element={<RootRedirect />} />
           <Route path="/login" element={<Login />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password/:token" element={<ResetPassword />} />

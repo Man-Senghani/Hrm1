@@ -11,7 +11,7 @@ export default defineConfig({
   base: '/manager/',
   plugins: [react()],
   server: {
-    port: 5003,
+    port: 5004,
     strictPort: true,
   },
   resolve: {
