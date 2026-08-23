@@ -1,12 +1,24 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
-import { API_BASE_URL, getImageUrl } from '@shared/services/api';
-import { FileText, UploadCloud, RefreshCw, CheckCircle, AlertTriangle } from 'lucide-react';
+import { FileText, Download, Upload, Trash2, Check, RefreshCw, Search, X, Plus } from 'lucide-react';
 import { toast } from 'react-hot-toast';
+import axios from 'axios';
+import { getImageUrl } from '@shared/services/api';
 
 const EmployeeDocuments = () => {
+  const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'));
+  useEffect(() => {
+    const observer = new MutationObserver(() => {
+      setIsDark(document.documentElement.classList.contains('dark'));
+    });
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+    return () => observer.disconnect();
+  }, []);
+  const [dossierFiles, setDossierFiles] = useState([]);
   const [userData, setUserData] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
+  const [uploadSuccess, setUploadSuccess] = useState(false);
+  const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   const [uploadingField, setUploadingField] = useState(null);
 
   const token = sessionStorage.getItem('token');
@@ -19,11 +31,42 @@ const EmployeeDocuments = () => {
       });
       if (response.data) {
         setUserData(response.data);
+        const u = response.data;
+
+        const fetchedFiles = [
+          {
+            id: 'adharCard',
+            name: u.adharCard ? 'Adhar Card Document' : 'Adhar Card (Missing)',
+            size: u.adharCard ? 'Uploaded' : '--',
+            date: u.adharCard ? 'Verified' : 'Pending',
+            type: 'adharCard',
+            url: u.adharCard
+          },
+          {
+            id: 'bankDetails',
+            name: u.bankDetails ? 'Bank Details Document' : 'Bank Details (Missing)',
+            size: u.bankDetails ? 'Uploaded' : '--',
+            date: u.bankDetails ? 'Verified' : 'Pending',
+            type: 'bankDetails',
+            url: u.bankDetails
+          },
+          {
+            id: 'panCard',
+            name: u.panCard ? 'PAN Card Document' : 'PAN Card (Missing)',
+            size: u.panCard ? 'Uploaded' : '--',
+            date: u.panCard ? 'Verified' : 'Pending',
+            type: 'panCard',
+            url: u.panCard
+          }
+        ];
+
+        setDossierFiles(prev => {
+          const dummies = prev.filter(f => f.dummy || (!['adharCard', 'bankDetails', 'panCard'].includes(f.type)));
+          return [...dummies, ...fetchedFiles];
+        });
       }
     } catch (err) {
       console.warn('Sync failed.', err);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -31,7 +74,7 @@ const EmployeeDocuments = () => {
     if (token) fetchProfile();
   }, [token]);
 
-  const handleDocumentChange = async (e, fieldName) => {
+  const handleRealUpload = async (e, fieldName) => {
     const file = e.target.files[0];
     if (!file) return;
 
@@ -48,7 +91,7 @@ const EmployeeDocuments = () => {
     reader.onloadend = async () => {
       try {
         setUploadingField(fieldName);
-        
+
         let endpoint = '';
         if (fieldName === 'adharCard') endpoint = `/api/employees/${userData.employeeRecordId}/adhar-card`;
         if (fieldName === 'bankDetails') endpoint = `/api/employees/${userData.employeeRecordId}/bank-details`;
@@ -57,16 +100,15 @@ const EmployeeDocuments = () => {
         await axios.post(endpoint, { document: reader.result }, {
           headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
         });
-        
-        toast.success(`${fieldName} updated successfully`, {
+
+        toast.success(`Document updated successfully`, {
           style: { background: '#24a148', color: '#fff', fontWeight: 'bold' }
         });
-        
-        // Refresh data to show new image
+
         await fetchProfile();
       } catch (err) {
         toast.error('Verification Failed', {
-           style: { background: '#ff4f00', color: '#fff', fontWeight: 'bold' }
+          style: { background: '#ff4f00', color: '#fff', fontWeight: 'bold' }
         });
         console.error('Upload Error:', err);
       } finally {
@@ -76,95 +118,273 @@ const EmployeeDocuments = () => {
     reader.readAsDataURL(file);
   };
 
-  if (loading) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
-        <RefreshCw size={32} className="animate-spin text-[#00a76b]" />
-        <p className="text-[11px] font-bold uppercase tracking-widest text-[#9ca3af]">Syncing Identity Vault...</p>
-      </div>
-    );
-  }
 
-  if (!userData) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
-        <AlertTriangle size={32} className="text-[#ff4f00]" />
-        <p className="text-[13px] font-bold text-[#3b3e3c]">Failed to load identity records.</p>
-      </div>
-    );
-  }
-
-  const { adharCard, bankDetails, panCard } = userData;
-
-  const renderDocumentBox = (title, field, currentValue, icon) => {
-    const isPdf = currentValue && (currentValue.toLowerCase().endsWith('.pdf') || currentValue.startsWith('data:application/pdf'));
-
-    return (
-      <div className="bg-white rounded-xl border border-[#eceae3] p-6 shadow-sm flex flex-col justify-between h-full hover:border-[#00a76b] transition-all">
-        <div className="flex items-start justify-between mb-6">
-          <div className="flex items-center gap-4">
-            <div 
-              className={`w-14 h-14 rounded-lg flex items-center justify-center overflow-hidden border border-[#eceae3] transition-all shrink-0 ${currentValue ? 'bg-white cursor-pointer hover:scale-105 active:scale-95 shadow-sm' : 'bg-[#f9fdfc] text-[#8c918f]'}`}
-              onClick={() => currentValue && window.open(getImageUrl(currentValue), '_blank')}
-            >
-              {currentValue ? (
-                isPdf ? (
-                  <div className="flex flex-col items-center justify-center text-red-500">
-                    <span className="font-black text-[10px] uppercase">PDF</span>
-                  </div>
-                ) : (
-                  <img src={getImageUrl(currentValue)} alt={title} className="w-full h-full object-cover" />
-                )
-              ) : (
-                icon
-              )}
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-[15px] font-bold text-[#2c302e] mb-0.5">{title}</p>
-              {!currentValue && <p className="text-[11px] text-[#8c918f] leading-tight">Missing document</p>}
-            </div>
-          </div>
-          {currentValue && <span className="text-[10px] font-black text-[#00a76b] uppercase tracking-widest bg-[#00a76b]/10 px-2 py-1 rounded-[4px]">Ready</span>}
-        </div>
+  const triggerDownload = async (fileName, url) => {
+    if (url) {
+      try {
+        const fullUrl = getImageUrl(url);
+        const response = await fetch(fullUrl);
+        const blob = await response.blob();
+        const dummyUrl = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = dummyUrl;
         
-        <label className="w-full h-10 bg-[#f9fdfc] hover:bg-[#00a76b] hover:text-white border border-[#eceae3] hover:border-[#00a76b] text-[#2c302e] rounded-lg text-[12px] font-bold uppercase tracking-widest cursor-pointer flex items-center justify-center gap-2 transition-all active:scale-[0.98]">
-          {uploadingField === field ? (
-             <RefreshCw size={14} className="animate-spin" />
-          ) : (
-             <UploadCloud size={14} />
-          )}
-          {uploadingField === field ? 'Uploading...' : (currentValue ? 'Replace Document' : 'Upload Document')}
-          <input 
-            type="file" 
-            className="hidden" 
-            accept=".jpg,.jpeg,.png,image/jpeg,image/png,application/pdf" 
-            onChange={(e) => handleDocumentChange(e, field)}
-            disabled={uploadingField === field}
-          />
-        </label>
-      </div>
-    );
+        const extMatch = url.match(/\.[0-9a-z]+$/i);
+        const ext = extMatch ? extMatch[0] : '';
+        const downloadName = fileName.replace(/\s+/g, '_') + ext;
+        link.download = downloadName;
+        
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        setTimeout(() => URL.revokeObjectURL(dummyUrl), 1000);
+      } catch (err) {
+        console.error('Download failed, opening in new tab', err);
+        window.open(getImageUrl(url), '_blank');
+      }
+      return;
+    }
+    const cleanName = fileName.replace(/\.pdf$/i, '').replace(/_/g, ' ');
+    const contentStream = `BT\n/F1 18 Tf\n50 720 Td\n(${cleanName}) Tj\n/F1 12 Tf\n0 -30 Td\n(FluidHR Document Verification Registry) Tj\n0 -20 Td\n(File Ref: ${fileName}) Tj\n0 -20 Td\n(Verification Date: ${new Date().toLocaleDateString()}) Tj\n0 -40 Td\n(This is a system-generated document showing verified employee records.) Tj\n0 -20 Td\n(All rights reserved by FluidHR Workforce OS.) Tj\nET`;
+    const streamLength = contentStream.length;
+    const pdfString = `%PDF-1.4\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>\nendobj\n4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n5 0 obj\n<< /Length ${streamLength} >>\nstream\n${contentStream}\nendstream\nendobj\nxref\n0 6\n0000000000 65535 f\n0000000009 00000 n\n0000000056 00000 n\n0000000111 00000 n\n0000000212 00000 n\n0000000289 00000 n\ntrailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${307 + streamLength}\n%%EOF`;
+
+    const blob = new Blob([pdfString], { type: "application/pdf" });
+    const dummyUrl = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = dummyUrl;
+    link.download = fileName.endsWith('.pdf') ? fileName : `${fileName}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(() => {
+      URL.revokeObjectURL(dummyUrl);
+    }, 1000);
+  };
+
+  const handleDummyUpload = (e) => {
+    e.preventDefault();
+    if (!e.target.files?.[0]) return;
+    setUploading(true);
+    const fileName = e.target.files[0].name;
+    const fileSize = `${Math.round(e.target.files[0].size / 1024)} KB`;
+    setTimeout(() => {
+      setUploading(false);
+      setUploadSuccess(true);
+      setDossierFiles(prev => [
+        ...prev,
+        {
+          id: Date.now(),
+          name: fileName,
+          size: fileSize,
+          date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+          type: 'other',
+          dummy: true
+        }
+      ]);
+      setTimeout(() => {
+        setUploadSuccess(false);
+        setIsUploadModalOpen(false);
+      }, 2000);
+    }, 1500);
+  };
+
+  const handleDelete = (id) => {
+    if (window.confirm('Are you sure you want to remove this document from your dossier?')) {
+      setDossierFiles(prev => prev.filter(f => f.id !== id));
+    }
+  };
+
+  const filteredDossier = dossierFiles.filter(f =>
+    f.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const handleExport = () => {
+    if (dossierFiles.length === 0) {
+      alert('No documents to export.');
+      return;
+    }
+    
+    try {
+      const headers = ['File Name', 'Size', 'Upload Date', 'Type'];
+      const rows = dossierFiles.map(file => [
+        `"${(file.name || '').replace(/"/g, '""')}"`,
+        `"${file.size || ''}"`,
+        `"${file.date || ''}"`,
+        `"${file.type || 'other'}"`
+      ]);
+
+      const csvContent = [
+        headers.join(','),
+        ...rows.map(row => row.join(','))
+      ].join('\n');
+
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', 'document_metadata.csv');
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      
+      toast.success('Document metadata exported successfully');
+    } catch (error) {
+      console.error('Export failed:', error);
+      alert('Failed to export documents.');
+    }
   };
 
   return (
-    <div className="p-8 pb-32 animate-fade-in max-w-6xl mx-auto">
-      <div className="mb-10">
-        <h1 className="text-3xl font-extrabold text-[#2c302e] tracking-tight">Identity Vault</h1>
-        <p className="text-sm font-medium text-[#8c918f] mt-2">Manage your verified credentials and institutional records.</p>
+    <div style={{ fontFamily: "'Inter', -apple-system, sans-serif", background: isDark ? '#08100e' : '#f9fdfc', minHeight: 'calc(100vh - 56px)', color: isDark ? '#cbd5e1' : '#3b3e3c', width: '100%', boxSizing: 'border-box', transition: 'background-color 0.3s ease, color 0.3s ease' }}>
+      <div style={{ width: '100%', maxWidth: '100%', padding: '32px 32px 60px', boxSizing: 'border-box' }}>
+
+        {/* HEADER */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, marginBottom: 24 }}>
+          <div>
+            <h1 style={{ fontSize: 28, fontWeight: 800, color: isDark ? '#fff' : '#2c302e', margin: 0, letterSpacing: '-0.5px' }}>
+              My documents
+            </h1>
+            <p style={{ fontSize: 14, color: isDark ? '#a3b3af' : '#8c918f', margin: '4px 0 0' }}>Personal files shared with HR.</p>
+          </div>
+          <div style={{ display: 'flex', gap: 12 }}>
+            <button onClick={handleExport} className="verdant-btn-outline" style={{ gap: 8, height: 44 }}>
+              <Download size={16} /> Export
+            </button>
+          </div>
+        </div>
+
+        {/* SEARCH BAR */}
+        <div style={{ display: 'flex', gap: 12, marginBottom: 24 }}>
+          <div style={{ position: 'relative', flex: 1 }}>
+            <Search size={18} color={isDark ? '#a3b3af' : '#9ca3af'} style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)' }} />
+            <input
+              type="text"
+              placeholder="Search..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              className="verdant-input with-search-icon"
+            />
+          </div>
+        </div>
+
+        {/* FILES CARD */}
+        <div className="verdant-card" style={{ padding: 0, overflow: 'hidden', marginBottom: 28 }}>
+          <div style={{ padding: '20px 24px', borderBottom: isDark ? '1px solid #1a2d29' : '1px solid #e2eae7' }}>
+            <h3 style={{ fontSize: 16, fontWeight: 800, color: isDark ? '#fff' : '#2c302e', margin: 0 }}>Files</h3>
+          </div>
+
+          {filteredDossier.length === 0 ? (
+            <p style={{ padding: '40px 24px', textAlign: 'center', color: isDark ? '#a3b3af' : '#8c918f', fontSize: 14, margin: 0 }}>
+              No dossier files found.
+            </p>
+          ) : (
+            filteredDossier.map((file, idx) => (
+              <div
+                key={file.id || idx}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '16px 24px',
+                  borderBottom: idx === filteredDossier.length - 1 ? 'none' : (isDark ? '1px solid #1a2d29' : '1px solid #e2eae7'),
+                  transition: 'background 0.2s'
+                }}
+                className={isDark ? "hover:bg-[#162722]" : "hover:bg-[#f9fdfc]"}
+              >
+                <div 
+                  style={{ display: 'flex', alignItems: 'center', gap: 16, cursor: file.url ? 'pointer' : 'default' }}
+                  onClick={() => file.url && window.open(getImageUrl(file.url), '_blank')}
+                >
+                  <div style={{ width: 40, height: 40, borderRadius: '50%', background: isDark ? 'rgba(0, 167, 107, 0.08)' : '#e6f7f0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <FileText size={20} color="#00a76b" />
+                  </div>
+                  <div>
+                    <h4 style={{ fontSize: 15, fontWeight: 700, color: isDark ? '#fff' : '#3b3e3c', margin: '0 0 4px' }}>{file.name}</h4>
+                    <p style={{ fontSize: 13, color: isDark ? '#a3b3af' : '#8c918f', margin: 0 }}>
+                      {file.size} • {file.date}
+                    </p>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  {/* Download button for all files */}
+                  {(file.dummy || file.url) && (
+                    <button
+                      onClick={() => triggerDownload(file.name, file.url)}
+                      className="verdant-btn-outline"
+                      style={{ gap: 6, height: 36, padding: '0 16px', fontSize: 12 }}
+                    >
+                      <Download size={14} /> Download
+                    </button>
+                  )}
+
+                  {/* Replace/Upload button for actual backend documents */}
+                  {['adharCard', 'bankDetails', 'panCard'].includes(file.type) && (
+                    <label className="verdant-btn-outline" style={{ display: 'flex', alignItems: 'center', gap: 6, height: 36, padding: '0 16px', fontSize: 12, cursor: 'pointer', margin: 0 }}>
+                      <Upload size={14} /> {file.url ? 'Replace' : 'Upload'}
+                      <input
+                        type="file"
+                        className="hidden"
+                        accept=".jpg,.jpeg,.png,image/jpeg,image/png,application/pdf"
+                        onChange={(e) => handleRealUpload(e, file.type)}
+                        disabled={uploadingField === file.type}
+                      />
+                    </label>
+                  )}
+
+                  {/* Option to delete user-added dummy dossier files */}
+                  {file.dummy && file.id > 4 && (
+                    <button
+                      onClick={() => handleDelete(file.id)}
+                      className="verdant-btn-outline"
+                      style={{ height: 36, width: 36, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderColor: '#f87171', color: '#ef4444' }}
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {renderDocumentBox('Adharcard Registry', 'adharCard', adharCard, <FileText size={24} />)}
-        {renderDocumentBox('Bank Details', 'bankDetails', bankDetails, <span className="material-symbols-outlined text-[24px]">credit_card</span>)}
-        {renderDocumentBox('PAN Card', 'panCard', panCard, <span className="material-symbols-outlined text-[24px]">badge</span>)}
-      </div>
+      {/* DUMMY UPLOAD MODAL */}
+      {isUploadModalOpen && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(30, 32, 38, 0.4)', backdropFilter: 'blur(4px)' }}>
+          <div className="verdant-card" style={{ width: '100%', maxWidth: 500, padding: 32, position: 'relative', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04)' }}>
+            <button onClick={() => setIsUploadModalOpen(false)} style={{ position: 'absolute', top: 20, right: 20, border: 'none', background: 'transparent', cursor: 'pointer', color: '#9ca3af' }}>
+              <X size={20} />
+            </button>
+            <h3 style={{ fontSize: 20, fontWeight: 800, color: isDark ? '#fff' : '#2c302e', margin: '0 0 24px' }}>Upload Dossier Document</h3>
 
-      <div className="mt-8 p-4 bg-[#f9fdfc] rounded-xl border border-[#eceae3] flex items-center gap-4">
-         <AlertTriangle size={20} className="text-[#00a76b]" />
-         <p className="text-[13px] font-medium text-[#8c918f]">
-           Replacing a document will overwrite your existing record immediately. Ensure documents are clear and readable.
-         </p>
-      </div>
+            <div className="verdant-highlight-box" style={{ borderStyle: 'dashed', borderWidth: '2px', borderColor: '#00a76b', textAlign: 'center', position: 'relative', cursor: 'pointer', padding: '32px 16px' }}>
+              <input type="file" onChange={handleDummyUpload} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer' }} disabled={uploading} />
+              {uploading ? (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+                  <RefreshCw size={24} className="animate-spin text-[#00a76b]" />
+                  <p style={{ fontSize: 13, fontWeight: 700, color: isDark ? '#fff' : '#3b3e3c', margin: 0 }}>Securing document connection...</p>
+                </div>
+              ) : uploadSuccess ? (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+                  <div style={{ width: 24, height: 24, borderRadius: '50%', background: isDark ? 'rgba(0, 167, 107, 0.08)' : '#e6f7f0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Check size={16} color="#00a76b" />
+                  </div>
+                  <p style={{ fontSize: 13, fontWeight: 700, color: '#00a76b', margin: 0 }}>Dossier updated successfully!</p>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+                  <Upload size={24} color="#00a76b" />
+                  <p style={{ fontSize: 13, fontWeight: 700, color: isDark ? '#fff' : '#3b3e3c', margin: 0 }}>Drag file here or click to browse</p>
+                  <p style={{ fontSize: 11, color: isDark ? '#a3b3af' : '#8c918f', margin: 0 }}>PDF, DOCX, or PNG formats up to 10MB</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

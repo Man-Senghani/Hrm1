@@ -1,5 +1,22 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, Suspense, lazy } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import EmployeeLayout from './layouts/EmployeeLayout';
+import ErrorBoundary from '@shared/components/ErrorBoundary';
+import { Toaster } from 'react-hot-toast';
+import useAuthStore from '@shared/store/authStore';
+
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const Attendance = lazy(() => import('./pages/Attendance'));
+const LeaveManagement = lazy(() => import('./pages/LeaveManagement'));
+const EmployeePayslips = lazy(() => import('./pages/EmployeePayslips'));
+const EmployeePerformance = lazy(() => import('./pages/EmployeePerformance'));
+const EmployeeProjects = lazy(() => import('./pages/EmployeeProjects'));
+const TimeTracker = lazy(() => import('./pages/TimeTracker'));
+const EmployeeDocuments = lazy(() => import('./pages/EmployeeDocuments'));
+const Holidays = lazy(() => import('./pages/Holidays'));
+const MyEvents = lazy(() => import('./pages/MyEvents'));
+const Chat = lazy(() => import('@shared/pages/Chat'));
+const Profile = lazy(() => import('@shared/pages/Profile'));
 
 const ScrollToTop = () => {
   const { pathname } = useLocation();
@@ -8,44 +25,22 @@ const ScrollToTop = () => {
   }, [pathname]);
   return null;
 };
-import EmployeeLayout from './layouts/EmployeeLayout';
-import Dashboard from './pages/Dashboard';
-import Attendance from './pages/Attendance';
-import Holidays from './pages/Holidays';
-import useAuthStore from '@shared/store/authStore';
-import EmployeeDocuments from './pages/EmployeeDocuments';
-import MyEvents from './pages/MyEvents';
 
-// Shared pages that already exist for employee role
-import Chat from '@shared/pages/Chat';
-import AttendanceDashboard from '@shared/components/AttendanceDashboard';
-
-// ─── Lazy page stubs for existing routes ──────────────────────────────────
-// These preserve the existing route structure while the new layout is applied.
-// Each placeholder can be replaced with a real page later.
-const PlaceholderPage = ({ title }) => (
-  <div className="space-y-4 animate-slide-up">
-    <div>
-      <h2 className="text-xl font-bold" style={{ color: 'var(--text-primary)' }}>{title}</h2>
-      <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>This section is coming soon.</p>
-    </div>
-    <div className="glass-card p-8 flex flex-col items-center justify-center text-center" style={{ minHeight: 300 }}>
-      <div className="w-14 h-14 rounded-2xl mb-4 flex items-center justify-center"
-        style={{ background: 'var(--accent-muted)' }}>
-        <span className="text-2xl">🚧</span>
-      </div>
-      <p className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>Under Construction</p>
-      <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>
-        This page will be fully built soon. Check back later!
-      </p>
-    </div>
+const RouteLoadingFallback = () => (
+  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh' }}>
+    <div style={{
+      width: 32, height: 32, borderRadius: '50%',
+      border: '3px solid rgba(0,167,107,0.2)', borderTopColor: '#00a76b',
+      animation: 'spin 0.7s linear infinite'
+    }} />
+    <style>{'@keyframes spin { to { transform: rotate(360deg); } }'}</style>
   </div>
 );
 
 function App() {
   const { isAuthenticated } = useAuthStore();
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (!isAuthenticated) {
       window.location.href = '/';
     }
@@ -56,39 +51,36 @@ function App() {
   }
 
   return (
-    <>
+    <ErrorBoundary>
+      <Toaster position="top-right" />
       <ScrollToTop />
-      <Routes>
-        {/* Employee portal — all routes live inside EmployeeLayout */}
-        <Route path="/" element={<EmployeeLayout />}>
-          <Route index element={<Dashboard />} />
-          <Route path="dashboard" element={<Dashboard />} />
-          <Route path="time-tracker" element={<PlaceholderPage title="Time Tracker" />} />
-          <Route path="chat" element={<Chat />} />
-          <Route path="task-management/create" element={<PlaceholderPage title="Create Task" />} />
-          <Route path="task-management" element={<PlaceholderPage title="Task Management" />} />
-          <Route path="profile" element={<PlaceholderPage title="My Profile" />} />
-          <Route path="settings" element={<PlaceholderPage title="Settings" />} />
-          <Route path="notifications" element={<PlaceholderPage title="Notifications" />} />
-          <Route path="employees/view/:id" element={<PlaceholderPage title="Employee Information" />} />
-          <Route path="attendance" element={<Attendance />} />
-          <Route path="events" element={<MyEvents />} />
-          <Route path="holidays" element={<Holidays />} />
-          <Route path="leave" element={<PlaceholderPage title="My Leaves" />} />
-          <Route path="payslips" element={<PlaceholderPage title="Payslips" />} />
-          <Route path="documents" element={<EmployeeDocuments />} />
-          <Route path="performance" element={<PlaceholderPage title="My Performance" />} />
-          <Route path="recruitment" element={<PlaceholderPage title="Recruitment" />} />
-          <Route path="reports" element={<PlaceholderPage title="Reports" />} />
-        </Route>
+      <Suspense fallback={<RouteLoadingFallback />}>
+        <Routes>
+          {/* Employee portal — all routes live inside EmployeeLayout */}
+          <Route path="/" element={<EmployeeLayout />}>
+            <Route index element={<Dashboard />} />
+            <Route path="dashboard" element={<Dashboard />} />
+            <Route path="time-tracker" element={<TimeTracker />} />
+            <Route path="chat" element={<Chat />} />
+            <Route path="projects" element={<EmployeeProjects />} />
+            <Route path="profile" element={<Profile />} />
+            <Route path="attendance" element={<Attendance />} />
+            <Route path="events" element={<MyEvents />} />
+            <Route path="holidays" element={<Holidays />} />
+            <Route path="leave" element={<LeaveManagement />} />
+            <Route path="payslips" element={<EmployeePayslips />} />
+            <Route path="documents" element={<EmployeeDocuments />} />
+            <Route path="performance" element={<EmployeePerformance />} />
+          </Route>
 
-        {/* Alias for /employee prefix if navigated from legacy links */}
-        <Route path="/employee/*" element={<Navigate to="/" replace />} />
+          {/* Alias for /employee prefix if navigated from legacy links */}
+          <Route path="/employee/*" element={<Navigate to="/" replace />} />
 
-        {/* Catch-all */}
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </>
+          {/* Catch-all */}
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </Suspense>
+    </ErrorBoundary>
   );
 }
 

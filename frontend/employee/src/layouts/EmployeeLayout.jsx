@@ -46,16 +46,23 @@ const useTheme = () => {
 // ─── SIDEBAR GROUPS ──────────────────────────────────────────
 const SIDEBAR_ITEMS = {
   OVERVIEW: [
-    { label: 'Dashboard', path: '/employee/dashboard', icon: LayoutDashboard },
-    { label: 'Notifications', path: '/employee/notifications', icon: Bell },
+    { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
+    { label: 'Time Tracker', path: '/time-tracker', icon: Clock },
+    { label: 'Team Chat', path: '/chat', icon: MessageSquare },
+    { label: 'Notifications', path: '/notifications', icon: Bell },
   ],
-  ME: [
-    { label: 'My Profile', path: '/employee/profile', icon: User },
-    { label: 'My Attendance', path: '/employee/attendance', icon: Clock },
-    { label: 'My Leave', path: '/employee/leave', icon: Calendar },
-    { label: 'My Payslips', path: '/employee/payslips', icon: Wallet },
-    { label: 'My Documents', path: '/employee/documents', icon: FileText },
-    { label: 'My Performance', path: '/employee/performance', icon: Target },
+  WORKSPACE: [
+    { label: 'My Attendance', path: '/attendance', icon: CalendarDays },
+    { label: 'My Leave', path: '/leave', icon: Calendar },
+    { label: 'My Projects', path: '/projects', icon: FolderOpen },
+    { label: 'My Payslips', path: '/payslips', icon: Wallet },
+    { label: 'My Documents', path: '/documents', icon: FileText },
+    { label: 'My Performance', path: '/performance', icon: Target },
+    { label: 'Company Holidays', path: '/holidays', icon: Globe },
+    { label: 'Events', path: '/events', icon: Briefcase },
+  ],
+  ACCOUNT: [
+    { label: 'My Profile', path: '/profile', icon: User },
   ]
 };
 
@@ -337,7 +344,7 @@ const EmployeeLayout = () => {
             <div className="space-y-1">
               {items.map(item => {
                 const Icon = item.icon;
-                const active = location.pathname === item.path || location.pathname.startsWith(item.path + '/');
+                const active = location.pathname === item.path || (item.path !== '/dashboard' && location.pathname.startsWith(item.path + '/')) || (item.path === '/dashboard' && (location.pathname === '/' || location.pathname === '/dashboard'));
                 return (
                   <Link
                     key={item.path}
@@ -381,7 +388,7 @@ const EmployeeLayout = () => {
       <header className="sticky top-0 w-full z-50 border-b border-[#c5c0b1] dark:border-[#1a2d29] bg-white/80 dark:bg-[#08100e]/80 backdrop-blur-md transition-colors duration-300 ease-in-out">
         <div className="flex items-center h-[56px] w-full px-6">
           <div className="flex items-center gap-6 mr-6">
-            <Link to="/employee/dashboard" className="flex items-center gap-3 no-underline">
+            <Link to="/dashboard" className="flex items-center gap-3 no-underline">
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 bg-[#00a76b] rounded-full flex items-center justify-center">
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">

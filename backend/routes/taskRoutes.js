@@ -45,6 +45,8 @@ router.route('/')
   .post(protect, upload.array('attachments', 5), createTask)
   .get(protect, getTasks);
 
+router.get('/my', protect, getTasks);
+
 router.route('/:id')
   .get(protect, getTask)
   .put(protect, upload.array('attachments', 5), updateTask)
