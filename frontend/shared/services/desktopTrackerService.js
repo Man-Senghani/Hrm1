@@ -66,8 +66,9 @@ export const startDesktopTracker = async (token) => {
 
     window.addEventListener('blur', onBlur);
 
-    // Launch custom protocol
-    const protocolUrl = `fluidhr-tracker://start?token=${encodeURIComponent(token || '')}`;
+    // Launch custom protocol with server origin
+    const serverHost = window.location.origin;
+    const protocolUrl = `fluidhr-tracker://start?token=${encodeURIComponent(token || '')}&server=${encodeURIComponent(serverHost)}`;
     
     // Create invisible iframe or navigation
     const iframe = document.createElement('iframe');

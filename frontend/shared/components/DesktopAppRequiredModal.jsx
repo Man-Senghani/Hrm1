@@ -47,7 +47,8 @@ const DesktopAppRequiredModal = ({
 
   const handleLaunchApp = () => {
     const userToken = token || (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('token') : '');
-    window.location.href = `fluidhr-tracker://start?token=${encodeURIComponent(userToken || '')}`;
+    const serverHost = window.location.origin;
+    window.location.href = `fluidhr-tracker://start?token=${encodeURIComponent(userToken || '')}&server=${encodeURIComponent(serverHost)}`;
   };
 
   const handleDownloadApp = () => {

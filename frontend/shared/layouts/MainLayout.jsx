@@ -63,6 +63,8 @@ const renderIcon = (iconItem, props) => {
 };
 
 const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
+  const navigate = useNavigate();
+  const location = useLocation();
   const [currentTime, setCurrentTime] = useState(new Date());
   const [isSidebarOpen, setIsSidebarOpen] = useState(() => typeof window !== 'undefined' ? window.innerWidth >= 768 : true);
   const [isSidebarHovered, setIsSidebarHovered] = useState(false);
@@ -89,9 +91,6 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
   const quickActionRef = React.useRef(null);
 
   const [isQuickActionOpen, setIsQuickActionOpen] = useState(false);
-
-  const location = useLocation();
-  const navigate = useNavigate();
 
   useEffect(() => {
     // Reserved for location.pathname based side effects
@@ -123,13 +122,17 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
   const activeRole = userRole || (roleMap[pathRole] ? pathRole : role);
 
   // Helper to normalize navigation paths across standalone sub-apps and unified admin
-  const handleNav = (targetPath, state) => {
+  const handleNav = (targetPath, options) => {
     if (!targetPath) return;
     let cleanPath = targetPath;
-    if (activeRole !== 'admin' && !cleanPath.startsWith(`/${activeRole}`)) {
-      cleanPath = `/${activeRole}${cleanPath.startsWith('/') ? '' : '/'}${cleanPath}`;
+    if (activeRole !== 'admin') {
+      if (cleanPath.startsWith(`/${activeRole}/`)) {
+        cleanPath = cleanPath.replace(new RegExp(`^/${activeRole}`), '');
+      } else if (cleanPath === `/${activeRole}`) {
+        cleanPath = '/';
+      }
     }
-    navigate(cleanPath, state);
+    navigate(cleanPath, typeof options === 'object' && options !== null ? options : { state: options });
   };
   const [unreadChats, setUnreadChats] = useState([]);
   const [isChatPopupOpen, setIsChatPopupOpen] = useState(false);

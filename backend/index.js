@@ -1,3 +1,11 @@
+// Prevent unexpected process crashes
+process.on('uncaughtException', (err) => {
+  console.error('⚠️ Uncaught Exception caught:', err);
+});
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('⚠️ Unhandled Rejection caught at:', promise, 'reason:', reason);
+});
+
 // nodemon restart trigger
 // nodemon restart comment 4
 const express = require('express');
@@ -6,6 +14,13 @@ const cors = require('cors');
 const compression = require('compression');
 const dotenv = require('dotenv');
 dotenv.config();
+
+const app = express();
+
+// 💓 Lightweight Health Endpoint for Keep-Alive pings
+app.get('/api/health', (req, res) => {
+  res.status(200).json({ status: 'healthy', uptime: process.uptime(), timestamp: new Date() });
+});
 const authRoutes = require('./routes/authRoutes');
 const employeeRoutes = require('./routes/employeeRoutes');
 const leaveRoutes = require('./routes/leaveRoutes');
@@ -31,7 +46,6 @@ const http = require('http');
 const { Server } = require('socket.io');
 
 dotenv.config();
-const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {

@@ -33,6 +33,7 @@ function handleDeepLink(urlStr) {
     const parsedUrl = new URL(urlStr);
     if (parsedUrl.protocol === 'fluidhr-tracker:') {
       const token = parsedUrl.searchParams.get('token');
+      const server = parsedUrl.searchParams.get('server');
       const action = parsedUrl.searchParams.get('action') || (parsedUrl.hostname === 'start' ? 'start' : parsedUrl.pathname.replace(/^\/+/, '')) || 'start';
       
       if (mainWindow) {
@@ -40,6 +41,9 @@ function handleDeepLink(urlStr) {
         mainWindow.show();
         mainWindow.focus();
 
+        if (server) {
+          mainWindow.webContents.send('deep-link-server', server);
+        }
         if (token) {
           mainWindow.webContents.send('deep-link-token', token);
         }

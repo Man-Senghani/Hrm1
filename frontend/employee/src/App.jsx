@@ -71,7 +71,6 @@ function App() {
 
   const navItems = [
     { label: 'Dashboard', icon: LayoutDashboard, path: '/' },
-    { label: 'Time Tracker', icon: Clock, path: '/time-tracker' },
     { label: 'Team Chat', icon: MessageSquare, path: '/chat' },
     { label: 'My Attendance', icon: CalendarDays, path: '/attendance' },
     { label: 'My Leave', icon: Calendar, path: '/leave' },

@@ -71,7 +71,7 @@ const IDLE_REMINDER_MS = 3 * 60 * 1000; // 3 minutes
 let socket = null;
 
 // ── Config ────────────────────────────────────────────────
-let BACKEND_HOST = 'https://hrm1.onrender.com';
+let BACKEND_HOST = 'https://darkorchid-opossum-277072.hostingersite.com';
 let API_BASE = `${BACKEND_HOST}/api/time`;
 const POLL_MS = 1000;   // 1s display refresh
 const HEARTBEAT_MS = 10000;  // 10s heartbeat to backend
@@ -133,26 +133,30 @@ async function loadSession() {
     console.error('Failed to get app version:', err);
   }
 
-  // 1. Immediately read stored authToken to preserve login across updates & launches
+  // 1. Immediately read stored authToken & serverHost
   const savedToken = await window.electronAPI.getStoreValue('authToken');
   if (savedToken) {
     authToken = savedToken;
     hideAuthSection();
   }
 
-  // 2. Discover backend host with quick timeouts
-  BACKEND_HOST = 'https://hrm1.onrender.com';
+  const savedServer = await window.electronAPI.getStoreValue('serverHost');
+  if (savedServer) {
+    BACKEND_HOST = savedServer;
+  } else {
+    BACKEND_HOST = 'https://darkorchid-opossum-277072.hostingersite.com';
+  }
+
+  // 2. Discover backend host (prefer local only if actively running)
   const candidateHosts = [
     'http://localhost:5000',
     'http://127.0.0.1:5000',
     'http://localhost:4000',
-    'http://127.0.0.1:4000',
-    'http://localhost:3000',
-    'http://127.0.0.1:3000'
+    'http://127.0.0.1:4000'
   ];
   for (const host of candidateHosts) {
     try {
-      const res = await fetch(`${host}/api/health`, { signal: AbortSignal.timeout(300) }).catch(() => null);
+      const res = await fetch(`${host}/api/health`, { signal: AbortSignal.timeout(200) }).catch(() => null);
       if (res && res.ok) {
         BACKEND_HOST = host;
         console.log(`🔌 Local development backend detected! Connected to ${host}`);
@@ -784,6 +788,19 @@ function redirectToWebLogin() {
   } else {
     window.open(loginUrl, '_blank');
   }
+}
+
+if (window.electronAPI?.onDeepLinkServer) {
+  window.electronAPI.onDeepLinkServer(async (serverUrl) => {
+    if (serverUrl && typeof serverUrl === 'string') {
+      const cleanUrl = serverUrl.replace(/\/+$/, '');
+      console.log('Server URL received via deep link:', cleanUrl);
+      BACKEND_HOST = cleanUrl;
+      API_BASE = `${BACKEND_HOST}/api/time`;
+      await window.electronAPI.setStoreValue('serverHost', cleanUrl);
+      initSocket();
+    }
+  });
 }
 
 if (window.electronAPI?.onDeepLinkToken) {

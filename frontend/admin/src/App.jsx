@@ -93,7 +93,8 @@ const ProtectedRoute = ({ children, allowedRole }) => {
   const role = sessionStorage.getItem('role');
 
   if (!token) {
-    return <Navigate to="/login" replace />;
+    window.location.href = '/login';
+    return null;
   }
 
   // ROLE SPECIFIC CHECK (ADMIN OVERRIDE)
@@ -101,12 +102,13 @@ const ProtectedRoute = ({ children, allowedRole }) => {
 
   if (allowedRole && role !== allowedRole) {
     const roleSubpaths = {
-      admin: '/',
+      admin: '/admin',
       hr: '/hr',
-      employee: '/employee/dashboard',
+      employee: '/employee',
       manager: '/manager'
     };
-    return <Navigate to={roleSubpaths[role] || `/${role}`} replace />;
+    window.location.href = roleSubpaths[role] || `/${role}`;
+    return null;
   }
 
   return children;
