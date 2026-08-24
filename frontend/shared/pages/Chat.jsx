@@ -6,7 +6,7 @@ import { io } from 'socket.io-client';
 import EmojiPicker from 'emoji-picker-react';
 import toast, { Toaster } from 'react-hot-toast';
 import CallManager from '@shared/components/CallManager';
-import { getImageUrl } from '@shared/services/api';
+import { API_BASE_URL, getImageUrl } from '@shared/services/api';
 import {
   Search, MoreVertical, MoreHorizontal, Paperclip, Send, Check, CheckCheck,
   MessageSquare, UserCircle, ArrowLeft, MessageSquarePlus, Smile,
@@ -486,7 +486,7 @@ const Chat = () => {
   useEffect(() => {
     if (!token || !currentUserId) return;
 
-    socketRef.current = io(window.location.origin, {
+    socketRef.current = io(API_BASE_URL || window.location.origin, {
       withCredentials: true,
       transports: ['websocket', 'polling'],
       forceNew: true,

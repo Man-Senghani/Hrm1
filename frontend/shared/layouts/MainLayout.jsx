@@ -556,7 +556,7 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
   // 🔌 SOCKET INITIALIZATION
   useEffect(() => {
     if (!token) return;
-    const s = io(window.location.origin, { withCredentials: true });
+    const s = io(API_BASE_URL || window.location.origin, { withCredentials: true });
 
     s.on('connect', () => {
       const user = JSON.parse(sessionStorage.getItem('user'));
