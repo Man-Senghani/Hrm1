@@ -71,7 +71,11 @@ const IDLE_REMINDER_MS = 3 * 60 * 1000; // 3 minutes
 let socket = null;
 
 // ── Config ────────────────────────────────────────────────
-let BACKEND_HOST = 'https://darkorchid-opossum-277072.hostingersite.com';
+const PRODUCTION_BACKEND_URL = 'https://hrm1-wljp.onrender.com';
+const PRODUCTION_FRONTEND_URL = 'https://hrm-staging.aupanishad.tech';
+
+let BACKEND_HOST = PRODUCTION_BACKEND_URL;
+let FRONTEND_HOST = PRODUCTION_FRONTEND_URL;
 let API_BASE = `${BACKEND_HOST}/api/time`;
 const POLL_MS = 1000;   // 1s display refresh
 const HEARTBEAT_MS = 10000;  // 10s heartbeat to backend
@@ -144,7 +148,7 @@ async function loadSession() {
   if (savedServer) {
     BACKEND_HOST = savedServer;
   } else {
-    BACKEND_HOST = 'https://darkorchid-opossum-277072.hostingersite.com';
+    BACKEND_HOST = PRODUCTION_BACKEND_URL;
   }
 
   // 2. Discover backend host (prefer local only if actively running)
@@ -779,10 +783,7 @@ function hideAuthSection() {
 }
 
 function redirectToWebLogin() {
-  let loginUrl = `${BACKEND_HOST}/login?desktop=true`;
-  if (BACKEND_HOST.includes(':5000')) {
-    loginUrl = 'http://localhost:3000/login?desktop=true';
-  }
+  const loginUrl = `${FRONTEND_HOST}/login?desktop=true`;
   if (window.electronAPI?.openExternal) {
     window.electronAPI.openExternal(loginUrl);
   } else {
