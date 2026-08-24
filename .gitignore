@@ -45,3 +45,8 @@ frontend/employee/dist/
 # Uploads
 backend/uploads/
 FluidHR-Tracker.zip
+
+# Hostinger Build Artifacts
+hostinger_public_html/
+*.zip
+
