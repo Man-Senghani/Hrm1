@@ -126,10 +126,9 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
     if (!targetPath) return;
     let cleanPath = targetPath;
     if (activeRole !== 'admin') {
-      if (cleanPath.startsWith(`/${activeRole}/`)) {
-        cleanPath = cleanPath.replace(new RegExp(`^/${activeRole}`), '');
-      } else if (cleanPath === `/${activeRole}`) {
-        cleanPath = '/';
+      const prefix = `/${activeRole}`;
+      if (!cleanPath.startsWith(prefix)) {
+        cleanPath = cleanPath.startsWith('/') ? `${prefix}${cleanPath}` : `${prefix}/${cleanPath}`;
       }
     }
     navigate(cleanPath, typeof options === 'object' && options !== null ? options : { state: options });
@@ -623,28 +622,8 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
     return () => clearInterval(interval);
   }, [token]);
 
-  // 🛡️ IDLE TIMER & AUTO-PAUSE LOGIC (60 Seconds / 1 Minute Inactivity Threshold)
-  useEffect(() => {
-    if (!token || !isTrackingActive || trackerRawStatus !== 'active') return;
-
-    const checkIdle = setInterval(async () => {
-      const now = Date.now();
-      const idleTime = now - lastActivity;
-      if (idleTime >= 60000 && trackerRawStatus === 'active') { // 60 seconds = 1 minute inactivity
-        try {
-          await axios.post('/api/time/timer/update', { type: 'idle', idleSeconds: 60 }, { headers: { Authorization: `Bearer ${token}` } });
-          setTrackerRawStatus('idle');
-          setIsTrackingActive(false);
-          setIsPausedByIdle(true);
-          toast('Timer paused due to 1 minute of inactivity', { icon: '⏸️' });
-        } catch (err) {
-          console.error('Idle report error:', err);
-        }
-      }
-    }, 3000);
-
-    return () => clearInterval(checkIdle);
-  }, [token, isTrackingActive, trackerRawStatus, lastActivity]);
+  // 🛡️ Note: System-wide desktop idle monitoring is handled authoritatively by FluidHR Tracker Desktop App (powerMonitor)
+  // Website subscribes to backend socket events (timer_paused, timer_resumed, timer_update) and status polling.
 
   const [lastServerSync, setLastServerSync] = useState(0);
 
@@ -682,10 +661,12 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
       setLastActivity(now);
 
       if (trackerRawStatus === 'idle' || isPausedByIdle) {
-        if (['click', 'mousedown', 'keydown', 'touchstart'].includes(e?.type)) {
-          handleResume();
-        }
-      } else {
+        // 🛑 DO NOT auto-resume on mouse clicks, keydown, or mousemove when idle/paused.
+        // The timer ONLY resumes when the user explicitly clicks the RESUME button in FluidHR Tracker Desktop App!
+        return;
+      }
+
+      if (e?.type !== 'mousemove') {
         reportActivity(e?.type || 'active');
       }
     };
@@ -798,10 +779,7 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
 
                   {activeRole === 'manager' && (
                     <>
-                      <button onClick={() => { setIsQuickActionOpen(false); handleNav('/tasks/create'); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-[#162722] text-xs font-bold text-gray-700 dark:text-slate-300 rounded-xl transition-colors border-none bg-transparent cursor-pointer">
-                        Assign / Reassign Task
-                      </button>
-                      <button onClick={() => { setIsQuickActionOpen(false); handleNav('/leaves'); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-[#162722] text-xs font-bold text-gray-700 dark:text-slate-300 rounded-xl transition-colors border-none bg-transparent cursor-pointer">
+                      <button onClick={() => { setIsQuickActionOpen(false); handleNav('/leave'); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-[#162722] text-xs font-bold text-gray-700 dark:text-slate-300 rounded-xl transition-colors border-none bg-transparent cursor-pointer">
                         Approve / Reject Leave
                       </button>
                       <button onClick={() => { setIsQuickActionOpen(false); handleNav('/employees'); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-[#162722] text-xs font-bold text-gray-700 dark:text-slate-300 rounded-xl transition-colors border-none bg-transparent cursor-pointer">
@@ -824,7 +802,7 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
                       <button onClick={() => { setIsQuickActionOpen(false); handleNav('/leave'); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-[#162722] text-xs font-bold text-gray-700 dark:text-slate-300 rounded-xl transition-colors border-none bg-transparent cursor-pointer">
                         Apply Leave
                       </button>
-                      <button onClick={() => { setIsQuickActionOpen(false); handleNav('/time-tracker'); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-[#162722] text-xs font-bold text-gray-700 dark:text-slate-300 rounded-xl transition-colors border-none bg-transparent cursor-pointer">
+                      <button onClick={() => { setIsQuickActionOpen(false); handleNav('/attendance'); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-[#162722] text-xs font-bold text-gray-700 dark:text-slate-300 rounded-xl transition-colors border-none bg-transparent cursor-pointer">
                         Time Tracker
                       </button>
                       <button onClick={() => { setIsQuickActionOpen(false); handleNav('/projects'); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-[#162722] text-xs font-bold text-gray-700 dark:text-slate-300 rounded-xl transition-colors border-none bg-transparent cursor-pointer">

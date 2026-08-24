@@ -11,7 +11,7 @@ const httpsEnabled = fs.existsSync(httpsCertificatePath)
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  base: '/admin/',
+  base: '/',
   plugins: [react()],
   server: {
     host: true,

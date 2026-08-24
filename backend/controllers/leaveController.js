@@ -439,7 +439,9 @@ exports.applyLeave = async (req, res) => {
 // @access  Private/Manager
 exports.getManagerLeaves = async (req, res) => {
   try {
-    const leaves = await Leave.find({}).populate('user', 'name email profile role employeeId profileImage').lean();
+    const leaves = await Leave.find({ user: { $ne: req.user.id } })
+      .populate('user', 'name email profile role employeeId profileImage')
+      .lean();
     res.json(leaves);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -527,7 +529,7 @@ exports.managerApprove = async (req, res) => {
 // @access  Private/HR
 exports.getHRLeaves = async (req, res) => {
   try {
-    const leaves = await Leave.find({})
+    const leaves = await Leave.find({ user: { $ne: req.user.id } })
       .populate('user', 'name email profile role employeeId profileImage')
       .populate('managerId', 'name email')
       .sort({ createdAt: -1 })
@@ -1062,9 +1064,9 @@ exports.getTeamLeaves = async (req, res) => {
     const { status, startDate, endDate } = req.query;
 
     const subordinates = await User.find({ reportingManager: req.user.id }).select('_id');
-    const subIds = subordinates.map(s => s._id);
+    const subIds = subordinates.map(s => s._id).filter(id => String(id) !== String(req.user.id));
 
-    const query = { user: { $in: subIds } };
+    const query = { user: { $in: subIds, $ne: req.user.id } };
 
     if (status === 'pending') {
       query.status = { $in: ['pending', 'cancellation_pending'] };
@@ -1090,7 +1092,7 @@ exports.getTeamLeaves = async (req, res) => {
     }
 
     // Calculate status counts
-    const baseQuery = { user: { $in: subIds } };
+    const baseQuery = { user: { $in: subIds, $ne: req.user.id } };
     const allTeamLeaves = await Leave.find(baseQuery);
 
     const counts = {

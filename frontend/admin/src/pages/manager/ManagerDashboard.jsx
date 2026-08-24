@@ -603,24 +603,17 @@ const ManagerDashboard = () => {
                     onMouseEnter={(_, index) => setHoveredTaskDonut(index)}
                     onMouseLeave={() => setHoveredTaskDonut(null)}
                   >
-                    {donutData.map((entry, index) => {
-                      const isHovered = hoveredTaskDonut === index;
-                      return (
-                        <Cell
-                          key={`cell-${index}`}
-                          fill={entry.color}
-                          stroke={isHovered ? '#ffffff' : 'none'}
-                          strokeWidth={isHovered ? 2 : 0}
-                          style={{
-                            filter: isHovered ? `drop-shadow(0px 0px 8px ${entry.color}a0) brightness(1.25)` : 'none',
-                            transform: isHovered ? 'scale(1.08)' : 'scale(1)',
-                            transformOrigin: 'center center',
-                            transition: 'all 0.2s ease-in-out',
-                            cursor: 'pointer'
-                          }}
-                        />
-                      );
-                    })}
+                    {donutData.map((entry, index) => (
+                      <Cell
+                        key={`cell-${index}`}
+                        fill={entry.color}
+                        stroke="none"
+                        strokeWidth={0}
+                        style={{
+                          cursor: 'pointer'
+                        }}
+                      />
+                    ))}
                   </Pie>
                 </PieChart>
               </ResponsiveContainer>
@@ -651,9 +644,9 @@ const ManagerDashboard = () => {
                     key={i}
                     onMouseEnter={() => setHoveredTaskDonut(i)}
                     onMouseLeave={() => setHoveredTaskDonut(null)}
-                    className={`flex items-center gap-2 p-1 rounded-lg transition-all cursor-pointer ${isHovered ? 'bg-gray-100 dark:bg-gray-800/80 scale-105' : 'hover:bg-gray-50 dark:hover:bg-gray-800/30'}`}
+                    className="flex items-center gap-2 p-1 rounded-lg transition-colors cursor-pointer bg-transparent"
                   >
-                    <div className="w-2 h-2 rounded-full shrink-0 transition-transform" style={{ backgroundColor: d.color, boxShadow: isHovered ? `0 0 8px ${d.color}` : 'none' }} />
+                    <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: d.color }} />
                     <div>
                       <p className="text-xs font-bold text-[#0f172a] dark:text-white leading-none" style={{ color: isHovered ? d.color : undefined }}>{d.value}</p>
                       <p className="text-[10px] font-semibold text-gray-500 dark:text-[#a3a094] mt-0.5">{d.name}</p>
@@ -794,27 +787,27 @@ const ManagerDashboard = () => {
               <div className="flex items-center gap-1 text-[#0f172a] dark:text-white">
                 <button
                   type="button"
-                  onClick={() => setCurrentYear(prev => prev - 1)}
+                  onClick={() => setCalendarDate(prev => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))}
                   className="p-1 hover:bg-gray-100 dark:hover:bg-[#28251e] rounded-lg transition-colors cursor-pointer"
-                  title="Previous Year"
+                  title="Previous Month"
                 >
                   <ChevronLeft size={16} />
                 </button>
                 <div className="flex items-center gap-1 text-xs font-extrabold px-1">
                   <span>{monthNames[calendarDate.getMonth()]}</span>
-                  <span>{currentYear}</span>
+                  <span>{calendarDate.getFullYear()}</span>
                 </div>
                 <button
                   type="button"
-                  onClick={() => setCurrentYear(prev => prev + 1)}
+                  onClick={() => setCalendarDate(prev => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))}
                   className="p-1 hover:bg-gray-100 dark:hover:bg-[#28251e] rounded-lg transition-colors cursor-pointer"
-                  title="Next Year"
+                  title="Next Month"
                 >
                   <ChevronRight size={16} />
                 </button>
                 <button
                   type="button"
-                  onClick={() => { setCalendarDate(new Date()); setCurrentYear(new Date().getFullYear()); }}
+                  onClick={() => setCalendarDate(new Date())}
                   className="ml-1 text-[10px] font-bold px-2 py-0.5 rounded-md border border-gray-200 dark:border-[#38332c] hover:bg-gray-50 dark:hover:bg-[#28251e] transition-colors cursor-pointer"
                 >
                   Today
@@ -831,7 +824,7 @@ const ManagerDashboard = () => {
 
             <div className="grid grid-cols-7 gap-1 flex-1">
               {(() => {
-                const year = currentYear;
+                const year = calendarDate.getFullYear();
                 const month = calendarDate.getMonth();
                 const firstDayOfMonth = new Date(year, month, 1);
                 const daysInMonth = new Date(year, month + 1, 0).getDate();

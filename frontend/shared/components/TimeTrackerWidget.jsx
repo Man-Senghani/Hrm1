@@ -49,16 +49,27 @@ const TimeTrackerWidget = ({ className = '', isDark = false, showControls = fals
 
   useEffect(() => {
     fetchStatus();
-    const interval = setInterval(fetchStatus, 5000);
+    const interval = setInterval(fetchStatus, 3000);
 
     let socket = null;
     try {
       socket = io(window.location.origin, { withCredentials: true });
+
+      socket.on('connect', () => {
+        const stored = sessionStorage.getItem('user');
+        if (stored) {
+          try {
+            const u = JSON.parse(stored);
+            socket.emit('join_notifications', { userId: u._id || u.id, role: u.role });
+          } catch (e) {}
+        }
+      });
+
       socket.on('timer_update', () => fetchStatus());
       socket.on('timer_paused', () => fetchStatus());
       socket.on('timer_resumed', () => fetchStatus());
       socket.on('timer_stopped', () => fetchStatus());
-    } catch (e) {}
+    } catch (e) { }
 
     return () => {
       clearInterval(interval);
@@ -141,14 +152,14 @@ const TimeTrackerWidget = ({ className = '', isDark = false, showControls = fals
   const statusText = !session?.hasActiveSession || session?.status === 'completed'
     ? 'NOT STARTED'
     : (session?.status === 'active' && session?.isRunning)
-    ? 'WORKING'
-    : (session?.status === 'paused' || session?.status === 'idle' ? 'ON BREAK' : 'STOPPED');
+      ? 'WORKING'
+      : (session?.status === 'paused' || session?.status === 'idle' ? 'ON BREAK' : 'STOPPED');
 
   const statusDotClass = !session?.hasActiveSession || session?.status === 'completed'
     ? 'bg-slate-400 dark:bg-slate-500'
     : (session?.status === 'active' && session?.isRunning)
-    ? 'bg-[#10B981] animate-pulse'
-    : 'bg-amber-500';
+      ? 'bg-[#10B981] animate-pulse'
+      : 'bg-amber-500';
 
   return (
     <div className={`bg-white dark:bg-[#181612] rounded-[24px] border border-gray-200/90 dark:border-[#38352e] hover:!border-[#10b981] dark:hover:!border-[#34d399] transition-colors duration-300 p-3.5 sm:p-4 flex flex-col justify-between relative overflow-hidden min-h-[170px] shadow-sm select-none ${className}`}>
