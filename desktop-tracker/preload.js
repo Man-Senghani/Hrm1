@@ -21,6 +21,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // ── Browser Authentication / Deep Linking ──────────────
   openExternal: (url) => ipcRenderer.invoke('open-external', url),
+  onDeepLinkServer: (callback) =>
+    ipcRenderer.on('deep-link-server', (event, data) => callback(data)),
   onDeepLinkToken: (callback) =>
     ipcRenderer.on('deep-link-token', (event, data) => callback(data)),
   onDeepLinkAction: (callback) =>

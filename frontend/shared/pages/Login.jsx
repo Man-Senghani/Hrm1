@@ -18,7 +18,8 @@ const Login = () => {
 
     if (isDesktop) {
       setShowThankYou(true);
-      window.location.href = `fluidhr-tracker://auth?token=${encodeURIComponent(authToken)}`;
+      const serverHost = window.location.origin;
+      window.location.href = `fluidhr-tracker://auth?token=${encodeURIComponent(authToken)}&server=${encodeURIComponent(serverHost)}`;
       return;
     }
 
@@ -128,7 +129,7 @@ const Login = () => {
   
                 <div className="space-y-4">
                    <a 
-                     href={`fluidhr-tracker://auth?token=${encodeURIComponent(token)}`}
+                     href={`fluidhr-tracker://auth?token=${encodeURIComponent(token)}&server=${encodeURIComponent(window.location.origin)}`}
                      className="h-[48px] w-full text-[15px] font-bold bg-[#00a76b] text-[#fffefb] hover:bg-[#201515] rounded-[4px] flex items-center justify-center gap-2 transition-all shadow-sm"
                    >
                       Open FluidHR Tracker <ArrowRight size={20} />
