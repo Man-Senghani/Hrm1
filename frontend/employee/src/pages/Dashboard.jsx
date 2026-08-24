@@ -11,7 +11,7 @@ import {
   LogIn, LogOut, Briefcase, Target, Bell, Star,
   CalendarCheck, CalendarX, Cake, Gift, ArrowRight, CalendarPlus, User, Download,
   PartyPopper, Sparkles, Heart, Smile, TrendingUp, ChevronDown,
-  AlertTriangle, Monitor, X, ExternalLink, RefreshCw, Activity
+  AlertTriangle, Monitor, X, ExternalLink, RefreshCw, Activity, Loader2
 } from 'lucide-react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { startDesktopTracker, stopDesktopTracker } from '@shared/services/desktopTrackerService';

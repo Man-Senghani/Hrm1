@@ -19,6 +19,8 @@ const TimeTrackerWidget = ({ className = '', isDark = false, showControls = fals
   const [actionLoading, setActionLoading] = useState(false);
   const timerRef = useRef(null);
 
+  const fetchTimeRef = useRef(Date.now());
+
   const getAuth = () => {
     const token = sessionStorage.getItem('token');
     return token ? { headers: { Authorization: `Bearer ${token}` } } : null;
@@ -36,18 +38,8 @@ const TimeTrackerWidget = ({ className = '', isDark = false, showControls = fals
       const res = await axios.get('/api/time/status', auth);
       const data = res.data;
       setSession(data);
-
-      if (data && data.hasActiveSession) {
-        if (data.isRunning && data.segmentStart) {
-          const startTime = new Date(data.segmentStart).getTime();
-          const elapsed = Math.floor((Date.now() - startTime) / 1000);
-          setTimer((data.activeTime || 0) + Math.max(0, elapsed));
-        } else {
-          setTimer(data.activeTime || 0);
-        }
-      } else {
-        setTimer(data?.activeTime || 0);
-      }
+      fetchTimeRef.current = Date.now();
+      setTimer(data?.activeTime || 0);
     } catch (err) {
       console.error('Failed to fetch timer status:', err);
     } finally {
@@ -76,12 +68,16 @@ const TimeTrackerWidget = ({ className = '', isDark = false, showControls = fals
 
   useEffect(() => {
     if (timerRef.current) clearInterval(timerRef.current);
-    if (session && session.hasActiveSession && session.isRunning && session.segmentStart) {
+    if (session && session.hasActiveSession && session.isRunning && session.status === 'active') {
+      const baseActive = session.activeTime || 0;
+      const baseTimestamp = fetchTimeRef.current || Date.now();
+
       timerRef.current = setInterval(() => {
-        const startTime = new Date(session.segmentStart).getTime();
-        const elapsed = Math.floor((Date.now() - startTime) / 1000);
-        setTimer((session.activeTime || 0) + Math.max(0, elapsed));
+        const elapsed = Math.floor((Date.now() - baseTimestamp) / 1000);
+        setTimer(baseActive + Math.max(0, elapsed));
       }, 1000);
+    } else {
+      setTimer(session?.activeTime || 0);
     }
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);

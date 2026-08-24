@@ -23,7 +23,8 @@ const useAuthStore = create((set) => ({
     sessionStorage.removeItem('token');
     sessionStorage.removeItem('role');
     set({ user: null, token: null, isAuthenticated: false });
-    window.location.href = '/login'; // Force redirect
+    const baseUrl = (import.meta.env.BASE_URL || '/').replace(/\/$/, '');
+    window.location.href = `${baseUrl}/login`;
   },
 
   updateProfile: (profileData) => {

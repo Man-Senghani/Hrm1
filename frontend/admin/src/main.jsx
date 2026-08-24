@@ -24,7 +24,8 @@ axios.interceptors.response.use(
   (error) => {
     if (error.response?.status === 401) {
       sessionStorage.clear();
-      window.location.href = '/';
+      const baseUrl = (import.meta.env.BASE_URL || '/').replace(/\/$/, '');
+      window.location.href = `${baseUrl}/login`;
     }
     return Promise.reject(error);
   }

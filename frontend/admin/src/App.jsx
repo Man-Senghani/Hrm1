@@ -101,13 +101,12 @@ const ProtectedRoute = ({ children, allowedRole }) => {
 
   if (allowedRole && role !== allowedRole) {
     const roleSubpaths = {
-      admin: '/admin',
+      admin: '/',
       hr: '/hr',
-      employee: '/employee',
+      employee: '/employee/dashboard',
       manager: '/manager'
     };
-    window.location.href = roleSubpaths[role] || `/${role}`;
-    return null;
+    return <Navigate to={roleSubpaths[role] || `/${role}`} replace />;
   }
 
   return children;
@@ -283,6 +282,7 @@ const App = () => {
               <MainLayout />
             </ProtectedRoute>
           }>
+            <Route index element={<EmployeeDashboard />} />
             <Route path="dashboard" element={<EmployeeDashboard />} />
             <Route path="task-management" element={<TaskManagement />} />
             <Route path="task-management/create" element={<TaskCreate />} />

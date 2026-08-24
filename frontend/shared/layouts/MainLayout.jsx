@@ -126,10 +126,8 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
   const handleNav = (targetPath, state) => {
     if (!targetPath) return;
     let cleanPath = targetPath;
-    if (cleanPath.startsWith(`/${activeRole}/`) || cleanPath === `/${activeRole}`) {
-      if (!location.pathname.startsWith(`/${activeRole}`)) {
-        cleanPath = cleanPath.replace(new RegExp(`^/${activeRole}`), '') || '/';
-      }
+    if (activeRole !== 'admin' && !cleanPath.startsWith(`/${activeRole}`)) {
+      cleanPath = `/${activeRole}${cleanPath.startsWith('/') ? '' : '/'}${cleanPath}`;
     }
     navigate(cleanPath, state);
   };
@@ -418,45 +416,46 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
   }, [role, location.pathname]);
 
   const getMenuItemsByRole = (currentRole) => {
+    const prefix = currentRole === 'admin' ? '' : `/${currentRole}`;
     switch (currentRole) {
       case 'hr':
         return [
-          { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
-          { name: 'Employees', path: '/employees', icon: Users },
-          { name: 'Daily Tasks Board', path: '/tasks', icon: CheckSquare },
-          { name: 'Events Management', path: '/events', icon: Calendar },
-          { name: 'Apply Leave', path: '/leave', icon: ClipboardList },
-          { name: 'Attendance', path: '/attendance', icon: Calendar },
-          { name: 'Team Chat', path: '/chat', icon: MessageSquare },
-          { name: 'Payroll', path: '/payroll', icon: Wallet },
-          { name: 'Recruitment', path: '/recruitment', icon: UserPlus },
-          { name: 'Performance', path: '/performance', icon: TrendingUp },
-          { name: 'Reports', path: '/reports', icon: BarChart3 },
-          { name: 'Monitoring Logs', path: '/screenshots', icon: Camera },
-          { name: 'Notifications', path: '/notifications', icon: Bell },
-          { name: 'Settings', path: '/settings', icon: Settings },
+          { name: 'Dashboard', path: `${prefix}/dashboard`, icon: LayoutDashboard },
+          { name: 'Employees', path: `${prefix}/employees`, icon: Users },
+          { name: 'Daily Tasks Board', path: `${prefix}/tasks`, icon: CheckSquare },
+          { name: 'Events Management', path: `${prefix}/events`, icon: Calendar },
+          { name: 'Apply Leave', path: `${prefix}/leave`, icon: ClipboardList },
+          { name: 'Attendance', path: `${prefix}/attendance`, icon: Calendar },
+          { name: 'Team Chat', path: `${prefix}/chat`, icon: MessageSquare },
+          { name: 'Payroll', path: `${prefix}/payroll`, icon: Wallet },
+          { name: 'Recruitment', path: `${prefix}/recruitment`, icon: UserPlus },
+          { name: 'Performance', path: `${prefix}/performance`, icon: TrendingUp },
+          { name: 'Reports', path: `${prefix}/reports`, icon: BarChart3 },
+          { name: 'Monitoring Logs', path: `${prefix}/screenshots`, icon: Camera },
+          { name: 'Notifications', path: `${prefix}/notifications`, icon: Bell },
+          { name: 'Settings', path: `${prefix}/settings`, icon: Settings },
         ];
       case 'employee':
         return [
-          { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
-          { name: 'Attendance', path: '/attendance', icon: Calendar },
-          { name: 'Apply Leave', path: '/leave', icon: ClipboardList },
-          { name: 'Team Chat', path: '/chat', icon: MessageSquare },
-          { name: 'Create Task', path: '/task-management/create', icon: PlusCircle },
-          { name: 'My Documents', path: '/documents', icon: FileText },
-          { name: 'Notifications', path: '/notifications', icon: Bell },
+          { name: 'Dashboard', path: `${prefix}/dashboard`, icon: LayoutDashboard },
+          { name: 'Attendance', path: `${prefix}/attendance`, icon: Calendar },
+          { name: 'Apply Leave', path: `${prefix}/leave`, icon: ClipboardList },
+          { name: 'Team Chat', path: `${prefix}/chat`, icon: MessageSquare },
+          { name: 'Create Task', path: `${prefix}/task-management/create`, icon: PlusCircle },
+          { name: 'My Documents', path: `${prefix}/documents`, icon: FileText },
+          { name: 'Notifications', path: `${prefix}/notifications`, icon: Bell },
         ];
       case 'manager':
         return [
-          { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
-          { name: 'Team / Employees', path: '/employees', icon: Users },
-          { name: 'Daily Tasks Board', path: '/tasks', icon: CheckSquare },
-          { name: 'Events Management', path: '/events', icon: Calendar },
-          { name: 'Team Chat', path: '/chat', icon: MessageSquare },
-          { name: 'Team Attendance', path: '/attendance', icon: Calendar },
-          { name: 'Monitoring Logs', path: '/screenshots', icon: Camera },
-          { name: 'Notifications', path: '/notifications', icon: Bell },
-          { name: 'Apply Leave', path: '/leave', icon: FileText },
+          { name: 'Dashboard', path: `${prefix}/dashboard`, icon: LayoutDashboard },
+          { name: 'Team / Employees', path: `${prefix}/employees`, icon: Users },
+          { name: 'Daily Tasks Board', path: `${prefix}/tasks`, icon: CheckSquare },
+          { name: 'Events Management', path: `${prefix}/events`, icon: Calendar },
+          { name: 'Team Chat', path: `${prefix}/chat`, icon: MessageSquare },
+          { name: 'Team Attendance', path: `${prefix}/attendance`, icon: Calendar },
+          { name: 'Monitoring Logs', path: `${prefix}/screenshots`, icon: Camera },
+          { name: 'Notifications', path: `${prefix}/notifications`, icon: Bell },
+          { name: 'Apply Leave', path: `${prefix}/leave`, icon: FileText },
         ];
       case 'admin':
       default:
@@ -635,8 +634,28 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
     return () => clearInterval(interval);
   }, [token, lastActivity]);
 
-  // 🛡️ REACTIVE IDLE TIMER REMOVED
-  // Timer runs continuously until stopped or paused manually.
+  // 🛡️ IDLE TIMER & AUTO-PAUSE LOGIC (60 Seconds Inactivity Threshold)
+  useEffect(() => {
+    if (!token || !isTrackingActive || trackerRawStatus !== 'active') return;
+
+    const checkIdle = setInterval(async () => {
+      const now = Date.now();
+      const idleTime = now - lastActivity;
+      if (idleTime >= 60000 && trackerRawStatus === 'active') { // 60 seconds = 1 minute
+        try {
+          await axios.post('/api/time/timer/update', { type: 'idle', idleSeconds: 60 }, { headers: { Authorization: `Bearer ${token}` } });
+          setTrackerRawStatus('idle');
+          setIsTrackingActive(false);
+          setIsPausedByIdle(true);
+          toast('Timer paused due to inactivity (1 minute idle)', { icon: '⏸️' });
+        } catch (err) {
+          console.error('Idle report error:', err);
+        }
+      }
+    }, 5000);
+
+    return () => clearInterval(checkIdle);
+  }, [token, isTrackingActive, trackerRawStatus, lastActivity]);
 
   const [lastServerSync, setLastServerSync] = useState(0);
 
@@ -651,17 +670,27 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
     } catch (err) { console.error('Heartbeat failed:', err); }
   };
 
-  // 🛡️ NOTIFICATION LOGIC REMOVED PER USER REQUEST
-  // Absolute silence protocol active. No browser notifications will be sent.
-  // 🛡️ IDLE TIMER REMOVED PER USER REQUEST
-  // Timer will only pause on explicit user interaction.
+  const handleResume = async () => {
+    try {
+      await axios.post('/api/time/resume', {}, { headers: { Authorization: `Bearer ${token}` } });
+      setLastActivity(Date.now());
+      setIsPausedByIdle(false);
+      setIsTrackingActive(true);
+      setTrackerRawStatus('active');
+    } catch (err) { console.error('Resume failed:', err); }
+  };
 
-  // 🔄 GLOBAL ACTIVITY TRACKER
+  // 🔄 GLOBAL ACTIVITY TRACKER (AUTO-RESUME ON INPUT)
   useEffect(() => {
     const handleActivity = (e) => {
       const now = Date.now();
       setLastActivity(now);
-      reportActivity(e?.type || 'active');
+
+      if (trackerRawStatus === 'idle' || isPausedByIdle) {
+        handleResume();
+      } else {
+        reportActivity(e?.type || 'active');
+      }
     };
 
     window.addEventListener('mousemove', handleActivity);
@@ -671,9 +700,7 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
     window.addEventListener('focus', handleActivity);
 
     const handleVisibilityChange = () => {
-      if (document.hidden) {
-        // handleHidden logic if needed, but we keep tracking
-      } else {
+      if (!document.hidden) {
         handleActivity();
       }
     };
@@ -687,15 +714,7 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
       window.removeEventListener('focus', handleActivity);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [isTrackingActive]);
-
-  const handleResume = async () => {
-    try {
-      await axios.post('/api/time/resume', {}, { headers: { Authorization: `Bearer ${token}` } });
-      setLastActivity(Date.now());
-      setIsPausedByIdle(false);
-    } catch (err) { console.error('Resume failed:', err); }
-  };
+  }, [isTrackingActive, trackerRawStatus, isPausedByIdle]);
 
   const getImageUrl = (path) => {
     if (!path) return '';
@@ -713,7 +732,7 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
       >
         {/* Brand Block / Logo (Fixed width matching expanded sidebar) */}
         <Link
-          to="/dashboard"
+          to={activeRole === 'admin' ? '/dashboard' : `/${activeRole}/dashboard`}
           className="px-4 flex items-center no-underline hover:opacity-90 transition-all duration-300 gap-3 shrink-0 h-full overflow-hidden"
           style={{ width: showExpandedSidebar ? '250px' : '72px' }}
         >
@@ -1092,7 +1111,7 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
                       role="menuitem"
                       onClick={() => {
                         setIsProfileDropdownOpen(false);
-                        navigate('/profile');
+                        handleNav('/profile');
                       }}
                       className="w-full px-6 py-2.5 flex items-center gap-3.5 text-left text-[13px] font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-[#162722]/50 hover:text-slate-900 dark:hover:text-white transition-colors border-none bg-transparent cursor-pointer outline-none"
                     >
@@ -1199,7 +1218,7 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
                       let isActive = false;
                       const isDashboard = item.name === 'Dashboard';
                       if (isDashboard) {
-                        isActive = location.pathname === '/' || location.pathname === '/dashboard' || location.pathname === '';
+                        isActive = location.pathname === '/' || location.pathname === '/dashboard' || location.pathname === `/${activeRole}` || location.pathname === `/${activeRole}/dashboard` || location.pathname === `/${activeRole}/`;
                       } else {
                         isActive = location.pathname === item.path || (item.path !== '/' && location.pathname.startsWith(item.path + '/'));
                       }

@@ -23,13 +23,13 @@ const Login = () => {
     }
 
     const roleSubpaths = {
-      admin: '/admin',
+      admin: '/',
       hr: '/hr',
-      employee: '/employee',
+      employee: '/employee/dashboard',
       manager: '/manager'
     };
     const targetPath = roleSubpaths[userRole] || `/${userRole}`;
-    window.location.href = targetPath;
+    navigate(targetPath, { replace: true });
   };
 
   // REDIRECT IF ALREADY LOGGED IN
