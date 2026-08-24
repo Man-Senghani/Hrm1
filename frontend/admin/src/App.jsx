@@ -101,12 +101,13 @@ const ProtectedRoute = ({ children, allowedRole }) => {
 
   if (allowedRole && role !== allowedRole) {
     const roleSubpaths = {
-      admin: '/',
+      admin: '/admin',
       hr: '/hr',
-      employee: '/employee/dashboard',
+      employee: '/employee',
       manager: '/manager'
     };
-    return <Navigate to={roleSubpaths[role] || `/${role}`} replace />;
+    window.location.href = roleSubpaths[role] || `/${role}`;
+    return null;
   }
 
   return children;
