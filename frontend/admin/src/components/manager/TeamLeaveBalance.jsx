@@ -55,28 +55,26 @@ const TeamLeaveBalance = () => {
       <div className="overflow-x-auto flex-1">
         <table className="w-full text-left border-collapse">
           <colgroup>
-            <col style={{ width: '38%' }} />
-            <col style={{ width: '12%' }} />
-            <col style={{ width: '12%' }} />
-            <col style={{ width: '12%' }} />
-            <col style={{ width: '12%' }} />
-            <col style={{ width: '14%' }} />
+            <col style={{ width: '36%' }} />
+            <col style={{ width: '16%' }} />
+            <col style={{ width: '16%' }} />
+            <col style={{ width: '16%' }} />
+            <col style={{ width: '16%' }} />
           </colgroup>
           <thead>
             <tr className="border-b border-gray-100 dark:border-gray-800 text-gray-500 text-[10px] uppercase text-center">
-              <th className="pb-3 font-bold text-left">Employee</th>
-              <th className="pb-3 font-bold" title="Casual Leave">CL</th>
-              <th className="pb-3 font-bold" title="Sick Leave">SL</th>
-              <th className="pb-3 font-bold" title="Earned Leave">EL</th>
-              <th className="pb-3 font-bold" title="Comp Off">CO</th>
-              <th className="pb-3 font-bold" title="Total Balance">Total</th>
+              <th className="pb-3 px-2 font-bold text-left">Employee</th>
+              <th className="pb-3 px-3 font-bold text-center" title="Casual Leave">CL</th>
+              <th className="pb-3 px-3 font-bold text-center" title="Sick Leave">SL</th>
+              <th className="pb-3 px-3 font-bold text-center" title="Earned Leave">EL</th>
+              <th className="pb-3 px-3 font-bold text-center" title="Comp Off">CO</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50 dark:divide-gray-800/50">
             {loading ? (
-              <tr><td colSpan="6" className="py-8 text-center text-gray-500 text-xs">Loading...</td></tr>
+              <tr><td colSpan="5" className="py-8 text-center text-gray-500 text-xs">Loading...</td></tr>
             ) : displayBalances.length === 0 ? (
-              <tr><td colSpan="6" className="py-8 text-center text-gray-500 text-xs">No balances found.</td></tr>
+              <tr><td colSpan="5" className="py-8 text-center text-gray-500 text-xs">No balances found.</td></tr>
             ) : (
               displayBalances.map(bal => {
                 const empName = bal.employeeId?.name || 'Unknown';
@@ -89,9 +87,15 @@ const TeamLeaveBalance = () => {
                 const totalAlloc = bal.totalLeave || 1;
                 const overallPct = Math.min((totalUsed / totalAlloc) * 100, 100);
 
+                const fmtNum = (val) => {
+                  if (val === undefined || val === null || isNaN(val)) return '0';
+                  const n = Number(val);
+                  return Number.isInteger(n) ? n.toString() : parseFloat(n.toFixed(1)).toString();
+                };
+
                 return (
                   <tr key={bal._id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors border-b border-gray-50 dark:border-gray-800 last:border-0">
-                    <td className="py-3.5 text-left pr-2">
+                    <td className="py-3.5 px-2 text-left">
                       <div className="flex items-center gap-2">
                         <img src={avatar} alt="" className="w-8 h-8 rounded-full object-cover shrink-0 shadow-sm" />
                         <div className="flex flex-col min-w-0">
@@ -102,20 +106,17 @@ const TeamLeaveBalance = () => {
                         </div>
                       </div>
                     </td>
-                    <td className="py-3.5 text-center text-xs font-semibold text-gray-700 dark:text-gray-300 whitespace-nowrap">
-                      {bal.usedLeave?.casual || 0}/{bal.casualLeave}
+                    <td className="py-3.5 px-3 text-center text-xs font-semibold text-gray-700 dark:text-gray-300 whitespace-nowrap">
+                      {fmtNum(bal.usedLeave?.casual)}/{fmtNum(bal.casualLeave)}
                     </td>
-                    <td className="py-3.5 text-center text-xs font-semibold text-gray-700 dark:text-gray-300 whitespace-nowrap">
-                      {bal.usedLeave?.sick || 0}/{bal.sickLeave}
+                    <td className="py-3.5 px-3 text-center text-xs font-semibold text-gray-700 dark:text-gray-300 whitespace-nowrap">
+                      {fmtNum(bal.usedLeave?.sick)}/{fmtNum(bal.sickLeave)}
                     </td>
-                    <td className="py-3.5 text-center text-xs font-semibold text-gray-700 dark:text-gray-300 whitespace-nowrap">
-                      {bal.usedLeave?.earned || 0}/{bal.earnedLeave}
+                    <td className="py-3.5 px-3 text-center text-xs font-semibold text-gray-700 dark:text-gray-300 whitespace-nowrap">
+                      {fmtNum(bal.usedLeave?.earned)}/{fmtNum(bal.earnedLeave)}
                     </td>
-                    <td className="py-3.5 text-center text-xs font-semibold text-gray-700 dark:text-gray-300 whitespace-nowrap">
-                      {bal.usedLeave?.compOff || 0}/{bal.compOff}
-                    </td>
-                    <td className="py-3.5 text-center whitespace-nowrap">
-                      <span className="text-xs font-black text-indigo-600 dark:text-indigo-400">{totalUsed}/{totalAlloc}</span>
+                    <td className="py-3.5 px-3 text-center text-xs font-semibold text-gray-700 dark:text-gray-300 whitespace-nowrap">
+                      {fmtNum(bal.usedLeave?.compOff)}/{fmtNum(bal.compOff)}
                     </td>
                   </tr>
                 );

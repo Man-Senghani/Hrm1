@@ -199,7 +199,7 @@ const App = () => {
           }>
             <Route index element={<AdminDashboard />} />
             <Route path="dashboard" element={<AdminDashboard />} />
-            <Route path="employees" element={<Employees />} />
+            <Route path="employees" element={<HREmployees />} />
             <Route path="employees/add" element={<EmployeeForm />} />
             <Route path="employees/edit/:id" element={<EmployeeForm />} />
             <Route path="employees/view/:id" element={<EmployeeDetail />} />

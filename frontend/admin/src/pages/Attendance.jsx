@@ -653,31 +653,6 @@ const Attendance = () => {
 
   const todaySummaryFromBackend = useMemo(() => weeklyChartData.find(d => d.date === todayStr), [weeklyChartData, todayStr]);
 
-  const summaryStats = useMemo(() => {
-    if (viewContext === 'team' && teamStats) {
-      const src = teamStats.today || teamStats;
-      const present = src.present || 0;
-      const late = src.late || 0;
-      const halfDay = src.halfDay || 0;
-      const absent = src.absent || 0;
-      const leave = src.leave || 0;
-      const total = src.total || (present + late + halfDay + absent + leave) || 1;
-      const pct = src.pct !== undefined ? src.pct : Math.round(((present + late + halfDay) / total) * 100);
-      return { present, late, absent, halfDay, leave, total, pct };
-    }
-
-    const present = todayRecords.filter(r => r.status === 'Present').length;
-    const late = todayRecords.filter(r => r.status === 'Late').length;
-    const halfDay = todayRecords.filter(r => r.status === 'Half Day').length;
-
-    const absent = todaySummaryFromBackend ? todaySummaryFromBackend.Absent : 0;
-    const leave = todaySummaryFromBackend ? todaySummaryFromBackend.Leave : 0;
-
-    const total = present + late + halfDay + absent + leave || 1;
-    const pct = Math.round(((present + late + halfDay) / total) * 100);
-    return { present, late, absent, halfDay, leave, total, pct };
-  }, [todayRecords, todaySummaryFromBackend, viewContext, teamStats]);
-
   const teamPresentCount = useMemo(() => {
     const uniquePresentUsers = new Set();
 
@@ -706,7 +681,48 @@ const Attendance = () => {
     });
 
     return uniquePresentUsers.size;
-  }, [records, teamLiveSessions, summaryStats, todayStr]);
+  }, [records, teamLiveSessions, todayStr]);
+
+  const summaryStats = useMemo(() => {
+    let present = 0;
+    let late = 0;
+    let halfDay = 0;
+    let absent = 0;
+    let leave = 0;
+    let total = 1;
+
+    if (viewContext === 'team' && teamStats) {
+      const src = teamStats.today || teamStats;
+      present = src.present || 0;
+      late = src.late || 0;
+      halfDay = src.halfDay || 0;
+      absent = src.absent || 0;
+      leave = src.leave || 0;
+      total = src.total || (present + late + halfDay + absent + leave) || 1;
+    } else {
+      present = todayRecords.filter(r => r.status === 'Present').length;
+      late = todayRecords.filter(r => r.status === 'Late').length;
+      halfDay = todayRecords.filter(r => r.status === 'Half Day').length;
+      absent = todaySummaryFromBackend ? todaySummaryFromBackend.Absent : 0;
+      leave = todaySummaryFromBackend ? todaySummaryFromBackend.Leave : 0;
+      total = present + late + halfDay + absent + leave || 1;
+    }
+
+    // Synchronize real-time active/present members with summaryStats in team mode
+    if (viewContext === 'team') {
+      const currentWorking = present + late + halfDay;
+      if (teamPresentCount > currentWorking) {
+        const diff = teamPresentCount - currentWorking;
+        present += diff;
+        absent = Math.max(0, absent - diff);
+      }
+    }
+
+    const working = present + late + halfDay;
+    total = Math.max(total, working + absent + leave);
+    const pct = Math.round((working / total) * 100);
+    return { present, late, absent, halfDay, leave, total, pct };
+  }, [todayRecords, todaySummaryFromBackend, viewContext, teamStats, teamPresentCount]);
 
   const teamCurrentLiveCount = useMemo(() => {
     return teamLiveSessions.filter(s => {
@@ -1228,20 +1244,19 @@ const Attendance = () => {
         {/* Left: View Mode Navigation Tabs */}
         <div>
           {userRole !== 'employee' && (
-            <div className="inline-flex items-center bg-slate-100/90 dark:bg-[#112822] p-1.5 rounded-2xl border border-slate-200/70 dark:border-[#1a3830] shadow-xs gap-1 flex-wrap sm:flex-nowrap">
+            <div className="bg-white dark:bg-[#181612] p-1 rounded-xl border border-slate-200/80 dark:border-[#38352e] shadow-xs inline-flex items-center">
               <button
                 type="button"
                 onClick={() => {
                   setAppViewMode('attendance');
                   setViewContext('employee');
                 }}
-                className={`flex items-center gap-2 px-3.5 py-2 text-xs font-bold rounded-xl transition-all duration-200 cursor-pointer ${appViewMode === 'attendance' && viewContext === 'employee'
-                  ? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-md shadow-emerald-500/25 scale-[1.02]'
-                  : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+                className={`px-6 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${appViewMode === 'attendance' && viewContext === 'employee'
+                  ? 'bg-[#00a76b] text-white shadow-sm'
+                  : 'text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-white'
                   }`}
               >
-                <Calendar size={14} className={appViewMode === 'attendance' && viewContext === 'employee' ? 'text-white' : 'text-emerald-500'} />
-                <span>My Attendance</span>
+                My Attendance
               </button>
               <button
                 type="button"
@@ -1249,13 +1264,12 @@ const Attendance = () => {
                   setAppViewMode('attendance');
                   setViewContext('team');
                 }}
-                className={`flex items-center gap-2 px-3.5 py-2 text-xs font-bold rounded-xl transition-all duration-200 cursor-pointer ${appViewMode === 'attendance' && viewContext === 'team'
-                  ? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-md shadow-emerald-500/25 scale-[1.02]'
-                  : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+                className={`px-6 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${appViewMode === 'attendance' && viewContext === 'team'
+                  ? 'bg-[#00a76b] text-white shadow-sm'
+                  : 'text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-white'
                   }`}
               >
-                <Users size={14} className={appViewMode === 'attendance' && viewContext === 'team' ? 'text-white' : 'text-emerald-500'} />
-                <span>My Team Attendance</span>
+                My Team Attendance
               </button>
             </div>
           )}
@@ -1263,21 +1277,22 @@ const Attendance = () => {
 
         {/* Right: Period Toggle (Week/Month/Year) */}
         {appViewMode === 'attendance' && (
-          <div className="flex items-center gap-1 bg-slate-100 dark:bg-[#133029] p-1 rounded-xl shrink-0">
+          <div className="bg-white dark:bg-[#181612] p-1 rounded-xl border border-slate-200/80 dark:border-[#38352e] shadow-xs inline-flex items-center shrink-0">
             {['week', 'month', 'year'].map((p) => {
               const isEmployee = viewContext === 'employee';
               const currentPeriod = isEmployee ? statsPeriod : teamStatsPeriod;
               return (
                 <button
                   key={p}
+                  type="button"
                   onClick={() => {
                     setStatsPeriod(p);
                     setTeamStatsPeriod(p);
                     setChartPeriod(p);
                   }}
-                  className={`px-4 py-1.5 text-xs font-bold uppercase tracking-wider rounded-lg transition-all cursor-pointer ${currentPeriod === p
-                    ? 'bg-emerald-600 text-white shadow-sm'
-                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                  className={`px-5 py-2 rounded-lg text-xs font-bold uppercase transition-all cursor-pointer ${currentPeriod === p
+                    ? 'bg-[#00a76b] text-white shadow-sm'
+                    : 'text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-white'
                     }`}
                 >
                   {p}

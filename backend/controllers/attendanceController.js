@@ -637,12 +637,15 @@ exports.getWeeklySummary = async (req, res) => {
       if (!eligibleUserIds.includes(req.user.id.toString())) {
         eligibleUserIds.push(req.user.id.toString());
       }
-    } else if (req.user.role === 'hr') {
-      const users = await User.find({ role: { $ne: 'admin' } }).select('_id');
-      eligibleUserIds = users.map(u => u._id.toString());
-    } else {
-      const users = await User.find().select('_id');
-      eligibleUserIds = users.map(u => u._id.toString());
+    } else if (req.user.role === 'hr' || req.user.role === 'admin') {
+      const activeEmps = await Employee.find({ status: { $ne: 'inactive' } }).select('userId user');
+      const empUserIds = activeEmps.map(e => e.userId?.toString() || e.user?.toString()).filter(Boolean);
+      if (empUserIds.length > 0) {
+        eligibleUserIds = Array.from(new Set(empUserIds));
+      } else {
+        const users = await User.find({ status: { $ne: 'inactive' } }).select('_id');
+        eligibleUserIds = users.map(u => u._id.toString());
+      }
     }
 
     const totalEmployees = eligibleUserIds.length || 1;
@@ -724,6 +727,12 @@ exports.getWeeklySummary = async (req, res) => {
       date: { $gte: overallStart, $lte: overallEnd }
     });
 
+    const TimeTrack = require('../models/TimeTrack');
+    const timeTrackRecords = await TimeTrack.find({
+      employeeId: { $in: eligibleUserIds },
+      date: { $gte: overallStart, $lte: overallEnd }
+    });
+
     const approvedLeaves = await Leave.find({
       user: { $in: eligibleUserIds },
       status: { $regex: /^approved$/i },
@@ -780,9 +789,24 @@ exports.getWeeklySummary = async (req, res) => {
         const recordedAbsent = periodRecords.filter(r => r.status === 'Absent').length;
         const isSingleDay = interval.startStr === interval.endStr;
 
+        let timeTrackPresentCount = 0;
+        if (isSingleDay) {
+          const activeUsersInTrack = timeTrackRecords.filter(t => {
+            if (t.date !== interval.startStr) return false;
+            const uId = t.employeeId?._id ? t.employeeId._id.toString() : (t.employeeId ? t.employeeId.toString() : '');
+            if (!uId) return false;
+            const isUserRecorded = periodRecords.some(r => (r.user?._id ? r.user._id.toString() : r.user.toString()) === uId);
+            if (isUserRecorded) return false;
+            return !!(t.startTime || t.isRunning || (t.status && ['active', 'working', 'paused', 'break', 'completed'].includes(t.status.toLowerCase())) || (t.activeTime && t.activeTime > 0));
+          }).map(t => t.employeeId._id ? t.employeeId._id.toString() : t.employeeId.toString());
+          timeTrackPresentCount = new Set(activeUsersInTrack).size;
+        }
+
+        const totalWorking = presentCount + lateCount + halfDayCount + timeTrackPresentCount;
+        const finalPresent = presentCount + timeTrackPresentCount;
+
         let finalAbsent = recordedAbsent;
         if (isSingleDay) {
-          const totalWorking = presentCount + lateCount + halfDayCount;
           const dayName = interval.name;
           const isWeekend = dayName === 'Sat' || dayName === 'Sun';
           finalAbsent = isWeekend ? 0 : Math.max(0, totalEmployees - (totalWorking + employeesOnLeave));
@@ -791,7 +815,7 @@ exports.getWeeklySummary = async (req, res) => {
         return {
           name: interval.name,
           date: interval.startStr,
-          Present: presentCount,
+          Present: finalPresent,
           Late: lateCount,
           'Half Day': halfDayCount,
           Leave: employeesOnLeave,
@@ -1208,14 +1232,15 @@ exports.getTeamStats = async (req, res) => {
     const Employee = require('../models/Employee');
     const Leave = require('../models/Leave');
 
-    let eligibleUserIds = [];
-
-    if (role === 'admin') {
-      const users = await User.find().select('_id');
-      eligibleUserIds = users.map(u => u._id.toString());
-    } else if (role === 'hr') {
-      const users = await User.find({ role: { $ne: 'admin' } }).select('_id');
-      eligibleUserIds = users.map(u => u._id.toString());
+    if (role === 'admin' || role === 'hr') {
+      const activeEmps = await Employee.find({ status: { $ne: 'inactive' } }).select('userId user');
+      const empUserIds = activeEmps.map(e => e.userId?.toString() || e.user?.toString()).filter(Boolean);
+      if (empUserIds.length > 0) {
+        eligibleUserIds = Array.from(new Set(empUserIds));
+      } else {
+        const users = await User.find({ status: { $ne: 'inactive' } }).select('_id');
+        eligibleUserIds = users.map(u => u._id.toString());
+      }
     } else if (role === 'manager') {
       eligibleUserIds = await getManagerSubordinateUserIds(userId);
     } else {
@@ -1226,6 +1251,18 @@ exports.getTeamStats = async (req, res) => {
       user: { $in: eligibleUserIds },
       date: { $gte: startStr, $lte: endStr }
     });
+
+    const TimeTrack = require('../models/TimeTrack');
+    const timeTrackRecords = await TimeTrack.find({
+      employeeId: { $in: eligibleUserIds },
+      date: { $gte: startStr, $lte: endStr }
+    });
+
+    const isUserActiveInTimeTrack = (uid, dateStr) => {
+      const sess = timeTrackRecords.find(t => t.date === dateStr && t.employeeId && t.employeeId.toString() === uid);
+      if (!sess) return false;
+      return !!(sess.startTime || sess.isRunning || (sess.status && ['active', 'working', 'paused', 'break', 'completed'].includes(sess.status.toLowerCase())) || (sess.activeTime && sess.activeTime > 0));
+    };
 
     const leaves = await Leave.find({
       user: { $in: eligibleUserIds },
@@ -1249,11 +1286,14 @@ exports.getTeamStats = async (req, res) => {
 
       for (const uid of eligibleUserIds) {
         const record = attendanceRecords.find(r => r.date === dStr && r.user.toString() === uid);
+        const hasTimeTrack = isUserActiveInTimeTrack(uid, dStr);
 
         if (record) {
           if (record.status === 'Late') lateCount++;
           else if (record.status === 'Half Day') halfDayCount++;
           else presentCount++;
+        } else if (hasTimeTrack) {
+          presentCount++;
         } else {
           const dStart = new Date(d);
           dStart.setHours(0, 0, 0, 0);
@@ -1293,10 +1333,13 @@ exports.getTeamStats = async (req, res) => {
 
     for (const uid of eligibleUserIds) {
       const record = attendanceRecords.find(r => r.date === todayStr && r.user.toString() === uid);
+      const hasTimeTrack = isUserActiveInTimeTrack(uid, todayStr);
       if (record) {
         if (record.status === 'Late') tLate++;
         else if (record.status === 'Half Day') tHalfDay++;
         else tPresent++;
+      } else if (hasTimeTrack) {
+        tPresent++;
       } else {
         const hasLeave = leaves.some(l => {
           return l.user.toString() === uid &&

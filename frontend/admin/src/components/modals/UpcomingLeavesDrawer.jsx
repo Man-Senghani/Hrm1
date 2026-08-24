@@ -1,35 +1,33 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { X } from 'lucide-react';
+import { X, Loader2, Calendar } from 'lucide-react';
+import axios from 'axios';
 
 const UpcomingLeavesDrawer = ({ isOpen, onClose }) => {
-  if (!isOpen) return null;
+  const [upcomingLeaves, setUpcomingLeaves] = useState([]);
+  const [loading, setLoading] = useState(false);
 
-  // Mock list of upcoming leaves (next 7 days)
-  const upcomingLeaves = [
-    {
-      id: 'emp1',
-      name: 'Amit Sharma',
-      role: 'Fullstack Developer',
-      email: 'amit@example.com',
-      leaveType: 'casual',
-      startDate: '14 Aug 2026',
-      endDate: '16 Aug 2026',
-      totalDays: 2,
-      reason: 'Attending family function'
-    },
-    {
-      id: 'emp2',
-      name: 'Karan Johar',
-      role: 'Product Manager',
-      email: 'karan@example.com',
-      leaveType: 'earned',
-      startDate: '18 Aug 2026',
-      endDate: '20 Aug 2026',
-      totalDays: 3,
-      reason: 'Personal travel & vacation'
+  useEffect(() => {
+    if (isOpen) {
+      const fetchUpcomingLeaves = async () => {
+        setLoading(true);
+        try {
+          const res = await axios.get('/api/leaves/upcoming-leaves', {
+            headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` }
+          });
+          setUpcomingLeaves(res.data || []);
+        } catch (error) {
+          console.error('Failed to fetch upcoming leaves', error);
+          setUpcomingLeaves([]);
+        } finally {
+          setLoading(false);
+        }
+      };
+      fetchUpcomingLeaves();
     }
-  ];
+  }, [isOpen]);
+
+  if (!isOpen) return null;
 
   return createPortal(
     <div className="fixed inset-0 z-[9999] bg-black/40 backdrop-blur-sm" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
@@ -48,40 +46,53 @@ const UpcomingLeavesDrawer = ({ isOpen, onClose }) => {
 
         {/* Content list */}
         <div className="flex-1 flex flex-col h-full overflow-hidden">
-          <div className="overflow-y-auto pr-1 flex-1 space-y-2.5 pb-2">
-            {upcomingLeaves.map((emp) => (
-              <div key={emp.id} className="border border-gray-150 dark:border-gray-800 rounded-xl p-2.5 px-3 flex flex-col gap-1.5 bg-gray-50 dark:bg-[#0f172a]/50">
-                <div className="flex justify-between items-center gap-2">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-indigo-50 to-violet-50 text-indigo-600 flex items-center justify-center font-bold text-xs border border-indigo-100 shadow-sm shrink-0">
-                      {emp.name.charAt(0).toUpperCase()}
+          {loading ? (
+            <div className="flex-1 flex items-center justify-center text-gray-400 gap-2">
+              <Loader2 className="w-5 h-5 animate-spin" />
+              <span className="text-xs font-semibold">Loading upcoming leaves...</span>
+            </div>
+          ) : upcomingLeaves.length === 0 ? (
+            <div className="flex-1 flex flex-col items-center justify-center text-center p-6 text-gray-400">
+              <Calendar className="w-10 h-10 mb-2 opacity-30 text-amber-500" />
+              <p className="text-sm font-bold text-gray-700 dark:text-gray-300">No Upcoming Leaves</p>
+              <p className="text-xs text-gray-400 mt-1">No approved leaves scheduled for the next 7 days.</p>
+            </div>
+          ) : (
+            <div className="overflow-y-auto pr-1 flex-1 space-y-2.5 pb-2">
+              {upcomingLeaves.map((emp) => (
+                <div key={emp.id} className="border border-gray-150 dark:border-gray-800 rounded-xl p-2.5 px-3 flex flex-col gap-1.5 bg-gray-50 dark:bg-[#0f172a]/50">
+                  <div className="flex justify-between items-center gap-2">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-indigo-50 to-violet-50 text-indigo-600 flex items-center justify-center font-bold text-xs border border-indigo-100 shadow-sm shrink-0">
+                        {emp.name ? emp.name.charAt(0).toUpperCase() : 'E'}
+                      </div>
+                      <div className="flex flex-col min-w-0">
+                        <span className="font-bold text-xs text-gray-900 dark:text-white truncate">{emp.name}</span>
+                        <span className="text-[9px] text-gray-400 font-bold uppercase tracking-wider truncate">{emp.role}</span>
+                      </div>
                     </div>
-                    <div className="flex flex-col min-w-0">
-                      <span className="font-bold text-xs text-gray-900 dark:text-white truncate">{emp.name}</span>
-                      <span className="text-[9px] text-gray-400 font-bold uppercase tracking-wider truncate">{emp.role}</span>
-                    </div>
+                    <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider shrink-0 ${
+                      emp.leaveType === 'sick' ? 'bg-red-50 text-red-600 dark:bg-red-950/20 dark:text-red-400' :
+                      emp.leaveType === 'casual' ? 'bg-amber-50 text-amber-600 dark:bg-amber-950/20 dark:text-amber-400' :
+                      'bg-indigo-50 text-indigo-600 dark:bg-indigo-950/20 dark:text-indigo-400'
+                    }`}>
+                      {emp.leaveType}
+                    </span>
                   </div>
-                  <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider shrink-0 ${
-                    emp.leaveType === 'sick' ? 'bg-red-50 text-red-600 dark:bg-red-950/20 dark:text-red-400' :
-                    emp.leaveType === 'casual' ? 'bg-amber-50 text-amber-600 dark:bg-amber-950/20 dark:text-amber-400' :
-                    'bg-indigo-50 text-indigo-600 dark:bg-indigo-950/20 dark:text-indigo-400'
-                  }`}>
-                    {emp.leaveType}
-                  </span>
-                </div>
 
-                <div className="space-y-0.5 text-[11px] text-gray-700 dark:text-gray-300">
-                  <div className="flex justify-between">
-                    <span className="font-bold text-gray-400">Duration:</span>
-                    <span className="font-bold text-gray-900 dark:text-white">{emp.startDate} - {emp.endDate} ({emp.totalDays} days)</span>
-                  </div>
-                  <div className="text-[10.5px] text-gray-650 dark:text-gray-400 italic">
-                    "{emp.reason}"
+                  <div className="space-y-0.5 text-[11px] text-gray-700 dark:text-gray-300">
+                    <div className="flex justify-between">
+                      <span className="font-bold text-gray-400">Duration:</span>
+                      <span className="font-bold text-gray-900 dark:text-white">{emp.startDate} - {emp.endDate} ({emp.totalDays} {emp.totalDays === 1 ? 'day' : 'days'})</span>
+                    </div>
+                    <div className="text-[10.5px] text-gray-650 dark:text-gray-400 italic">
+                      "{emp.reason}"
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
 
           {/* Footer Action */}
           <div className="pt-4 border-t border-gray-200 dark:border-gray-800 flex justify-end mt-4">

@@ -116,8 +116,7 @@ const LeaveManagement = () => {
               style={{
                 borderColor: hoveredCardIndex === 0 ? '#a855f7' : undefined,
                 borderWidth: '2px',
-                borderStyle: 'solid',
-                boxShadow: hoveredCardIndex === 0 ? '0 0 16px rgba(168, 85, 247, 0.35)' : undefined
+                borderStyle: 'solid'
               }}
               className="bg-white dark:bg-[#1e293b] py-3.5 px-5 rounded-2xl border-gray-100 dark:border-gray-800 shadow-sm flex flex-col justify-between min-h-[140px] transition-all cursor-pointer group"
             >
@@ -141,8 +140,7 @@ const LeaveManagement = () => {
               style={{
                 borderColor: hoveredCardIndex === 1 ? '#10b981' : undefined,
                 borderWidth: '2px',
-                borderStyle: 'solid',
-                boxShadow: hoveredCardIndex === 1 ? '0 0 16px rgba(16, 185, 129, 0.35)' : undefined
+                borderStyle: 'solid'
               }}
               className="bg-white dark:bg-[#1e293b] py-3.5 px-5 rounded-2xl border-gray-100 dark:border-gray-800 shadow-sm flex flex-col justify-between min-h-[140px] transition-all cursor-pointer group"
             >
@@ -166,8 +164,7 @@ const LeaveManagement = () => {
               style={{
                 borderColor: hoveredCardIndex === 2 ? '#f59e0b' : undefined,
                 borderWidth: '2px',
-                borderStyle: 'solid',
-                boxShadow: hoveredCardIndex === 2 ? '0 0 16px rgba(245, 158, 11, 0.35)' : undefined
+                borderStyle: 'solid'
               }}
               className="bg-white dark:bg-[#1e293b] py-3.5 px-5 rounded-2xl border-gray-100 dark:border-gray-800 shadow-sm flex flex-col justify-between min-h-[140px] transition-all cursor-pointer group"
             >
@@ -194,8 +191,7 @@ const LeaveManagement = () => {
               style={{
                 borderColor: hoveredCardIndex === 3 ? '#3b82f6' : undefined,
                 borderWidth: '2px',
-                borderStyle: 'solid',
-                boxShadow: hoveredCardIndex === 3 ? '0 0 16px rgba(59, 130, 246, 0.35)' : undefined
+                borderStyle: 'solid'
               }}
               className="bg-white dark:bg-[#1e293b] py-3.5 px-5 rounded-2xl border-gray-100 dark:border-gray-800 shadow-sm flex flex-col justify-between min-h-[140px] transition-all cursor-pointer group"
             >
@@ -224,8 +220,7 @@ const LeaveManagement = () => {
               style={{
                 borderColor: hoveredCardIndex === 4 ? '#6366f1' : undefined,
                 borderWidth: '2px',
-                borderStyle: 'solid',
-                boxShadow: hoveredCardIndex === 4 ? '0 0 16px rgba(99, 102, 241, 0.35)' : undefined
+                borderStyle: 'solid'
               }}
               className="bg-white dark:bg-[#1e293b] py-3.5 px-5 rounded-2xl border-gray-100 dark:border-gray-800 shadow-sm flex flex-col justify-between min-h-[140px] transition-all cursor-pointer group"
             >
