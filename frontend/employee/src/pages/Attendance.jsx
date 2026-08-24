@@ -9,6 +9,7 @@ import {
   Calendar as CalendarIcon, Clock, Search, Filter, Download,
   CheckCircle, XCircle, RefreshCw, Play, Square, FileClock, X, Sun
 } from 'lucide-react';
+import TimeTracker from './TimeTracker';
 
 // Custom tooltip for Weekly chart
 const CustomWeeklyTooltip = ({ active, payload, label, isDark }) => {
@@ -785,11 +786,7 @@ const Attendance = () => {
 
         </>
       ) : (
-        <div className="p-8 text-center bg-white dark:bg-[#1a1714] rounded-2xl border border-gray-200 dark:border-[#38352e]">
-          <Clock size={32} className="mx-auto mb-2 text-[#00a76b]" />
-          <h3 className="text-lg font-bold text-gray-800 dark:text-white">Time Tracker</h3>
-          <p className="text-xs text-gray-500 mt-1">Detailed time tracker logs are active in desktop tracker.</p>
-        </div>
+        <TimeTracker />
       )}
 
     </div>
