@@ -398,7 +398,7 @@ const HRDashboard = () => {
             color: 'text-amber-600 dark:text-amber-400',
             bg: 'bg-amber-50 dark:bg-amber-950/50 border border-amber-100 dark:border-amber-900/40',
             hoverBorder: 'hover:!border-[#f59e0b] dark:hover:!border-[#fbbf24]',
-            onClick: () => navigate('/hr/leave', { state: { viewMode: 'hr' } })
+            onClick: () => navigate('/leave', { state: { viewMode: 'hr' } })
           },
           {
             label: 'Pending Leave',
@@ -407,7 +407,7 @@ const HRDashboard = () => {
             color: 'text-rose-600 dark:text-rose-400',
             bg: 'bg-rose-50 dark:bg-rose-950/50 border border-rose-100 dark:border-rose-900/40',
             hoverBorder: 'hover:!border-[#ef4444] dark:hover:!border-[#f87171]',
-            onClick: () => navigate('/hr/leave', { state: { viewMode: 'hr', filter: 'pending' } })
+            onClick: () => navigate('/leave', { state: { viewMode: 'hr', filter: 'pending' } })
           },
         ].map((stat, i) => {
           return (
@@ -680,7 +680,7 @@ const HRDashboard = () => {
               <div className="flex items-center gap-2 shrink-0">
                 <button
                   type="button"
-                  onClick={() => navigate('/hr/payroll')}
+                  onClick={() => navigate('/payroll')}
                   className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-950/40 px-2 py-1 rounded-lg flex items-center gap-0.5 transition-all cursor-pointer whitespace-nowrap"
                   title="View Payroll Details"
                 >
@@ -767,7 +767,7 @@ const HRDashboard = () => {
                 hoverBorder: 'hover:!border-blue-400 dark:hover:!border-blue-500',
                 hoverBg: 'hover:bg-blue-50/40 dark:hover:bg-blue-950/20',
                 hoverText: 'group-hover:text-blue-600 dark:group-hover:text-blue-400',
-                onClick: () => navigate('/hr/create-user')
+                onClick: () => navigate('/create-user')
               },
               {
                 label: 'Add Department',
@@ -777,7 +777,7 @@ const HRDashboard = () => {
                 hoverBorder: 'hover:!border-indigo-400 dark:hover:!border-indigo-500',
                 hoverBg: 'hover:bg-indigo-50/40 dark:hover:bg-indigo-950/20',
                 hoverText: 'group-hover:text-indigo-600 dark:group-hover:text-indigo-400',
-                onClick: () => navigate('/hr/departments')
+                onClick: () => navigate('/departments')
               },
               {
                 label: 'Create Job',
@@ -787,7 +787,7 @@ const HRDashboard = () => {
                 hoverBorder: 'hover:!border-purple-400 dark:hover:!border-purple-500',
                 hoverBg: 'hover:bg-purple-50/40 dark:hover:bg-purple-950/20',
                 hoverText: 'group-hover:text-purple-600 dark:group-hover:text-purple-400',
-                onClick: () => navigate('/hr/recruitment')
+                onClick: () => navigate('/recruitment')
               },
               {
                 label: 'Approve Leave',
@@ -797,7 +797,7 @@ const HRDashboard = () => {
                 hoverBorder: 'hover:!border-[#00a76b] dark:hover:!border-[#00a76b]',
                 hoverBg: 'hover:bg-green-50/40 dark:hover:bg-green-950/20',
                 hoverText: 'group-hover:text-[#00a76b] dark:group-hover:text-[#00a76b]',
-                onClick: () => navigate('/hr/leave', { state: { viewMode: 'hr', filter: 'pending' } })
+                onClick: () => navigate('/leave', { state: { viewMode: 'hr', filter: 'pending' } })
               },
               {
                 label: 'Run Payroll',
@@ -807,7 +807,7 @@ const HRDashboard = () => {
                 hoverBorder: 'hover:!border-orange-400 dark:hover:!border-orange-500',
                 hoverBg: 'hover:bg-orange-50/40 dark:hover:bg-orange-950/20',
                 hoverText: 'group-hover:text-orange-600 dark:group-hover:text-orange-400',
-                onClick: () => navigate('/hr/payroll')
+                onClick: () => navigate('/payroll')
               },
               {
                 label: 'Announcement',
@@ -817,7 +817,7 @@ const HRDashboard = () => {
                 hoverBorder: 'hover:!border-red-400 dark:hover:!border-red-500',
                 hoverBg: 'hover:bg-red-50/40 dark:hover:bg-red-950/20',
                 hoverText: 'group-hover:text-red-600 dark:group-hover:text-red-400',
-                onClick: () => navigate('/hr/notifications')
+                onClick: () => navigate('/notifications')
               },
             ].map((action, i) => (
               <button
@@ -837,7 +837,7 @@ const HRDashboard = () => {
         <Card className="p-6 flex flex-col h-[420px] lg:col-span-8 xl:col-span-8 hover:!border-blue-500 dark:hover:!border-blue-400 transition-colors duration-300">
           <div className="flex justify-between items-center mb-6">
             <h3 className="font-bold text-gray-900 dark:text-white">Pending Approvals</h3>
-            <button onClick={() => navigate('/hr/leave', { state: { viewMode: 'hr', filter: 'pending' } })} className="text-xs font-bold text-[#00a76b] hover:underline cursor-pointer">View All</button>
+            <button onClick={() => navigate('/leave', { state: { viewMode: 'hr', filter: 'pending' } })} className="text-xs font-bold text-[#00a76b] hover:underline cursor-pointer">View All</button>
           </div>
           <div className="flex-1 overflow-y-auto">
             {pendingApprovals.filter(a => a.role?.toLowerCase() !== 'hr' && a.role?.toLowerCase() !== 'admin').length > 0 ? (
@@ -1017,7 +1017,7 @@ const HRDashboard = () => {
           <div className="flex justify-between items-center mb-4">
             <h3 className="font-bold text-gray-900 dark:text-white text-base">HR Announcements</h3>
             <button
-              onClick={() => navigate('/hr/notifications')}
+              onClick={() => navigate('/notifications')}
               className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer flex items-center gap-1"
             >
               View All
@@ -1027,7 +1027,7 @@ const HRDashboard = () => {
             {announcements && announcements.length > 0 ? announcements.slice(0, 3).map((ann) => (
               <div
                 key={ann._id}
-                onClick={() => navigate('/hr/notifications')}
+                onClick={() => navigate('/notifications')}
                 className="p-3 bg-[#f0f6ff] dark:bg-blue-950/25 hover:bg-[#e6f0fd] dark:hover:bg-blue-950/40 rounded-2xl border border-[#dbeafe] dark:border-blue-900/40 flex flex-col gap-1.5 transition-all cursor-pointer shadow-xs"
               >
                 <div className="flex items-center gap-2">

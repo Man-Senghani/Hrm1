@@ -79,7 +79,7 @@ function App() {
   };
 
   const navItems = [
-    { label: 'Overview', icon: LayoutDashboard, path: '/' },
+    { label: 'Dashboard', icon: LayoutDashboard, path: '/' },
     { label: 'Employees', icon: Users, path: '/employees' },
     { label: 'Daily Tasks', icon: CheckSquare, path: '/tasks' },
     { label: 'Projects', icon: Layers, path: '/projects' },

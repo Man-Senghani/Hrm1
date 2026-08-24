@@ -889,7 +889,7 @@ const ManagerDashboard = () => {
 
         {/* Upcoming Schedule */}
         <Card
-          onClick={() => navigate('/manager/events')}
+          onClick={() => navigate('/events')}
           className="h-72 flex flex-col cursor-pointer hover:!border-[#f59e0b] dark:hover:!border-[#fbbf24] transition-colors duration-300"
         >
           <SectionHeader title="Upcoming Schedule" />
@@ -920,7 +920,7 @@ const ManagerDashboard = () => {
           <button
             onClick={(e) => {
               e.stopPropagation();
-              navigate('/manager/events');
+              navigate('/events');
             }}
             className="mt-2 w-full py-2 text-xs font-bold text-[#00a76b] hover:bg-green-50 dark:hover:bg-[#16291e] rounded-xl transition-colors cursor-pointer"
           >
