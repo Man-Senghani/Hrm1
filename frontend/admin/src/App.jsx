@@ -93,7 +93,8 @@ const ProtectedRoute = ({ children, allowedRole }) => {
   const role = sessionStorage.getItem('role');
 
   if (!token) {
-    return <Navigate to="/login" replace />;
+    window.location.href = '/login';
+    return null;
   }
 
   // ROLE SPECIFIC CHECK (ADMIN OVERRIDE)
