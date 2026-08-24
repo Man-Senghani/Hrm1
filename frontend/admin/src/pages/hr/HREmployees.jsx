@@ -26,7 +26,10 @@ const HREmployees = () => {
   const [showFiltersPanel, setShowFiltersPanel] = useState(false);
   const filtersRef = useRef(null);
   const navigate = useNavigate();
-  const pathRole = window.location.pathname.split('/')[1] || 'hr';
+  const userStr = sessionStorage.getItem('user') || localStorage.getItem('user');
+  const userObj = userStr ? JSON.parse(userStr) : {};
+  const currentRole = userObj.role || 'admin';
+  const targetPrefix = currentRole === 'admin' ? '' : `/${currentRole}`;
 
   const [currentPage, setCurrentPage] = useState(1);
 
@@ -112,7 +115,7 @@ const HREmployees = () => {
       alert('Demo personnel records cannot be modified.');
       return;
     }
-    navigate(`/${pathRole}/employees/edit/${id}`);
+    navigate(`${targetPrefix}/employees/edit/${id}`);
   };
 
   const handleView = (id) => {
@@ -120,7 +123,7 @@ const HREmployees = () => {
       alert(`Viewing demo profile for ${id}`);
       return;
     }
-    navigate(`/${pathRole}/employees/view/${id}`);
+    navigate(`${targetPrefix}/employees/view/${id}`);
   };
 
   const handleExportCSV = () => {
@@ -231,7 +234,7 @@ const HREmployees = () => {
             <span>Export</span>
           </button>
           <button
-            onClick={() => navigate(`/${pathRole}/create-user`)}
+            onClick={() => navigate(`${targetPrefix}/create-user`)}
             className="verdant-btn-outline h-10 px-5 flex items-center gap-2 text-sm font-semibold rounded-full border border-gray-200 dark:border-[#1a2d29] bg-white dark:bg-[#111c18] hover:bg-gray-50 dark:hover:bg-[#162722] text-[#374151] dark:text-[#cbd5e1] transition-all shadow-sm cursor-pointer"
           >
             <Plus size={15} />

@@ -384,17 +384,15 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
 
   const displayEmail = userProfile?.email || 'user@company.com';
 
-  const userRealRole = userProfile?.position || (
-    userProfile?.role === 'admin' ? 'Super Admin' :
-      userProfile?.role === 'hr' ? 'HR Manager' :
-        userProfile?.role === 'manager' ? 'Team Manager' :
-          userProfile?.role === 'employee' ? 'Employee' : 'User'
-  );
+  const sessionRole = sessionStorage.getItem('role');
+  const actualRole = (userProfile?.role || sessionRole || role || activeRole || 'admin').toLowerCase();
 
-  const activeRoleTitle = activeRole === 'admin' ? 'Super Admin' :
-    activeRole === 'hr' ? 'HR Manager' :
-      activeRole === 'manager' ? 'Team Manager' :
-        activeRole === 'employee' ? 'Employee' : 'User';
+  const userRealRole = actualRole === 'admin' ? 'Admin' :
+    actualRole === 'hr' ? 'HR Manager' :
+      actualRole === 'manager' ? 'Team Manager' :
+        actualRole === 'employee' ? 'Employee' : 'User';
+
+  const activeRoleTitle = userRealRole;
 
   const initials = displayName.split(' ').filter(Boolean).map(n => n[0]).join('').toUpperCase().substring(0, 2) || 'U';
 
@@ -817,22 +815,21 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
               )}
             </div>
 
-            {/* ⏱️ GLOBAL INACTIVITY TRACKER */}
+            {/* ⏱️ GLOBAL INACTIVITY TRACKER STATUS */}
             {isTrackingActive ? (
-              <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-[#eceae3] dark:bg-[#111c18] rounded-full border border-[#c5c0b1] dark:border-[#1a2d29]">
-                <div className="w-1.5 h-1.5 rounded-full bg-[#24a148]"></div>
-                <span className="text-[10px] font-black text-[#201515] dark:text-[#e2e8f0] uppercase tracking-widest tabular-nums">
-                  Active
-                </span>
-              </div>
+              <span className="text-xs font-bold text-[#00a76b] dark:text-[#34d399] flex items-center gap-1.5 select-none">
+                <span className="w-2 h-2 rounded-full bg-[#00a76b] animate-pulse"></span>
+                <span>Active</span>
+              </span>
             ) : (
-              <button
+              <span
                 onClick={handleResume}
-                className="flex items-center gap-2 px-4 py-1.5 bg-[#00a76b] text-white rounded-full border-none cursor-pointer hover:bg-[#059669] transition-all"
+                className="text-xs font-bold text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300 cursor-pointer flex items-center gap-1.5 select-none no-underline"
+                title="Click to resume timer"
               >
-                <Play size={14} fill="currentColor" />
-                <span className="text-[10px] font-black uppercase tracking-widest">Resume Timer</span>
-              </button>
+                <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                <span>Paused</span>
+              </span>
             )}
 
             {/* Language Selector Removed */}
@@ -1200,7 +1197,7 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
                               setIsSidebarOpen(false);
                             }
                           }}
-                          className={`flex items-center h-9 text-[13px] font-semibold no-underline rounded-[5px] transition-all group ${showExpandedSidebar ? 'px-3 gap-2.5 w-full' : 'px-0 justify-center w-full'} ${isActive ? 'text-white bg-[#00a76b] shadow-sm' : 'text-[#475569] dark:text-[#a3b3af] hover:bg-[#eceae3]/40 dark:hover:bg-[#111c18]/50 hover:text-[#00a76b]'}`}
+                          className={`flex items-center h-9 text-[13px] font-bold no-underline rounded-[6px] transition-all group ${showExpandedSidebar ? 'px-3 gap-2.5 w-full' : 'px-0 justify-center w-full'} ${isActive ? 'text-white bg-[#00a76b] shadow-sm font-bold' : 'text-[#334155] dark:text-[#cbd5e1] font-bold hover:bg-[#eceae3]/50 dark:hover:bg-[#111c18]/50 hover:text-[#00a76b]'}`}
                           title={!showExpandedSidebar ? item.name : ""}
                         >
                           <div className={`shrink-0 flex items-center justify-center transition-all ${showExpandedSidebar ? 'w-5' : 'w-8'}`}>

@@ -375,6 +375,7 @@ const LeaveManagement = ({ isChild = false }) => {
     if (str.includes('casual') || str.includes('cl') || str === 'cl') return 'casual';
     if (str.includes('sick') || str.includes('sl') || str === 'sl') return 'sick';
     if (str.includes('earned') || str.includes('el') || str.includes('annual') || str === 'el') return 'earned';
+    if (str.includes('emergency') || str.includes('eml') || str === 'eml') return 'emergency';
     if (str.includes('comp') || str === 'co') return 'compoff';
     if (str.includes('optional') || str.includes('oh')) return 'optional';
     return str;
@@ -393,12 +394,14 @@ const LeaveManagement = ({ isChild = false }) => {
   const usedEarned = approvedLeaves.filter(l => getCatKey(l.leaveType) === 'earned').reduce((acc, curr) => acc + getLeaveDays(curr), 0);
   const usedSick = approvedLeaves.filter(l => getCatKey(l.leaveType) === 'sick').reduce((acc, curr) => acc + getLeaveDays(curr), 0);
   const usedCasual = approvedLeaves.filter(l => getCatKey(l.leaveType) === 'casual').reduce((acc, curr) => acc + getLeaveDays(curr), 0);
+  const usedEmergency = approvedLeaves.filter(l => getCatKey(l.leaveType) === 'emergency').reduce((acc, curr) => acc + getLeaveDays(curr), 0);
   const usedCompOff = approvedLeaves.filter(l => getCatKey(l.leaveType) === 'compoff').reduce((acc, curr) => acc + getLeaveDays(curr), 0);
   const usedOptional = approvedLeaves.filter(l => getCatKey(l.leaveType) === 'optional').reduce((acc, curr) => acc + getLeaveDays(curr), 0);
 
   const casualBalance = Math.round(Math.max(0, (QUOTAS.casual || 12) - usedCasual));
   const sickBalance = Math.round(Math.max(0, (QUOTAS.sick || 10) - usedSick));
   const annualBalance = Math.round(Math.max(0, (QUOTAS.earned || 20) - usedEarned));
+  const emergencyBalance = Math.round(Math.max(0, (QUOTAS.emergency || 5) - usedEmergency));
   const compOffBalance = Math.round(Math.max(0, (QUOTAS.compOff || 3) - usedCompOff));
   const optionalBalance = Math.round(Math.max(0, (QUOTAS.optionalHoliday || 1) - usedOptional));
 
@@ -407,8 +410,8 @@ const LeaveManagement = ({ isChild = false }) => {
   const elAllowance = policies.find(p => getCatKey(p.type || p.name) === 'earned')?.annualAllowance ?? (QUOTAS.earned || 20);
   const cfEarned = policies.find(p => getCatKey(p.type || p.name) === 'earned')?.carryForwardLimit ?? 5;
 
-  const totalAllocated = Math.round((QUOTAS.earned || 20) + (QUOTAS.sick || 10) + (QUOTAS.casual || 12) + (QUOTAS.compOff || 3) + (QUOTAS.optionalHoliday || 1));
-  const totalUsed = Math.round(usedEarned + usedSick + usedCasual + usedOptional);
+  const totalAllocated = Math.round((QUOTAS.earned || 20) + (QUOTAS.sick || 10) + (QUOTAS.casual || 12) + (QUOTAS.emergency || 5) + (QUOTAS.compOff || 3) + (QUOTAS.optionalHoliday || 1));
+  const totalUsed = Math.round(usedEarned + usedSick + usedCasual + usedEmergency + usedCompOff + usedOptional);
   const totalBalance = Math.round(Math.max(0, totalAllocated - totalUsed));
   const activeLeaveTypesCount = 5;
   const pendingCount = leaves.filter(l => l.status?.toLowerCase() === 'pending' || l.status?.toLowerCase() === 'cancellation_pending').length;
@@ -635,6 +638,7 @@ const LeaveManagement = ({ isChild = false }) => {
                   { name: 'Casual Leave (CL)', balance: Math.round(casualBalance), used: Math.round(usedCasual), total: Math.round(QUOTAS.casual || 12), icon: Calendar, color: 'text-purple-600 dark:text-purple-400', bg: 'bg-purple-50 dark:bg-purple-950/60 border border-purple-100 dark:border-purple-900/40' },
                   { name: 'Sick Leave (SL)', balance: Math.round(sickBalance), used: Math.round(usedSick), total: Math.round(QUOTAS.sick || 10), icon: CheckCircle2, color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-100 dark:border-emerald-900/40' },
                   { name: 'Earned Leave (EL)', balance: Math.round(annualBalance), used: Math.round(usedEarned), total: Math.round(QUOTAS.earned || 20), icon: FileText, color: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50 dark:bg-amber-950/60 border border-amber-100 dark:border-amber-900/40' },
+                  { name: 'Emergency Leave (EML)', balance: Math.round(emergencyBalance), used: Math.round(usedEmergency), total: Math.round(QUOTAS.emergency || 5), icon: AlertCircle, color: 'text-red-600 dark:text-red-400', bg: 'bg-red-50 dark:bg-red-950/60 border border-red-100 dark:border-red-900/40' },
                   { name: 'Compensatory Off (CO)', balance: Math.round(compOffBalance), used: Math.round(usedCompOff), total: Math.round(QUOTAS.compOff || 3), icon: Clock, color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-950/60 border border-blue-100 dark:border-blue-900/40' },
                   { name: 'Optional Holiday (OH)', balance: Math.round(optionalBalance), used: Math.round(usedOptional), total: Math.round(QUOTAS.optionalHoliday || 1), icon: FileText, color: 'text-rose-600 dark:text-rose-400', bg: 'bg-rose-50 dark:bg-rose-950/60 border border-rose-100 dark:border-rose-900/40' }
                 ].map((row, idx) => (
@@ -734,38 +738,40 @@ const LeaveManagement = ({ isChild = false }) => {
       <div className="grid grid-cols-1 lg:grid-cols-10 gap-6 mb-4 items-stretch">
 
         {/* My Upcoming Leaves */}
-        <div className="lg:col-span-3 bg-white dark:bg-[#111c18] rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 p-6 flex flex-col justify-between transition-colors duration-300 hover:!border-orange-500 dark:hover:!border-orange-400 h-[290px]">
-          <div className="flex justify-between items-center mb-2 shrink-0">
+        <div className="lg:col-span-3 bg-white dark:bg-[#111c18] rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 p-4 flex flex-col justify-start transition-colors duration-300 hover:!border-orange-500 dark:hover:!border-orange-400 min-h-[290px]">
+          <div className="flex justify-between items-center mb-3 shrink-0">
             <h2 className="text-base font-bold text-gray-900 dark:text-white">My Upcoming Leaves</h2>
-            <button onClick={() => setIsUpcomingLeavesDrawerOpen(true)} className="text-xs font-bold text-blue-600 hover:text-blue-700 transition-colors">View All</button>
+            <button onClick={() => setIsUpcomingLeavesDrawerOpen(true)} className="text-xs font-bold text-blue-600 hover:text-blue-700 transition-colors cursor-pointer">View All</button>
           </div>
-          <div className="space-y-4 flex-1 mt-1 flex flex-col justify-center">
+          <div className="space-y-2 flex-1 flex flex-col justify-start overflow-hidden">
             {(() => {
-              const upcoming = leaves.filter(l => new Date(l.startDate) >= new Date() && (l.status === 'approved' || l.status === 'pending'));
+              const now = new Date();
+              now.setHours(0, 0, 0, 0);
+              const upcoming = leaves.filter(l => new Date(l.startDate) >= now && (l.status === 'approved' || l.status === 'pending'));
               if (upcoming.length > 0) {
-                return upcoming.slice(0, 1).map((l, idx) => (
-                  <div key={idx} onClick={() => setIsUpcomingLeavesDrawerOpen(true)} className="flex gap-4 p-3 border border-gray-100 dark:border-gray-800 rounded-lg hover:!border-blue-500 dark:hover:!border-blue-400 transition-colors cursor-pointer hover:bg-slate-50/50 dark:hover:bg-[#162722]/40 shrink-0">
-                    <div className="bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 rounded-lg p-2.5 flex flex-col items-center justify-center min-w-[65px] shrink-0">
-                      <span className="text-[9px] font-bold uppercase">{new Date(l.startDate).toLocaleString('default', { month: 'short' })}</span>
-                      <span className="text-base font-black leading-none my-0.5">{new Date(l.startDate).getDate()}</span>
-                      <span className="text-[8px] font-semibold uppercase">{new Date(l.startDate).toLocaleString('default', { weekday: 'short' })}</span>
+                return upcoming.slice(0, 3).map((l, idx) => (
+                  <div key={idx} onClick={() => setIsUpcomingLeavesDrawerOpen(true)} className="flex gap-2.5 p-2 border border-gray-100 dark:border-gray-800 rounded-xl hover:!border-blue-500 dark:hover:!border-blue-400 transition-colors cursor-pointer hover:bg-slate-50/50 dark:hover:bg-[#162722]/40 shrink-0">
+                    <div className="bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 rounded-lg p-1.5 flex flex-col items-center justify-center min-w-[54px] shrink-0">
+                      <span className="text-[8px] font-bold uppercase leading-none">{new Date(l.startDate).toLocaleString('default', { month: 'short' })}</span>
+                      <span className="text-sm font-black leading-none my-0.5">{new Date(l.startDate).getDate()}</span>
+                      <span className="text-[7px] font-semibold uppercase leading-none">{new Date(l.startDate).toLocaleString('default', { weekday: 'short' })}</span>
                     </div>
-                    <div className="flex-1 flex justify-between min-w-0">
+                    <div className="flex-1 flex justify-between min-w-0 items-center">
                       <div className="min-w-0">
                         <h4 className="font-bold text-gray-900 dark:text-gray-100 capitalize text-xs truncate">{l.leaveType} Leave</h4>
-                        <p className="text-[11px] text-gray-500 mt-0.5 truncate"><span className="font-semibold">Reason:</span> {l.reason || 'N/A'}</p>
-                        <p className="text-[9px] text-gray-400 mt-0.5">Applied on: {new Date(l.createdAt).toLocaleDateString()}</p>
+                        <p className="text-[10px] text-gray-500 truncate"><span className="font-semibold">Reason:</span> {l.reason || 'N/A'}</p>
+                        <p className="text-[8px] text-gray-400">Applied: {new Date(l.createdAt).toLocaleDateString()}</p>
                       </div>
                       <div className="flex flex-col items-end justify-between shrink-0 ml-2">
-                        <span className="text-[11px] font-bold text-gray-700 dark:text-gray-300">{l.totalDays} Day(s)</span>
-                        <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${getStatusColor(l.status)} capitalize`}>{l.status}</span>
+                        <span className="text-[10px] font-bold text-gray-700 dark:text-gray-300">{l.totalDays} Day(s)</span>
+                        <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded-full ${getStatusColor(l.status)} capitalize`}>{l.status}</span>
                       </div>
                     </div>
                   </div>
                 ));
               } else {
                 return (
-                  <div className="text-center py-6 text-gray-500 font-medium text-xs">No upcoming leaves found.</div>
+                  <div className="text-center py-8 text-gray-500 font-medium text-xs">No upcoming leaves found.</div>
                 );
               }
             })()}
