@@ -28,6 +28,7 @@ const LeaveManagement = lazy(() => import('./pages/LeaveManagement'));
 const Holidays = lazy(() => import('./pages/Holidays'));
 const MyEvents = lazy(() => import('./pages/MyEvents'));
 const Profile = lazy(() => import('@shared/pages/Profile'));
+const Settings = lazy(() => import('@shared/pages/Settings'));
 const Chat = lazy(() => import('@shared/pages/Chat'));
 
 const RouteLoadingFallback = () => (
@@ -91,11 +92,13 @@ function App() {
             <Route path="/tasks" element={<ManagerTasks />} />
             <Route path="/tasks/create" element={<TaskCreate />} />
             <Route path="/projects" element={<ManagerProjects />} />
+            <Route path="/leave" element={<LeaveManagement />} />
             <Route path="/leaves" element={<LeaveManagement />} />
             <Route path="/holidays" element={<Holidays />} />
             <Route path="/events" element={<MyEvents />} />
             <Route path="/chat" element={<Chat />} />
             <Route path="/profile" element={<Profile />} />
+            <Route path="/settings" element={<Settings />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Suspense>

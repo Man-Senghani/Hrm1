@@ -30,6 +30,7 @@ const Holidays = lazy(() => import('./pages/Holidays'));
 const MyEvents = lazy(() => import('./pages/MyEvents'));
 const Chat = lazy(() => import('@shared/pages/Chat'));
 const Profile = lazy(() => import('@shared/pages/Profile'));
+const Settings = lazy(() => import('@shared/pages/Settings'));
 
 const ScrollToTop = () => {
   const { pathname } = useLocation();
@@ -101,6 +102,7 @@ function App() {
             <Route path="/chat" element={<Chat />} />
             <Route path="/projects" element={<EmployeeProjects />} />
             <Route path="/profile" element={<Profile />} />
+            <Route path="/settings" element={<Settings />} />
             <Route path="/attendance" element={<Attendance />} />
             <Route path="/events" element={<MyEvents />} />
             <Route path="/holidays" element={<Holidays />} />

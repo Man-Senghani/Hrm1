@@ -1125,7 +1125,7 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
                       role="menuitem"
                       onClick={() => {
                         setIsProfileDropdownOpen(false);
-                        navigate('/settings');
+                        handleNav('/settings');
                       }}
                       className="w-full px-6 py-2.5 flex items-center gap-3.5 text-left text-[13px] font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-[#162722]/50 hover:text-slate-900 dark:hover:text-white transition-colors border-none bg-transparent cursor-pointer outline-none"
                     >
