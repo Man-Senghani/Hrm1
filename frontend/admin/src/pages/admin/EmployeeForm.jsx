@@ -230,29 +230,29 @@ const EmployeeForm = () => {
             const pathRole = window.location.pathname.split('/')[1];
             navigate(`/${pathRole}/employees`);
           }}
-          className="w-10 h-10 bg-white rounded-full flex items-center justify-center text-[#848E9C] hover:text-[#1E2026] hover:shadow-sm border border-[#E6E8EA] transition-all"
+          className="w-10 h-10 bg-white dark:bg-[#0d1f1a] rounded-full flex items-center justify-center text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:shadow-sm border border-slate-200 dark:border-[#133029] transition-all cursor-pointer"
         >
           <ArrowLeft size={18} />
         </button>
         <div>
-          <h1 className="text-3xl font-black text-[#1E2026] uppercase tracking-tighter">
-            {isEdit ? 'Update' : 'Register'} <span className="text-[#F0B90B]">Node</span>
+          <h1 className="text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
+            {isEdit ? 'Update' : 'Register'} <span className="text-[#00a76b]">Employee Profile</span>
           </h1>
         </div>
       </div>
 
-      <div className="bg-white border border-[#E6E8EA] rounded-2xl p-8 shadow-[0_3px_5px_rgba(32,32,37,0.05)]">
+      <div className="bg-white dark:bg-[#0d1f1a] border border-slate-200/80 dark:border-[#133029] rounded-2xl p-8 shadow-sm transition-colors">
         {/* TAB SWITCHER */}
-        <div className="flex gap-1 p-1 bg-[#F5F5F5] rounded-xl mb-10 w-fit">
+        <div className="flex gap-1 p-1 bg-slate-100 dark:bg-[#0a1815] rounded-xl mb-10 w-fit">
            <button 
              onClick={() => setActiveTab('profile')}
-             className={`px-8 py-2.5 rounded-lg text-[11px] font-black uppercase tracking-widest transition-all ${activeTab === 'profile' ? 'bg-white text-[#1E2026] shadow-sm' : 'text-[#848E9C] hover:text-[#1E2026]'}`}
+             className={`px-8 py-2.5 rounded-lg text-[11px] font-black uppercase tracking-widest transition-all ${activeTab === 'profile' ? 'bg-white dark:bg-[#132d26] text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}
            >
-              Profile Nodes
+              Profile
            </button>
            <button 
              onClick={() => setActiveTab('documents')}
-             className={`px-8 py-2.5 rounded-lg text-[11px] font-black uppercase tracking-widest transition-all ${activeTab === 'documents' ? 'bg-white text-[#1E2026] shadow-sm' : 'text-[#848E9C] hover:text-[#1E2026]'}`}
+             className={`px-8 py-2.5 rounded-lg text-[11px] font-black uppercase tracking-widest transition-all ${activeTab === 'documents' ? 'bg-white dark:bg-[#132d26] text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}
            >
               Identity Vault
            </button>
@@ -260,18 +260,18 @@ const EmployeeForm = () => {
 
         {/* AVATAR SECTION */}
         {isEdit && activeTab === 'profile' && (
-          <div className="flex justify-center mb-10 border-b border-[#F5F5F5] pb-10">
+          <div className="flex justify-center mb-10 border-b border-slate-100 dark:border-[#133029] pb-10">
             <div className="relative group">
-              <div className="w-32 h-32 rounded-2xl bg-[#F5F5F5] flex items-center justify-center border-2 border-dashed border-[#E6E8EA] overflow-hidden group-hover:border-[#F0B90B] transition-all">
+              <div className="w-32 h-32 rounded-2xl bg-slate-100 dark:bg-[#132d26] flex items-center justify-center border-2 border-dashed border-slate-200 dark:border-[#19352e] overflow-hidden group-hover:border-[#00a76b] transition-all">
                 {formData.profileImage ? (
                   <img src={getImageUrl(formData.profileImage)} alt="" className="w-full h-full object-cover" />
                 ) : (
-                  <span className="text-4xl font-black text-[#1E2026] opacity-10 uppercase">
+                  <span className="text-4xl font-black text-slate-400 dark:text-slate-500 opacity-30 uppercase">
                     {formData.firstName?.substring(0, 1) || 'S'}{formData.lastName?.substring(0, 1) || 'A'}
                   </span>
                 )}
               </div>
-              <label htmlFor="emp-photo" className="absolute -bottom-3 -right-3 w-10 h-10 bg-[#F0B90B] text-white rounded-xl flex items-center justify-center shadow-xl cursor-pointer hover:scale-110 active:scale-95 transition-all">
+              <label htmlFor="emp-photo" className="absolute -bottom-3 -right-3 w-10 h-10 bg-[#00a76b] text-white rounded-xl flex items-center justify-center shadow-xl cursor-pointer hover:scale-110 active:scale-95 transition-all">
                  <span className="material-symbols-outlined text-xl">photo_camera</span>
                  <input 
                   id="emp-photo" 
@@ -718,14 +718,14 @@ const EmployeeForm = () => {
              </div>
           </div>
 
-          <div className="pt-6 border-t border-[#E6E8EA] flex justify-end">
+          <div className="pt-6 border-t border-slate-200 dark:border-[#133029] flex justify-end">
              <button 
                type="submit" 
                disabled={loading}
-               className="bg-[#1E2026] text-white px-8 py-4 rounded-xl font-black uppercase text-[12px] tracking-widest hover:bg-black transition-all flex items-center gap-3 shadow-2xl active:scale-[0.98] disabled:opacity-50"
+               className="bg-[#00a76b] hover:bg-[#00915c] text-white px-8 py-3.5 rounded-xl font-bold text-sm shadow-md hover:shadow-lg transition-all flex items-center gap-2 cursor-pointer active:scale-[0.98] disabled:opacity-50"
              >
                {loading ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-               {isEdit ? 'Save Mutations' : 'Execute Registration'}
+               {isEdit ? 'Save Employee Changes' : 'Save Employee'}
              </button>
           </div>
         </form>
