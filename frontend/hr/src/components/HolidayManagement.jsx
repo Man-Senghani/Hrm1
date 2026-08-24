@@ -77,11 +77,11 @@ const HolidayManagement = ({ refreshTrigger }) => {
       return !isNaN(hDate.getTime()) && hDate >= now;
     })
     .sort((a, b) => new Date(a.date) - new Date(b.date))
-    .slice(0, 7);
+    .slice(0, 4);
 
   return (
-    <div className="bg-white dark:bg-[#1e293b] rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 p-4 flex flex-col h-full transition-all duration-200 hover:border-pink-500">
-      <div className="flex justify-between items-center mb-3.5">
+    <div className="bg-white dark:bg-[#1e293b] rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 p-4 flex flex-col h-full transition-all duration-200 hover:border-pink-500 overflow-hidden [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+      <div className="flex justify-between items-center mb-3">
         <h2 className="text-base font-bold text-gray-900 dark:text-white">Upcoming Holidays</h2>
         <button
           onClick={() => setIsDrawerOpen(true)}
@@ -90,14 +90,14 @@ const HolidayManagement = ({ refreshTrigger }) => {
           View Calendar
         </button>
       </div>
-      <div className="overflow-x-auto flex-1">
-        <table className="w-full text-left border-collapse">
+      <div className="overflow-hidden flex-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+        <table className="w-full text-left border-collapse table-fixed">
           <thead>
             <tr className="border-b border-gray-100 dark:border-gray-800">
-              <th className="px-3 py-2 text-[9px] font-black text-gray-400 uppercase tracking-wider">Holiday Name</th>
-              <th className="px-3 py-2 text-[9px] font-black text-gray-400 uppercase tracking-wider">Date</th>
-              <th className="px-3 py-2 text-[9px] font-black text-gray-400 uppercase tracking-wider text-center">Type</th>
-              <th className="px-3 py-2 text-[9px] font-black text-gray-400 uppercase tracking-wider text-center">Status</th>
+              <th className="px-2 py-1.5 text-[9px] font-black text-gray-400 uppercase tracking-wider w-2/5">Holiday Name</th>
+              <th className="px-2 py-1.5 text-[9px] font-black text-gray-400 uppercase tracking-wider w-1/4">Date</th>
+              <th className="px-1 py-1.5 text-[9px] font-black text-gray-400 uppercase tracking-wider text-center w-1/6">Type</th>
+              <th className="px-1 py-1.5 text-[9px] font-black text-gray-400 uppercase tracking-wider text-center w-1/5">Status</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50 dark:divide-gray-800/50">
