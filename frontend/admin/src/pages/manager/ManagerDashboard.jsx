@@ -22,6 +22,11 @@ const getGreeting = () => {
   return 'Good Evening';
 };
 
+const monthNames = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'
+];
+
 const fmtDate = () =>
   new Date().toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 
@@ -36,30 +41,46 @@ const Card = ({ children, className = '', style = {}, ...props }) => (
   </div>
 );
 
-const getEmpId = (emp) => {
+const getUserObjId = (obj) => {
+  if (!obj) return '';
+  if (typeof obj === 'string') return obj;
+  if (obj._id) return obj._id.toString();
+  return obj.toString();
+};
+
+const getEmpUserIds = (emp) => {
+  if (!emp) return [];
+  const ids = new Set();
+  if (typeof emp === 'string') {
+    ids.add(emp);
+    return Array.from(ids);
+  }
+  if (emp._id) ids.add(emp._id.toString());
+  if (emp.user) ids.add(getUserObjId(emp.user));
+  if (emp.userId) ids.add(getUserObjId(emp.userId));
+  if (emp.employee) ids.add(getUserObjId(emp.employee));
+  if (emp.employeeId) ids.add(getUserObjId(emp.employeeId));
+  return Array.from(ids).filter(id => id && id !== '[object Object]');
+};
+
+const getEmpName = (emp) => {
   if (!emp) return '';
-  if (typeof emp === 'string') return emp;
-  return (emp._id || emp.employeeId || emp.id || emp.user || emp.userId || '').toString();
+  if (typeof emp === 'string') return '';
+  const n = emp.fullName || emp.name || (emp.user && (emp.user.fullName || emp.user.name)) || (emp.firstName ? `${emp.firstName} ${emp.lastName || ''}` : '');
+  return (n || '').toLowerCase().replace(/\s+/g, ' ').trim();
 };
 
 const isSameEmp = (empA, empB) => {
   if (!empA || !empB) return false;
-  const idA = getEmpId(empA);
-  const idB = getEmpId(empB);
-  if (idA && idB && idA === idB) return true;
+  const idsA = getEmpUserIds(empA);
+  const idsB = getEmpUserIds(empB);
 
-  const userA = (empA?.user || empA?.userId || '').toString();
-  const userB = (empB?.user || empB?.userId || '').toString();
-  if (userA && idB && userA === idB) return true;
-  if (idA && userB && idA === userB) return true;
-  if (userA && userB && userA === userB) return true;
+  for (const idA of idsA) {
+    if (idsB.includes(idA)) return true;
+  }
 
-  const codeA = (empA?.employeeId || '').toString().toLowerCase().trim();
-  const codeB = (empB?.employeeId || '').toString().toLowerCase().trim();
-  if (codeA && codeB && codeA === codeB) return true;
-
-  const nameA = (empA?.fullName || empA?.name || (empA?.firstName ? `${empA.firstName} ${empA.lastName || ''}` : '')).toLowerCase().replace(/\s+/g, ' ').trim();
-  const nameB = (empB?.fullName || empB?.name || (empB?.firstName ? `${empB.firstName} ${empB.lastName || ''}` : '')).toLowerCase().replace(/\s+/g, ' ').trim();
+  const nameA = getEmpName(empA);
+  const nameB = getEmpName(empB);
   if (nameA && nameB && nameA === nameB) return true;
 
   return false;
@@ -67,6 +88,11 @@ const isSameEmp = (empA, empB) => {
 
 const isTodayDate = (dateVal) => {
   if (!dateVal) return false;
+  const todayStr = new Date().toISOString().split('T')[0];
+  if (typeof dateVal === 'string') {
+    if (dateVal.startsWith(todayStr)) return true;
+    if (dateVal.includes('T') && dateVal.split('T')[0] === todayStr) return true;
+  }
   const d = new Date(dateVal);
   if (isNaN(d.getTime())) return false;
   const today = new Date();
@@ -200,6 +226,7 @@ const ManagerDashboard = () => {
   const [perfFilter, setPerfFilter] = useState('monthly');
   const [goalFilter, setGoalFilter] = useState('quarterly');
   const [calendarDate, setCalendarDate] = useState(new Date());
+  const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
   const [showAvailabilityDrawer, setShowAvailabilityDrawer] = useState(false);
   const [availabilitySearch, setAvailabilitySearch] = useState('');
   const [liveTime, setLiveTime] = useState(new Date());
@@ -233,14 +260,16 @@ const ManagerDashboard = () => {
       if (attRes.status === 'fulfilled') {
         const d = attRes.value.data;
         const list = Array.isArray(d) ? d : (d?.data || d?.attendance || d?.records || d?.logs || []);
-        allAtt = [...allAtt, ...list];
+        if (Array.isArray(list)) allAtt.push(...list);
+        else if (list && typeof list === 'object') allAtt.push(list);
       }
       if (todayAttRes && todayAttRes.status === 'fulfilled') {
         const td = todayAttRes.value.data;
         const tList = Array.isArray(td) ? td : (td?.data || td?.attendance || td?.records || td?.logs || []);
-        allAtt = [...allAtt, ...tList];
+        if (Array.isArray(tList)) allAtt.push(...tList);
+        else if (tList && typeof tList === 'object') allAtt.push(tList);
       }
-      setAttendance(allAtt);
+      setAttendance(allAtt.filter(Boolean));
 
       let allLeaves = [];
       if (leavesRes && leavesRes.status === 'fulfilled') {
@@ -440,12 +469,18 @@ const ManagerDashboard = () => {
   const todayDateISO = new Date().toISOString().split('T')[0];
   const allMembersAvailability = teamMembers.map(member => {
     const memberName = member.fullName || member.name || (member.firstName ? `${member.firstName} ${member.lastName || ''}`.trim() : 'Unknown');
+
     const memberAtt = attendance.find(a =>
-      isSameEmp(a.employeeId || a.employee || a.userId || a.user || a, member) &&
+      isSameEmp(a, member) &&
       isTodayDate(a.date || a.createdAt || a.checkIn || a.checkInTime || a.startTime) &&
       (a.status || '').toLowerCase() !== 'absent'
     );
-    const memberLeave = leaves.find(l => isSameEmp(l.employeeId || l.employee || l.userId || l.user || l, member) && (l.status === 'approved' || l.status === 'Approved' || l.status === 'pending' || l.status === 'Pending') && isDateInLeaveRange(todayDateISO, l.startDate, l.endDate));
+
+    const memberLeave = leaves.find(l =>
+      isSameEmp(l, member) &&
+      (l.status === 'approved' || l.status === 'Approved' || l.status === 'pending' || l.status === 'Pending') &&
+      isDateInLeaveRange(todayDateISO, l.startDate, l.endDate)
+    );
 
     let status = 'Not Logged In';
     let color = '#94a3b8';
@@ -460,7 +495,7 @@ const ManagerDashboard = () => {
       const hasRealClockIn = (memberAtt.clockIn && memberAtt.clockIn !== '--') ||
         (memberAtt.checkInTime && memberAtt.checkInTime !== '--') ||
         (memberAtt.checkIn && memberAtt.checkIn !== '--') ||
-        st.includes('present') || st.includes('working') || st.includes('late') || st.includes('half');
+        st.includes('present') || st.includes('working') || st.includes('late') || st.includes('half') || st.includes('in');
       if (hasRealClockIn) {
         status = 'Logged In';
         color = '#22c55e';
@@ -490,7 +525,7 @@ const ManagerDashboard = () => {
   }
 
   return (
-    <div className="bg-[#F8F9FB] dark:bg-[#110e0c] min-h-screen text-[#1e293b] dark:text-gray-200 font-['Inter',sans-serif] px-2 pt-1 pb-6 max-w-[1600px] mx-auto space-y-4">
+    <div className="bg-[#F8F9FB] dark:bg-[#110e0c] min-h-screen text-[#1e293b] dark:text-gray-200 font-['Inter',sans-serif] px-2 pt-3 pb-6 max-w-[1600px] mx-auto space-y-4">
 
       {/* 1. HEADER SECTION */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-3">
@@ -517,9 +552,10 @@ const ManagerDashboard = () => {
       {/* 3. QUICK ACTIONS ROW */}
       <QuickActionsRow role="manager" />
 
-      {/* 3. SECOND ROW (Attendance Trend & Task Status) */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <Card className="min-h-[280px] flex flex-col hover:!border-[#22c55e] dark:hover:!border-[#34d399] transition-colors duration-300">
+      {/* Single Row: Team Attendance Trend, Task Status Overview & Quick Actions (6 Tiles) side-by-side */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* 1. Team Attendance Trend */}
+        <Card className="min-h-[290px] flex flex-col hover:!border-[#22c55e] dark:hover:!border-[#34d399] transition-colors duration-300">
           <SectionHeader
             title="Team Attendance Trend"
             action={<Dropdown value={attFilter} onChange={setAttFilter} options={[{ value: 'weekly', label: 'This Week' }, { value: 'monthly', label: 'This Month' }]} />}
@@ -546,19 +582,20 @@ const ManagerDashboard = () => {
           </div>
         </Card>
 
-        <Card className="min-h-[280px] flex flex-col hover:!border-[#3b82f6] dark:hover:!border-[#60a5fa] transition-colors duration-300">
+        {/* 2. Task Status Overview */}
+        <Card className="min-h-[290px] flex flex-col hover:!border-[#3b82f6] dark:hover:!border-[#60a5fa] transition-colors duration-300">
           <SectionHeader
             title="Task Status Overview"
             action={<Dropdown value={taskFilter} onChange={setTaskFilter} options={[{ value: 'monthly', label: 'This Month' }, { value: 'weekly', label: 'This Week' }]} />}
           />
-          <div className="flex-1 flex items-center justify-between px-4 sm:px-6">
-            <div className="w-[150px] h-[150px] relative">
+          <div className="flex-1 flex items-center justify-between px-2 sm:px-4">
+            <div className="w-[130px] h-[130px] relative shrink-0">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
                     data={donutData}
-                    innerRadius={50}
-                    outerRadius={70}
+                    innerRadius={42}
+                    outerRadius={60}
                     paddingAngle={4}
                     dataKey="value"
                     stroke="none"
@@ -590,23 +627,23 @@ const ManagerDashboard = () => {
               <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-center px-1">
                 {hoveredTaskDonut !== null ? (
                   <>
-                    <span className="text-2xl font-extrabold leading-none tracking-tight" style={{ color: donutData[hoveredTaskDonut].color }}>
+                    <span className="text-xl font-extrabold leading-none tracking-tight" style={{ color: donutData[hoveredTaskDonut].color }}>
                       {donutData[hoveredTaskDonut].value}
                     </span>
-                    <span className="text-[10px] font-bold mt-0.5 truncate max-w-[85px]" style={{ color: donutData[hoveredTaskDonut].color }}>
+                    <span className="text-[9px] font-bold mt-0.5 truncate max-w-[75px]" style={{ color: donutData[hoveredTaskDonut].color }}>
                       {donutData[hoveredTaskDonut].name}
                     </span>
                   </>
                 ) : (
                   <>
-                    <span className="text-3xl font-extrabold text-[#0f172a] dark:text-white leading-none">{totalTasksSum}</span>
-                    <span className="text-xs font-semibold text-gray-500 dark:text-[#a3a094]">Total Tasks</span>
+                    <span className="text-2xl font-extrabold text-[#0f172a] dark:text-white leading-none">{totalTasksSum}</span>
+                    <span className="text-[10px] font-semibold text-gray-500 dark:text-[#a3a094]">Total Tasks</span>
                   </>
                 )}
               </div>
             </div>
 
-            <div className="flex flex-col gap-2 justify-center">
+            <div className="flex flex-col gap-1.5 justify-center">
               {donutData.map((d, i) => {
                 const isHovered = hoveredTaskDonut === i;
                 return (
@@ -614,17 +651,44 @@ const ManagerDashboard = () => {
                     key={i}
                     onMouseEnter={() => setHoveredTaskDonut(i)}
                     onMouseLeave={() => setHoveredTaskDonut(null)}
-                    className={`flex items-center gap-2.5 p-1.5 rounded-lg transition-all cursor-pointer ${isHovered ? 'bg-gray-100 dark:bg-gray-800/80 scale-105' : 'hover:bg-gray-50 dark:hover:bg-gray-800/30'}`}
+                    className={`flex items-center gap-2 p-1 rounded-lg transition-all cursor-pointer ${isHovered ? 'bg-gray-100 dark:bg-gray-800/80 scale-105' : 'hover:bg-gray-50 dark:hover:bg-gray-800/30'}`}
                   >
-                    <div className="w-2.5 h-2.5 rounded-full shrink-0 transition-transform" style={{ backgroundColor: d.color, boxShadow: isHovered ? `0 0 8px ${d.color}` : 'none' }} />
+                    <div className="w-2 h-2 rounded-full shrink-0 transition-transform" style={{ backgroundColor: d.color, boxShadow: isHovered ? `0 0 8px ${d.color}` : 'none' }} />
                     <div>
-                      <p className="text-sm font-bold text-[#0f172a] dark:text-white leading-none" style={{ color: isHovered ? d.color : undefined }}>{d.value}</p>
-                      <p className="text-[11px] font-semibold text-gray-500 dark:text-[#a3a094] mt-0.5">{d.name}</p>
+                      <p className="text-xs font-bold text-[#0f172a] dark:text-white leading-none" style={{ color: isHovered ? d.color : undefined }}>{d.value}</p>
+                      <p className="text-[10px] font-semibold text-gray-500 dark:text-[#a3a094] mt-0.5">{d.name}</p>
                     </div>
                   </div>
                 );
               })}
             </div>
+          </div>
+        </Card>
+
+        {/* 3. Quick Actions Card (Exact 6 Action Tiles) */}
+        <Card className="min-h-[290px] flex flex-col hover:!border-[#00a76b] dark:hover:!border-[#34d399] transition-colors duration-300">
+          <SectionHeader title="Quick Actions" />
+          <div className="flex-1 grid grid-cols-3 gap-2.5 pt-1">
+            {[
+              { icon: <ClipboardList size={20} />, label: 'Assign Task', color: '#22c55e', bg: 'bg-[#f0fdf4] dark:bg-green-950/40 text-[#22c55e] dark:text-[#34d399]', hoverClass: 'hover:!border-[#22c55e] dark:hover:!border-[#34d399]', path: '/manager/task-management/create' },
+              { icon: <Briefcase size={20} />, label: 'Create Project', color: '#3b82f6', bg: 'bg-[#eff6ff] dark:bg-blue-950/40 text-[#3b82f6] dark:text-[#60a5fa]', hoverClass: 'hover:!border-[#3b82f6] dark:hover:!border-[#60a5fa]', path: '/manager/projects' },
+              { icon: <UserCheck size={20} />, label: 'Approve Leave', color: '#f59e0b', bg: 'bg-[#fffbeb] dark:bg-amber-950/40 text-[#f59e0b] dark:text-[#fbbf24]', hoverClass: 'hover:!border-[#f59e0b] dark:hover:!border-[#fbbf24]', path: '/manager/leave' },
+              { icon: <TrendingUp size={20} />, label: 'Team Report', color: '#a855f7', bg: 'bg-[#f3e8ff] dark:bg-purple-950/40 text-[#a855f7] dark:text-[#c084fc]', hoverClass: 'hover:!border-[#a855f7] dark:hover:!border-[#c084fc]', path: '/manager/reports' },
+              { icon: <CalendarIcon size={20} />, label: 'Schedule Meeting', color: '#ef4444', bg: 'bg-[#fee2e2] dark:bg-red-950/40 text-[#ef4444] dark:text-[#f87171]', hoverClass: 'hover:!border-[#ef4444] dark:hover:!border-[#f87171]', path: '/manager/events' },
+              { icon: <Star size={20} />, label: 'Performance Review', color: '#14b8a6', bg: 'bg-[#ccfbf1] dark:bg-teal-950/40 text-[#14b8a6] dark:text-[#2dd4bf]', hoverClass: 'hover:!border-[#14b8a6] dark:hover:!border-[#2dd4bf]', path: '/manager/performance' },
+            ].map((action, i) => (
+              <button
+                key={i}
+                type="button"
+                className={`flex flex-col items-center justify-center gap-2 rounded-2xl border border-gray-200 dark:border-[#28251e] bg-white dark:bg-[#161311] ${action.hoverClass} transition-colors h-full py-2.5 cursor-pointer group`}
+                onClick={() => navigate(action.path)}
+              >
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-transform group-hover:scale-110 ${action.bg}`}>
+                  {action.icon}
+                </div>
+                <span className="text-[10px] font-bold text-gray-700 dark:text-gray-200 text-center leading-tight px-1">{action.label}</span>
+              </button>
+            ))}
           </div>
         </Card>
       </div>
@@ -720,113 +784,111 @@ const ManagerDashboard = () => {
 
 
 
-      {/* 6. FOURTH ROW (Calendar, Availability) */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Calendar */}
-        <Card className="h-[350px] flex flex-col hover:!border-[#8b5cf6] dark:hover:!border-[#a78bfa] transition-colors duration-300">
-          <SectionHeader title="Team Calendar" />
-          <div className="flex-1 flex flex-col">
-            <div className="flex justify-between items-center mb-4 px-2">
-              <button
-                onClick={() => setCalendarDate(new Date(calendarDate.getFullYear(), calendarDate.getMonth() - 1, 1))}
-                className="text-gray-400 dark:text-gray-400 hover:text-gray-700 dark:hover:text-white cursor-pointer transition-colors p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-[#1f1b17]"
-                title="Previous Month"
-              >
-                <ChevronLeft size={18} />
-              </button>
-              <h3 className="text-sm font-bold text-[#0f172a] dark:text-white">
-                {calendarDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
-              </h3>
-              <div className="flex items-center gap-2">
+      {/* 7. ROW: Team Calendar, Team Availability & Upcoming Schedule side-by-side in 1 single row */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Team Calendar */}
+        <Card className="h-[350px] flex flex-col hover:!border-[#00a76b] dark:hover:!border-[#34d399] transition-colors duration-300">
+          <SectionHeader
+            title="Team Calendar"
+            action={
+              <div className="flex items-center gap-1 text-[#0f172a] dark:text-white">
                 <button
-                  onClick={() => setCalendarDate(new Date())}
-                  className="text-[10px] font-bold border border-gray-200 dark:border-[#28251e] rounded px-2 py-0.5 text-gray-600 dark:text-gray-300 bg-white dark:bg-[#1f1b17] hover:bg-gray-50 dark:hover:bg-[#28251e] cursor-pointer transition-colors"
+                  type="button"
+                  onClick={() => setCurrentYear(prev => prev - 1)}
+                  className="p-1 hover:bg-gray-100 dark:hover:bg-[#28251e] rounded-lg transition-colors cursor-pointer"
+                  title="Previous Year"
+                >
+                  <ChevronLeft size={16} />
+                </button>
+                <div className="flex items-center gap-1 text-xs font-extrabold px-1">
+                  <span>{monthNames[calendarDate.getMonth()]}</span>
+                  <span>{currentYear}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setCurrentYear(prev => prev + 1)}
+                  className="p-1 hover:bg-gray-100 dark:hover:bg-[#28251e] rounded-lg transition-colors cursor-pointer"
+                  title="Next Year"
+                >
+                  <ChevronRight size={16} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setCalendarDate(new Date()); setCurrentYear(new Date().getFullYear()); }}
+                  className="ml-1 text-[10px] font-bold px-2 py-0.5 rounded-md border border-gray-200 dark:border-[#38332c] hover:bg-gray-50 dark:hover:bg-[#28251e] transition-colors cursor-pointer"
                 >
                   Today
                 </button>
-                <button
-                  onClick={() => setCalendarDate(new Date(calendarDate.getFullYear(), calendarDate.getMonth() + 1, 1))}
-                  className="text-gray-400 dark:text-gray-400 hover:text-gray-700 dark:hover:text-white cursor-pointer transition-colors p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-[#1f1b17]"
-                  title="Next Month"
-                >
-                  <ChevronRight size={18} />
-                </button>
               </div>
-            </div>
-            <div className="grid grid-cols-7 text-center mb-2 px-2">
-              {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(d => (
-                <span key={d} className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase">{d}</span>
+            }
+          />
+          <div className="flex-1 flex flex-col justify-between">
+            <div className="grid grid-cols-7 gap-1 text-center mb-1">
+              {['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'].map((d, i) => (
+                <span key={i} className="text-[10px] font-bold text-gray-500 dark:text-[#a3a094] tracking-wider">{d}</span>
               ))}
             </div>
-            <div className="grid grid-cols-7 text-center gap-y-1 flex-1 px-2">
+
+            <div className="grid grid-cols-7 gap-1 flex-1">
               {(() => {
-                const today = new Date();
-                const currentMonth = calendarDate.getMonth();
-                const currentYear = calendarDate.getFullYear();
-                const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
-                const firstDayOfMonth = new Date(currentYear, currentMonth, 1).getDay();
-                const offset = firstDayOfMonth === 0 ? 6 : firstDayOfMonth - 1;
-                const totalCells = offset + daysInMonth > 35 ? 42 : 35;
+                const year = currentYear;
+                const month = calendarDate.getMonth();
+                const firstDayOfMonth = new Date(year, month, 1);
+                const daysInMonth = new Date(year, month + 1, 0).getDate();
 
-                return [...Array(totalCells)].map((_, i) => {
-                  const day = i - offset + 1;
-                  if (day < 1 || day > daysInMonth) return <div key={i} className="p-0.5"></div>;
-                  const isToday = day === today.getDate() && currentMonth === today.getMonth() && currentYear === today.getFullYear();
+                let startingDay = firstDayOfMonth.getDay() - 1;
+                if (startingDay === -1) startingDay = 6;
 
-                  // Find matching events for this date
-                  const dayEvents = events.filter(e => {
-                    if (!e.date) return false;
-                    const d = new Date(e.date);
-                    return d.getDate() === day && d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+                const cells = [];
+                for (let i = 0; i < startingDay; i++) cells.push(null);
+                for (let i = 1; i <= daysInMonth; i++) cells.push(i);
+
+                return cells.map((day, idx) => {
+                  if (!day) return <div key={idx} className="h-7" />;
+
+                  const fullDateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                  const dayEvents = (events || []).filter(e => {
+                    const eDate = e.date ? e.date.split('T')[0] : '';
+                    return eDate === fullDateStr;
                   });
 
-                  const eventTooltip = dayEvents.length > 0
-                    ? dayEvents.map(e => `${e.title} (${e.startTime || 'All Day'})`).join('\n')
-                    : undefined;
+                  const isToday = day === new Date().getDate() && month === new Date().getMonth() && year === new Date().getFullYear();
+                  const hasEvents = dayEvents.length > 0;
 
                   return (
                     <div
-                      key={i}
-                      className="flex flex-col items-center justify-center p-0.5 relative rounded-lg transition-colors group hover:bg-gray-100 dark:hover:bg-[#1f1b17]"
+                      key={idx}
+                      className={`h-7 flex flex-col items-center justify-center rounded-lg text-xs font-semibold relative group transition-all ${isToday
+                        ? 'bg-[#00a76b] text-white shadow-md font-bold'
+                        : hasEvents
+                          ? 'bg-emerald-50 dark:bg-emerald-950/40 text-[#00a76b] dark:text-[#34d399] font-bold border border-emerald-200 dark:border-emerald-800/40'
+                          : 'text-[#0f172a] dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-[#28251e]'
+                        }`}
                     >
-                      <span className={`text-[11px] font-semibold w-6 h-6 flex items-center justify-center rounded-full ${isToday ? 'bg-[#00a76b] text-white shadow-sm font-bold' : 'text-gray-700 dark:text-gray-300'}`}>
-                        {day}
-                      </span>
-                      {dayEvents.length > 0 && (
+                      <span>{day}</span>
+                      {hasEvents && (
                         <>
-                          <div className="absolute bottom-0 flex gap-0.5 items-center justify-center">
-                            {dayEvents.slice(0, 3).map((ev, idx) => {
+                          <div className="flex items-center gap-0.5 mt-0.5">
+                            {dayEvents.slice(0, 3).map((ev, iIdx) => {
                               const dotColor = ev.eventType === 'Meeting' ? 'bg-[#22c55e]' : ev.eventType === 'Review' ? 'bg-[#3b82f6]' : 'bg-[#a855f7]';
-                              return <div key={idx} className={`w-1 h-1 rounded-full ${dotColor}`} />;
+                              return <span key={iIdx} className={`w-1 h-1 rounded-full ${isToday ? 'bg-white' : dotColor}`} />;
                             })}
                           </div>
-
                           {/* Hover Popover showing Meetings, Deadlines, Events */}
                           <div className="hidden group-hover:block absolute bottom-full mb-1.5 left-1/2 -translate-x-1/2 z-50 w-48 p-2.5 bg-gray-900/95 backdrop-blur-md text-white text-left rounded-xl shadow-xl border border-gray-700 pointer-events-none transition-all">
                             <div className="text-[10px] font-bold text-gray-400 mb-1 border-b border-gray-700 pb-1">
-                              {calendarDate.toLocaleDateString('en-US', { month: 'short' })} {day}, {currentYear}
+                              {monthNames[month]} {day}, {year}
                             </div>
                             <div className="space-y-1.5 max-h-36 overflow-y-auto">
                               {dayEvents.map((ev, idx) => {
                                 const dotBg = ev.eventType === 'Meeting' ? 'bg-[#22c55e]' : ev.eventType === 'Review' ? 'bg-[#3b82f6]' : 'bg-[#a855f7]';
-                                let assignedNames = '';
-                                if (Array.isArray(ev.assignedEmployees) && ev.assignedEmployees.length > 0) {
-                                  assignedNames = ev.assignedEmployees.map(emp => typeof emp === 'object' ? (emp.name || emp.fullName || '') : '').filter(Boolean).join(', ');
-                                }
                                 return (
                                   <div key={idx} className="text-[11px] leading-tight">
                                     <div className="flex items-center gap-1.5 font-bold text-white">
                                       <span className={`w-2 h-2 rounded-full shrink-0 ${dotBg}`} />
                                       <span className="truncate">{ev.title}</span>
                                     </div>
-                                    <div className="text-[9px] text-gray-300 ml-3.5 mt-0.5">
-                                      {ev.eventType || 'Event'} {ev.startTime ? `• ${ev.startTime}` : ''}
-                                    </div>
-                                    {assignedNames && (
-                                      <div className="text-[9px] text-emerald-400 ml-3.5 truncate">
-                                        With: {assignedNames}
-                                      </div>
-                                    )}
+                                    <div className="text-[9px] text-gray-300 ml-3.5 mt-0.5">{ev.eventType || 'Event'}</div>
                                   </div>
                                 );
                               })}
@@ -847,7 +909,7 @@ const ManagerDashboard = () => {
           </div>
         </Card>
 
-        {/* Availability */}
+        {/* Team Availability */}
         <Card className="h-[350px] flex flex-col hover:!border-[#6366f1] dark:hover:!border-[#818cf8] transition-colors duration-300">
           <SectionHeader
             title="Team Availability"
@@ -880,17 +942,11 @@ const ManagerDashboard = () => {
             ))}
           </div>
         </Card>
-      </div>
-
-
-
-      {/* 8. BOTTOM ROW (Schedule, Quick Actions) */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
         {/* Upcoming Schedule */}
         <Card
           onClick={() => navigate('/manager/events')}
-          className="h-72 flex flex-col cursor-pointer hover:!border-[#f59e0b] dark:hover:!border-[#fbbf24] transition-colors duration-300"
+          className="h-[350px] flex flex-col cursor-pointer hover:!border-[#f59e0b] dark:hover:!border-[#fbbf24] transition-colors duration-300"
         >
           <SectionHeader title="Upcoming Schedule" />
           <div className="flex-1 overflow-y-auto pr-1 space-y-2.5 custom-scrollbar">
@@ -914,7 +970,7 @@ const ManagerDashboard = () => {
                 </span>
               </div>
             )) : (
-              <div className="text-center text-xs text-gray-400 dark:text-gray-500 py-4">No upcoming events found.</div>
+              <div className="text-center text-xs text-gray-400 dark:text-gray-500 py-12">No upcoming events found.</div>
             )}
           </div>
           <button
@@ -926,32 +982,6 @@ const ManagerDashboard = () => {
           >
             View Full Schedule
           </button>
-        </Card>
-
-        {/* Quick Actions */}
-        <Card className="h-72 flex flex-col hover:!border-[#00a76b] dark:hover:!border-[#34d399] transition-colors duration-300">
-          <SectionHeader title="Quick Actions" />
-          <div className="flex-1 grid grid-cols-3 gap-3">
-            {[
-              { icon: <ClipboardList size={20} />, label: 'Assign Task', color: '#22c55e', bg: 'bg-[#f0fdf4] dark:bg-green-950/40 text-[#22c55e] dark:text-[#34d399]', hoverClass: 'hover:!border-[#22c55e] dark:hover:!border-[#34d399]', path: '/manager/task-management/create' },
-              { icon: <Briefcase size={20} />, label: 'Create Project', color: '#3b82f6', bg: 'bg-[#eff6ff] dark:bg-blue-950/40 text-[#3b82f6] dark:text-[#60a5fa]', hoverClass: 'hover:!border-[#3b82f6] dark:hover:!border-[#60a5fa]', path: '/manager/projects' },
-              { icon: <UserCheck size={20} />, label: 'Approve Leave', color: '#f59e0b', bg: 'bg-[#fffbeb] dark:bg-amber-950/40 text-[#f59e0b] dark:text-[#fbbf24]', hoverClass: 'hover:!border-[#f59e0b] dark:hover:!border-[#fbbf24]', path: '/manager/leave' },
-              { icon: <TrendingUp size={20} />, label: 'Team Report', color: '#a855f7', bg: 'bg-[#f3e8ff] dark:bg-purple-950/40 text-[#a855f7] dark:text-[#c084fc]', hoverClass: 'hover:!border-[#a855f7] dark:hover:!border-[#c084fc]', path: '/manager/reports' },
-              { icon: <CalendarIcon size={20} />, label: 'Schedule Meeting', color: '#ef4444', bg: 'bg-[#fee2e2] dark:bg-red-950/40 text-[#ef4444] dark:text-[#f87171]', hoverClass: 'hover:!border-[#ef4444] dark:hover:!border-[#f87171]', path: '/manager/events' },
-              { icon: <Star size={20} />, label: 'Performance Review', color: '#14b8a6', bg: 'bg-[#ccfbf1] dark:bg-teal-950/40 text-[#14b8a6] dark:text-[#2dd4bf]', hoverClass: 'hover:!border-[#14b8a6] dark:hover:!border-[#2dd4bf]', path: '/manager/performance' },
-            ].map((action, i) => (
-              <button
-                key={i}
-                className={`flex flex-col items-center justify-center gap-2 rounded-2xl border border-gray-200 dark:border-[#28251e] bg-white dark:bg-[#161311] ${action.hoverClass} transition-colors h-full cursor-pointer group`}
-                onClick={() => navigate(action.path)}
-              >
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-transform group-hover:scale-110 ${action.bg}`}>
-                  {action.icon}
-                </div>
-                <span className="text-[10px] font-bold text-gray-700 dark:text-gray-200 text-center leading-tight px-1">{action.label}</span>
-              </button>
-            ))}
-          </div>
         </Card>
       </div>
 

@@ -1209,7 +1209,7 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
 
         {/* Main Workspace content */}
         <div className="flex-1 flex flex-col min-w-0">
-          <main className="flex-1 min-w-0 overflow-x-hidden overflow-y-auto bg-[#f8fafc] dark:bg-[#08100e] relative flex flex-col p-3 md:px-6 md:pt-2 md:pb-6">
+          <main className="flex-1 min-w-0 overflow-x-hidden overflow-y-auto bg-[#f8fafc] dark:bg-[#08100e] relative flex flex-col px-4 pt-5 md:px-8 md:pt-6 md:pb-8">
             {location.pathname.endsWith('/chat') ? (
               <div className="h-[calc(100vh-70px)] relative overflow-hidden">
                 <ErrorBoundary key={location.pathname}>

@@ -961,6 +961,99 @@ exports.getManagerStats = async (req, res) => {
   }
 };
 
+// @desc    Get employees on leave today
+// @route   GET /api/leaves/on-leave-today
+// @access  Private (Manager / HR / Admin)
+exports.getEmployeesOnLeaveToday = async (req, res) => {
+  try {
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+
+    let queryUserIds = [];
+    if (req.user.role === 'manager') {
+      const subordinates = await User.find({ reportingManager: req.user.id }).select('_id');
+      queryUserIds = subordinates.map(s => s._id);
+    } else {
+      const users = await User.find({ role: { $ne: 'admin' } }).select('_id');
+      queryUserIds = users.map(u => u._id);
+    }
+
+    const leaves = await Leave.find({
+      user: { $in: queryUserIds },
+      status: 'approved',
+      startDate: { $lte: endOfToday },
+      endDate: { $gte: startOfToday }
+    }).populate('user', 'name role department email designation');
+
+    const formattedLeaves = leaves.map(l => {
+      const startDateStr = new Date(l.startDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+      const endDateStr = new Date(l.endDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+      return {
+        id: l._id,
+        name: l.user ? l.user.name : 'Employee',
+        role: l.user ? (l.user.designation || l.user.department || l.user.role || 'Team Member') : 'Team Member',
+        email: l.user ? l.user.email : '',
+        leaveType: l.leaveType || 'Leave',
+        startDate: startDateStr,
+        endDate: endDateStr,
+        totalDays: l.totalDays || 1,
+        reason: l.reason || 'No reason provided'
+      };
+    });
+
+    res.json(formattedLeaves);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Get upcoming leaves for next 7 days
+// @route   GET /api/leaves/upcoming-leaves
+// @access  Private (Manager / HR / Admin)
+exports.getUpcomingLeavesList = async (req, res) => {
+  try {
+    const now = new Date();
+    const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+    const next7Days = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+    let queryUserIds = [];
+    if (req.user.role === 'manager') {
+      const subordinates = await User.find({ reportingManager: req.user.id }).select('_id');
+      queryUserIds = subordinates.map(s => s._id);
+    } else {
+      const users = await User.find({ role: { $ne: 'admin' } }).select('_id');
+      queryUserIds = users.map(u => u._id);
+    }
+
+    const leaves = await Leave.find({
+      user: { $in: queryUserIds },
+      status: 'approved',
+      startDate: { $gt: endOfToday, $lte: next7Days }
+    }).populate('user', 'name role department email designation').sort({ startDate: 1 });
+
+    const formattedLeaves = leaves.map(l => {
+      const startDateStr = new Date(l.startDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+      const endDateStr = new Date(l.endDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+      return {
+        id: l._id,
+        name: l.user ? l.user.name : 'Employee',
+        role: l.user ? (l.user.designation || l.user.department || l.user.role || 'Team Member') : 'Team Member',
+        email: l.user ? l.user.email : '',
+        leaveType: l.leaveType || 'Leave',
+        startDate: startDateStr,
+        endDate: endDateStr,
+        totalDays: l.totalDays || 1,
+        reason: l.reason || 'No reason provided'
+      };
+    });
+
+    res.json(formattedLeaves);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 exports.getTeamLeaves = async (req, res) => {
   try {
     const page = parseInt(req.query.page, 10) || 1;
