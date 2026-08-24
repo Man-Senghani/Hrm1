@@ -461,9 +461,29 @@ exports.getSessionStatus = async (req, res) => {
       });
     }
 
+    // ── Backend Authority Auto-Idle Check (60s Inactivity Threshold) ──
+    const now = new Date();
+    if (session.status === 'active' && session.lastHeartbeat) {
+      const inactiveSeconds = (now - new Date(session.lastHeartbeat)) / 1000;
+      if (inactiveSeconds >= 60) {
+        const rewind = Math.min(session.activeTime || 0, 60);
+        session.activeTime = Math.max(0, (session.activeTime || 0) - rewind);
+        session.idleTime = (session.idleTime || 0) + rewind;
+        session.idleStart = now;
+        session.status = 'idle';
+        session.isRunning = false;
+        session.segmentStart = null;
+        session.idleApplied = true;
+        await session.save();
+
+        const io = req.app.get('io');
+        if (io) {
+          io.to(`user_${targetId}`).emit('timer_paused', { reason: 'inactivity', ...buildPayload(session) });
+        }
+      }
+    }
+
     // ── Session Status ──
-    // The frontend is responsible for calculating elapsed time from segmentStart.
-    // We strictly return the database state to prevent double-counting.
     res.json(buildPayload(session));
   } catch (err) {
     console.error('[STATUS ERROR]', err);

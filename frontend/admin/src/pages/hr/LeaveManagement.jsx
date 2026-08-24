@@ -204,7 +204,15 @@ const Leaves = () => {
           axios.get(endpoint, { headers: { Authorization: `Bearer ${token}` } }),
           axios.get('/api/hr-dashboard/summary', { headers: { Authorization: `Bearer ${token}` } })
         ]);
-        setLeaves(leavesRes.data || []);
+        let leavesData = leavesRes.data || [];
+        if (role === 'hr' && user) {
+          const currentUserId = String(user._id || user.id || '');
+          leavesData = leavesData.filter(l => {
+            const leaveUserId = String(l.user?._id || l.user?.id || l.user || l.employeeId || '');
+            return leaveUserId !== currentUserId;
+          });
+        }
+        setLeaves(leavesData);
         if (statsRes.data && statsRes.data.data) {
           setStats(statsRes.data.data.stats);
         }

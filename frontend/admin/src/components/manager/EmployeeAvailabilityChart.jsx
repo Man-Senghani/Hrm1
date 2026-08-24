@@ -75,24 +75,17 @@ const EmployeeAvailabilityChart = ({ trigger }) => {
                 onMouseEnter={(_, index) => setHoveredItem(legend[index])}
                 onMouseLeave={() => setHoveredItem(null)}
               >
-                {chartData.map((entry, index) => {
-                  const isHovered = hoveredItem?.key === legend[index]?.key;
-                  return (
-                    <Cell
-                      key={`cell-${index}`}
-                      fill={entry.color}
-                      stroke={isHovered ? '#ffffff' : 'none'}
-                      strokeWidth={isHovered ? 2 : 0}
-                      style={{
-                        filter: isHovered ? `drop-shadow(0px 0px 8px ${entry.color}a0) brightness(1.25)` : 'none',
-                        transform: isHovered ? 'scale(1.06)' : 'scale(1)',
-                        transformOrigin: 'center center',
-                        transition: 'all 0.2s ease-in-out',
-                        cursor: 'pointer'
-                      }}
-                    />
-                  );
-                })}
+                {chartData.map((entry, index) => (
+                  <Cell
+                    key={`cell-${index}`}
+                    fill={entry.color}
+                    stroke="none"
+                    strokeWidth={0}
+                    style={{
+                      cursor: 'pointer'
+                    }}
+                  />
+                ))}
               </Pie>
             </PieChart>
 

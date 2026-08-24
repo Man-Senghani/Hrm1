@@ -126,10 +126,9 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
     if (!targetPath) return;
     let cleanPath = targetPath;
     if (activeRole !== 'admin') {
-      if (cleanPath.startsWith(`/${activeRole}/`)) {
-        cleanPath = cleanPath.replace(new RegExp(`^/${activeRole}`), '');
-      } else if (cleanPath === `/${activeRole}`) {
-        cleanPath = '/';
+      const prefix = `/${activeRole}`;
+      if (!cleanPath.startsWith(prefix)) {
+        cleanPath = cleanPath.startsWith('/') ? `${prefix}${cleanPath}` : `${prefix}/${cleanPath}`;
       }
     }
     navigate(cleanPath, typeof options === 'object' && options !== null ? options : { state: options });
@@ -616,49 +615,15 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
         setIsTrackingActive(isRunning);
         setIsPausedByIdle(!isRunning);
         setTrackerRawStatus(res.data?.status || 'offline');
-
-        if (res.data?.lastActiveTime && res.data?.serverTime) {
-          const serverNow = Date.parse(res.data.serverTime);
-          const serverLast = Date.parse(res.data.lastActiveTime);
-          const localNow = Date.now();
-
-          if (!isNaN(serverNow) && !isNaN(serverLast)) {
-            const sinceLast = serverNow - serverLast;
-            const adjustedLastActivity = localNow - sinceLast;
-            if (adjustedLastActivity > lastActivity) {
-              setLastActivity(adjustedLastActivity);
-            }
-          }
-        }
       } catch (err) { console.error('Status fetch failed:', err); }
     };
     fetchStatus();
     const interval = setInterval(fetchStatus, 10000); // Poll status every 10s
     return () => clearInterval(interval);
-  }, [token, lastActivity]);
+  }, [token]);
 
-  // 🛡️ IDLE TIMER & AUTO-PAUSE LOGIC (60 Seconds Inactivity Threshold)
-  useEffect(() => {
-    if (!token || !isTrackingActive || trackerRawStatus !== 'active') return;
-
-    const checkIdle = setInterval(async () => {
-      const now = Date.now();
-      const idleTime = now - lastActivity;
-      if (idleTime >= 60000 && trackerRawStatus === 'active') { // 60 seconds = 1 minute
-        try {
-          await axios.post('/api/time/timer/update', { type: 'idle', idleSeconds: 60 }, { headers: { Authorization: `Bearer ${token}` } });
-          setTrackerRawStatus('idle');
-          setIsTrackingActive(false);
-          setIsPausedByIdle(true);
-          toast('Timer paused due to inactivity (1 minute idle)', { icon: '⏸️' });
-        } catch (err) {
-          console.error('Idle report error:', err);
-        }
-      }
-    }, 5000);
-
-    return () => clearInterval(checkIdle);
-  }, [token, isTrackingActive, trackerRawStatus, lastActivity]);
+  // 🛡️ Note: System-wide desktop idle monitoring is handled authoritatively by FluidHR Tracker Desktop App (powerMonitor)
+  // Website subscribes to backend socket events (timer_paused, timer_resumed, timer_update) and status polling.
 
   const [lastServerSync, setLastServerSync] = useState(0);
 
@@ -683,39 +648,43 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
     } catch (err) { console.error('Resume failed:', err); }
   };
 
-  // 🔄 GLOBAL ACTIVITY TRACKER (AUTO-RESUME ON INPUT)
+  // 🔄 GLOBAL ACTIVITY TRACKER (Mouse, Keyboard, Click, Scroll, Touch)
   useEffect(() => {
+    let lastMouseTime = 0;
     const handleActivity = (e) => {
       const now = Date.now();
+      if (e?.type === 'mousemove') {
+        if (now - lastMouseTime < 2000) return;
+        lastMouseTime = now;
+      }
+
       setLastActivity(now);
 
       if (trackerRawStatus === 'idle' || isPausedByIdle) {
-        handleResume();
-      } else {
+        // 🛑 DO NOT auto-resume on mouse clicks, keydown, or mousemove when idle/paused.
+        // The timer ONLY resumes when the user explicitly clicks the RESUME button in FluidHR Tracker Desktop App!
+        return;
+      }
+
+      if (e?.type !== 'mousemove') {
         reportActivity(e?.type || 'active');
       }
     };
 
     window.addEventListener('mousemove', handleActivity);
-    window.addEventListener('keydown', handleActivity);
+    window.addEventListener('mousedown', handleActivity);
     window.addEventListener('click', handleActivity);
+    window.addEventListener('keydown', handleActivity);
     window.addEventListener('scroll', handleActivity);
-    window.addEventListener('focus', handleActivity);
-
-    const handleVisibilityChange = () => {
-      if (!document.hidden) {
-        handleActivity();
-      }
-    };
-    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('touchstart', handleActivity);
 
     return () => {
       window.removeEventListener('mousemove', handleActivity);
-      window.removeEventListener('keydown', handleActivity);
+      window.removeEventListener('mousedown', handleActivity);
       window.removeEventListener('click', handleActivity);
+      window.removeEventListener('keydown', handleActivity);
       window.removeEventListener('scroll', handleActivity);
-      window.removeEventListener('focus', handleActivity);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('touchstart', handleActivity);
     };
   }, [isTrackingActive, trackerRawStatus, isPausedByIdle]);
 
@@ -810,10 +779,7 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
 
                   {activeRole === 'manager' && (
                     <>
-                      <button onClick={() => { setIsQuickActionOpen(false); handleNav('/tasks/create'); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-[#162722] text-xs font-bold text-gray-700 dark:text-slate-300 rounded-xl transition-colors border-none bg-transparent cursor-pointer">
-                        Assign / Reassign Task
-                      </button>
-                      <button onClick={() => { setIsQuickActionOpen(false); handleNav('/leaves'); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-[#162722] text-xs font-bold text-gray-700 dark:text-slate-300 rounded-xl transition-colors border-none bg-transparent cursor-pointer">
+                      <button onClick={() => { setIsQuickActionOpen(false); handleNav('/leave'); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-[#162722] text-xs font-bold text-gray-700 dark:text-slate-300 rounded-xl transition-colors border-none bg-transparent cursor-pointer">
                         Approve / Reject Leave
                       </button>
                       <button onClick={() => { setIsQuickActionOpen(false); handleNav('/employees'); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-[#162722] text-xs font-bold text-gray-700 dark:text-slate-300 rounded-xl transition-colors border-none bg-transparent cursor-pointer">
@@ -836,7 +802,7 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
                       <button onClick={() => { setIsQuickActionOpen(false); handleNav('/leave'); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-[#162722] text-xs font-bold text-gray-700 dark:text-slate-300 rounded-xl transition-colors border-none bg-transparent cursor-pointer">
                         Apply Leave
                       </button>
-                      <button onClick={() => { setIsQuickActionOpen(false); handleNav('/time-tracker'); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-[#162722] text-xs font-bold text-gray-700 dark:text-slate-300 rounded-xl transition-colors border-none bg-transparent cursor-pointer">
+                      <button onClick={() => { setIsQuickActionOpen(false); handleNav('/attendance'); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-[#162722] text-xs font-bold text-gray-700 dark:text-slate-300 rounded-xl transition-colors border-none bg-transparent cursor-pointer">
                         Time Tracker
                       </button>
                       <button onClick={() => { setIsQuickActionOpen(false); handleNav('/projects'); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-[#162722] text-xs font-bold text-gray-700 dark:text-slate-300 rounded-xl transition-colors border-none bg-transparent cursor-pointer">

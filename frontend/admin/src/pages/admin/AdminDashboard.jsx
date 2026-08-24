@@ -784,7 +784,7 @@ const AdminDashboard = () => {
                 hoverBorder: 'hover:border-blue-400 dark:hover:border-blue-500',
                 hoverBg: 'hover:bg-blue-50/40 dark:hover:bg-blue-950/20',
                 hoverText: 'group-hover:text-blue-600 dark:group-hover:text-blue-400',
-                path: `/${pathRole}/create-user`
+                path: '/create-user'
               },
               {
                 label: 'Add Department',
@@ -794,7 +794,7 @@ const AdminDashboard = () => {
                 hoverBorder: 'hover:border-indigo-400 dark:hover:border-indigo-500',
                 hoverBg: 'hover:bg-indigo-50/40 dark:hover:bg-indigo-950/20',
                 hoverText: 'group-hover:text-indigo-600 dark:group-hover:text-indigo-400',
-                path: `/${pathRole}/departments`
+                path: '/departments'
               },
               {
                 label: 'Create Job',
@@ -804,7 +804,7 @@ const AdminDashboard = () => {
                 hoverBorder: 'hover:border-purple-400 dark:hover:border-purple-500',
                 hoverBg: 'hover:bg-purple-50/40 dark:hover:bg-purple-950/20',
                 hoverText: 'group-hover:text-purple-600 dark:group-hover:text-purple-400',
-                path: `/${pathRole}/jobs`
+                path: '/recruitment'
               },
               {
                 label: 'Approve Leave',
@@ -814,7 +814,7 @@ const AdminDashboard = () => {
                 hoverBorder: 'hover:border-[#00a76b] dark:hover:border-[#00a76b]',
                 hoverBg: 'hover:bg-green-50/40 dark:hover:bg-green-950/20',
                 hoverText: 'group-hover:text-[#00a76b] dark:group-hover:text-[#00a76b]',
-                path: `/${pathRole}/leave`
+                path: '/leave'
               },
               {
                 label: 'Run Payroll',
@@ -824,7 +824,7 @@ const AdminDashboard = () => {
                 hoverBorder: 'hover:border-orange-400 dark:hover:border-orange-500',
                 hoverBg: 'hover:bg-orange-50/40 dark:hover:bg-orange-950/20',
                 hoverText: 'group-hover:text-orange-600 dark:group-hover:text-orange-400',
-                path: `/${pathRole}/payroll`
+                path: '/payroll'
               },
               {
                 label: 'Announcement',
@@ -834,7 +834,7 @@ const AdminDashboard = () => {
                 hoverBorder: 'hover:border-red-400 dark:hover:border-red-500',
                 hoverBg: 'hover:bg-red-50/40 dark:hover:bg-red-950/20',
                 hoverText: 'group-hover:text-red-600 dark:group-hover:text-red-400',
-                path: `/${pathRole}/notifications`
+                path: '/notifications'
               },
             ].map((action, i) => (
               <button

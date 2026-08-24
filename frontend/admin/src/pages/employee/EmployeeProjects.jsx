@@ -30,11 +30,28 @@ const EmployeeProjects = () => {
                 axios.get('/api/tasks/my', { headers }),
                 axios.get('/api/projects/my', { headers })
             ]);
-            const fetchedTasks = tasksRes.data || [];
+            const fetchedTasks = Array.isArray(tasksRes.data)
+                ? tasksRes.data
+                : Array.isArray(tasksRes.data?.data)
+                    ? tasksRes.data.data
+                    : Array.isArray(tasksRes.data?.tasks)
+                        ? tasksRes.data.tasks
+                        : [];
+
+            const fetchedProjects = Array.isArray(projectsRes.data)
+                ? projectsRes.data
+                : Array.isArray(projectsRes.data?.data)
+                    ? projectsRes.data.data
+                    : Array.isArray(projectsRes.data?.projects)
+                        ? projectsRes.data.projects
+                        : [];
+
             setTasks(fetchedTasks);
-            setProjects(projectsRes.data || []);
+            setProjects(fetchedProjects);
         } catch (error) {
             console.error('Data Sync Failure:', error);
+            setTasks([]);
+            setProjects([]);
         } finally {
             if (!silent) setLoading(false);
         }
@@ -77,7 +94,9 @@ const EmployeeProjects = () => {
         </div>
     );
 
-    const hasAssignments = tasks.length > 0 || projects.length > 0;
+    const safeTasks = Array.isArray(tasks) ? tasks : [];
+    const safeProjects = Array.isArray(projects) ? projects : [];
+    const hasAssignments = safeTasks.length > 0 || safeProjects.length > 0;
 
     return (
         <>
@@ -97,11 +116,11 @@ const EmployeeProjects = () => {
                     <div className="flex items-center gap-4 bg-[#eceae3]/50 p-2 rounded-2xl border border-[#c5c0b1]">
                         <div className="px-6 py-3 bg-white rounded-xl shadow-sm">
                             <p className="text-[9px] font-black text-[#939084] uppercase tracking-widest mb-1">Total Work</p>
-                            <p className="text-xl font-black text-[#201515]">{tasks.length + projects.length}</p>
+                            <p className="text-xl font-black text-[#201515]">{safeTasks.length + safeProjects.length}</p>
                         </div>
                         <div className="px-6 py-3 bg-white rounded-xl shadow-sm">
                             <p className="text-[9px] font-black text-[#939084] uppercase tracking-widest mb-1">Active Now</p>
-                            <p className="text-xl font-black text-[#00a76b]">{tasks.filter(t => t.status !== 'completed').length + projects.filter(p => p.status !== 'completed').length}</p>
+                            <p className="text-xl font-black text-[#00a76b]">{safeTasks.filter(t => t.status !== 'completed').length + safeProjects.filter(p => p.status !== 'completed').length}</p>
                         </div>
                     </div>
                 </div>
@@ -117,14 +136,14 @@ const EmployeeProjects = () => {
                 ) : (
                     <div className="space-y-16">
                         {/* PROJECTS SECTION */}
-                        {projects.length > 0 && (
+                        {safeProjects.length > 0 && (
                             <div className="space-y-8">
                                 <div className="flex items-center gap-4">
                                     <h2 className="text-[14px] font-black uppercase tracking-[0.4em] text-[#201515]">My Projects</h2>
                                     <div className="h-[1px] bg-[#c5c0b1] flex-1"></div>
                                 </div>
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                                    {projects.map((project) => (
+                                    {safeProjects.map((project) => (
                                         <div key={project._id} className="bg-white border border-[#c5c0b1] rounded-[40px] p-8 hover:border-[#00a76b] transition-all group relative overflow-hidden shadow-sm flex flex-col min-h-[320px]">
                                             <div className="flex justify-between items-start mb-6">
                                                 <div className="p-3 rounded-2xl bg-[#eceae3] text-[#201515] group-hover:bg-[#00a76b] group-hover:text-white transition-all">
@@ -171,14 +190,14 @@ const EmployeeProjects = () => {
                         )}
 
                         {/* TASKS SECTION */}
-                        {tasks.length > 0 && (
+                        {safeTasks.length > 0 && (
                             <div className="space-y-8">
                                 <div className="flex items-center gap-4">
                                     <h2 className="text-[14px] font-black uppercase tracking-[0.4em] text-[#201515]">Specific Tasks</h2>
                                     <div className="h-[1px] bg-[#c5c0b1] flex-1"></div>
                                 </div>
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                                    {tasks.map((task) => (
+                                    {safeTasks.map((task) => (
                                         <div key={task._id} className="bg-white border border-[#c5c0b1] rounded-[40px] p-8 hover:border-[#00a76b] transition-all group relative overflow-hidden shadow-sm flex flex-col min-h-[400px]">
                                             <div className="flex justify-between items-start mb-6">
                                                 <div className="p-3 rounded-2xl bg-[#eceae3] text-[#201515] group-hover:bg-[#00a76b] group-hover:text-white transition-all">
