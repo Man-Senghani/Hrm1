@@ -160,13 +160,12 @@ const QuickActionsRow = ({ role = 'admin', title = 'Quick Actions' }) => {
 
   // Role based target URLs
   const getRoutes = () => {
-    const prefix = role ? `/${role}` : '/admin';
     return {
-      leave: `${prefix}/leave`,
-      tasks: role === 'employee' ? '/employee/task-management' : `${prefix}/tasks`,
-      timeTracker: `${prefix}/time-tracker`,
-      payroll: role === 'employee' ? '/employee/payslips' : `${prefix}/payroll`,
-      profile: `${prefix}/profile`
+      leave: '/leave',
+      tasks: role === 'employee' ? '/task-management' : '/tasks',
+      timeTracker: '/attendance',
+      payroll: role === 'employee' ? '/payslips' : '/payroll',
+      profile: '/profile'
     };
   };
 
@@ -193,7 +192,7 @@ const QuickActionsRow = ({ role = 'admin', title = 'Quick Actions' }) => {
     },
     {
       icon: <Clock size={16} strokeWidth={2.5} className="text-amber-600 dark:text-amber-400" />,
-      label: 'Time Tracker',
+      label: 'Attendance',
       color: '#f59e0b',
       glowColor: 'rgba(245, 158, 11, 0.45)',
       iconBg: 'bg-amber-50 dark:bg-amber-950/50 border border-amber-100 dark:border-amber-900/40',
@@ -209,7 +208,7 @@ const QuickActionsRow = ({ role = 'admin', title = 'Quick Actions' }) => {
     },
     {
       icon: <User size={16} strokeWidth={2.5} className="text-emerald-600 dark:text-emerald-400" />,
-      label: 'View Profile',
+      label: 'My Profile',
       color: '#10b981',
       glowColor: 'rgba(16, 185, 129, 0.45)',
       iconBg: 'bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-100 dark:border-emerald-900/40',

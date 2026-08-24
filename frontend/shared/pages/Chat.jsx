@@ -1044,10 +1044,7 @@ const Chat = () => {
                     <button 
                       onClick={() => { 
                         setShowMenu(false); 
-                        if (currentUserRole === 'admin') navigate('/admin/settings');
-                        else if (currentUserRole === 'hr') navigate('/hr/settings');
-                        else if (currentUserRole === 'manager') navigate('/manager/settings');
-                        else navigate('/employee/profile');
+                        navigate('/settings');
                       }}
                       className="w-full text-left px-4 py-2.5 text-sm text-[#1E2026] dark:text-white hover:bg-[#F5F7FA] dark:hover:bg-[#282520] font-medium transition-colors border-none bg-transparent cursor-pointer"
                     >
