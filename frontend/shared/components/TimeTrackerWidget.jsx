@@ -136,18 +136,18 @@ const TimeTrackerWidget = ({ className = '', isDark = false, showControls = fals
     } finally { setActionLoading(false); }
   };
 
-  const isRunning = session?.hasActiveSession && session?.isRunning;
+  const isRunning = !!(session?.hasActiveSession && session?.isRunning && session?.status === 'active');
 
   const statusText = !session?.hasActiveSession || session?.status === 'completed'
     ? 'NOT STARTED'
-    : session?.isRunning
-    ? (session?.status === 'active' ? 'WORKING' : 'ON BREAK')
+    : (session?.status === 'active' && session?.isRunning)
+    ? 'WORKING'
     : (session?.status === 'paused' || session?.status === 'idle' ? 'ON BREAK' : 'STOPPED');
 
   const statusDotClass = !session?.hasActiveSession || session?.status === 'completed'
     ? 'bg-slate-400 dark:bg-slate-500'
-    : isRunning
-    ? (session?.status === 'active' ? 'bg-[#10B981] animate-pulse' : 'bg-amber-500 animate-pulse')
+    : (session?.status === 'active' && session?.isRunning)
+    ? 'bg-[#10B981] animate-pulse'
     : 'bg-amber-500';
 
   return (

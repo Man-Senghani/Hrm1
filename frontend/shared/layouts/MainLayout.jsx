@@ -613,46 +613,32 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
         setIsTrackingActive(isRunning);
         setIsPausedByIdle(!isRunning);
         setTrackerRawStatus(res.data?.status || 'offline');
-
-        if (res.data?.lastActiveTime && res.data?.serverTime) {
-          const serverNow = Date.parse(res.data.serverTime);
-          const serverLast = Date.parse(res.data.lastActiveTime);
-          const localNow = Date.now();
-
-          if (!isNaN(serverNow) && !isNaN(serverLast)) {
-            const sinceLast = serverNow - serverLast;
-            const adjustedLastActivity = localNow - sinceLast;
-            if (adjustedLastActivity > lastActivity) {
-              setLastActivity(adjustedLastActivity);
-            }
-          }
-        }
       } catch (err) { console.error('Status fetch failed:', err); }
     };
     fetchStatus();
     const interval = setInterval(fetchStatus, 10000); // Poll status every 10s
     return () => clearInterval(interval);
-  }, [token, lastActivity]);
+  }, [token]);
 
-  // 🛡️ IDLE TIMER & AUTO-PAUSE LOGIC (60 Seconds Inactivity Threshold)
+  // 🛡️ IDLE TIMER & AUTO-PAUSE LOGIC (60 Seconds / 1 Minute Inactivity Threshold)
   useEffect(() => {
     if (!token || !isTrackingActive || trackerRawStatus !== 'active') return;
 
     const checkIdle = setInterval(async () => {
       const now = Date.now();
       const idleTime = now - lastActivity;
-      if (idleTime >= 60000 && trackerRawStatus === 'active') { // 60 seconds = 1 minute
+      if (idleTime >= 60000 && trackerRawStatus === 'active') { // 60 seconds = 1 minute inactivity
         try {
           await axios.post('/api/time/timer/update', { type: 'idle', idleSeconds: 60 }, { headers: { Authorization: `Bearer ${token}` } });
           setTrackerRawStatus('idle');
           setIsTrackingActive(false);
           setIsPausedByIdle(true);
-          toast('Timer paused due to inactivity (1 minute idle)', { icon: '⏸️' });
+          toast('Timer paused due to 1 minute of inactivity', { icon: '⏸️' });
         } catch (err) {
           console.error('Idle report error:', err);
         }
       }
-    }, 5000);
+    }, 3000);
 
     return () => clearInterval(checkIdle);
   }, [token, isTrackingActive, trackerRawStatus, lastActivity]);
@@ -680,39 +666,41 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
     } catch (err) { console.error('Resume failed:', err); }
   };
 
-  // 🔄 GLOBAL ACTIVITY TRACKER (AUTO-RESUME ON INPUT)
+  // 🔄 GLOBAL ACTIVITY TRACKER (Mouse, Keyboard, Click, Scroll, Touch)
   useEffect(() => {
+    let lastMouseTime = 0;
     const handleActivity = (e) => {
       const now = Date.now();
+      if (e?.type === 'mousemove') {
+        if (now - lastMouseTime < 2000) return;
+        lastMouseTime = now;
+      }
+
       setLastActivity(now);
 
       if (trackerRawStatus === 'idle' || isPausedByIdle) {
-        handleResume();
+        if (['click', 'mousedown', 'keydown', 'touchstart'].includes(e?.type)) {
+          handleResume();
+        }
       } else {
         reportActivity(e?.type || 'active');
       }
     };
 
     window.addEventListener('mousemove', handleActivity);
-    window.addEventListener('keydown', handleActivity);
+    window.addEventListener('mousedown', handleActivity);
     window.addEventListener('click', handleActivity);
+    window.addEventListener('keydown', handleActivity);
     window.addEventListener('scroll', handleActivity);
-    window.addEventListener('focus', handleActivity);
-
-    const handleVisibilityChange = () => {
-      if (!document.hidden) {
-        handleActivity();
-      }
-    };
-    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('touchstart', handleActivity);
 
     return () => {
       window.removeEventListener('mousemove', handleActivity);
-      window.removeEventListener('keydown', handleActivity);
+      window.removeEventListener('mousedown', handleActivity);
       window.removeEventListener('click', handleActivity);
+      window.removeEventListener('keydown', handleActivity);
       window.removeEventListener('scroll', handleActivity);
-      window.removeEventListener('focus', handleActivity);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('touchstart', handleActivity);
     };
   }, [isTrackingActive, trackerRawStatus, isPausedByIdle]);
 
