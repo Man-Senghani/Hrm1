@@ -11,3 +11,5 @@
   - Task Attachments: `hrm/tasks/{task_title}/`
   - *Standardization:* Sanitize folder names by replacing spaces with underscores (e.g. `(name).replace(/\s+/g, '_')`) and lowercasing role variables to keep URLs clean and normalized.
 
+## Production Build & Dist File Synchronization
+- **Automatic Dist Bundle Rebuild:** Whenever frontend source code files (`frontend/...`) are edited or modified, always run `npm run build` so that production `dist/` static bundles (`frontend/admin/dist`, `frontend/hr/dist`, `frontend/employee/dist`, `frontend/manager/dist`, `frontend/login/dist`) remain freshly updated and in sync with the source code.

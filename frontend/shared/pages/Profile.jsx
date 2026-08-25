@@ -67,12 +67,12 @@ const Profile = () => {
   const empId = safeUserData.employeeId || 'PENDING-SYNC';
   const personalEmail = safeUserData.personalEmail || 'Not Configured';
   const joinDateRaw = safeUserData.joinDate || safeUserData.createdAt;
-  const joinDate = joinDateRaw ? new Date(joinDateRaw).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Not Set';
+  const joinDate = joinDateRaw ? new Date(joinDateRaw).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }) : 'Not Set';
   const phone = safeUserData.phone || 'Data Missing';
   const empType = safeUserData.employmentType || 'Standard';
   const gender = safeUserData.gender || 'Not Specified';
   const address = safeUserData.address || 'Locator Data Missing';
-  const birthdate = safeUserData.dob ? new Date(safeUserData.dob).toLocaleDateString() : 'Not Configured';
+  const birthdate = safeUserData.dob ? new Date(safeUserData.dob).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }) : 'Not Configured';
   const adharCard = safeUserData.adharCard || null;
   const bankDetails = safeUserData.bankDetails || null;
   const panCard = safeUserData.panCard || null;

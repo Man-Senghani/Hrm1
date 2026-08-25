@@ -125,11 +125,9 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
   const handleNav = (targetPath, options) => {
     if (!targetPath) return;
     let cleanPath = targetPath;
-    if (activeRole !== 'admin') {
-      const prefix = `/${activeRole}`;
-      if (!cleanPath.startsWith(prefix)) {
-        cleanPath = cleanPath.startsWith('/') ? `${prefix}${cleanPath}` : `${prefix}/${cleanPath}`;
-      }
+    const prefix = `/${activeRole}`;
+    if (!cleanPath.startsWith(prefix)) {
+      cleanPath = cleanPath.startsWith('/') ? `${prefix}${cleanPath}` : `${prefix}/${cleanPath}`;
     }
     navigate(cleanPath, typeof options === 'object' && options !== null ? options : { state: options });
   };
@@ -416,7 +414,7 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
   }, [role, location.pathname]);
 
   const getMenuItemsByRole = (currentRole) => {
-    const prefix = currentRole === 'admin' ? '' : `/${currentRole}`;
+    const prefix = `/${currentRole}`;
     switch (currentRole) {
       case 'hr':
         return [
@@ -460,20 +458,20 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
       case 'admin':
       default:
         return [
-          { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
-          { name: 'Employees', path: '/employees', icon: Users },
-          { name: 'Daily Tasks Board', path: '/tasks', icon: CheckSquare },
-          { name: 'Events Management', path: '/events', icon: Calendar },
-          { name: 'Team Leave', path: '/leave', icon: ClipboardList },
-          { name: 'Attendance', path: '/attendance', icon: Calendar },
-          { name: 'Global Chat', path: '/chat', icon: MessageSquare },
-          { name: 'Payroll', path: '/payroll', icon: Wallet },
-          { name: 'Recruitment', path: '/recruitment', icon: UserPlus },
-          { name: 'Performance', path: '/performance', icon: TrendingUp },
-          { name: 'Reports', path: '/reports', icon: BarChart3 },
-          { name: 'Monitoring Logs', path: '/screenshots', icon: Camera },
-          { name: 'Notifications', path: '/notifications', icon: Bell },
-          { name: 'Settings', path: '/settings', icon: Settings },
+          { name: 'Dashboard', path: `${prefix}/dashboard`, icon: LayoutDashboard },
+          { name: 'Employees', path: `${prefix}/employees`, icon: Users },
+          { name: 'Daily Tasks Board', path: `${prefix}/tasks`, icon: CheckSquare },
+          { name: 'Events Management', path: `${prefix}/events`, icon: Calendar },
+          { name: 'Team Leave', path: `${prefix}/leave`, icon: ClipboardList },
+          { name: 'Attendance', path: `${prefix}/attendance`, icon: Calendar },
+          { name: 'Global Chat', path: `${prefix}/chat`, icon: MessageSquare },
+          { name: 'Payroll', path: `${prefix}/payroll`, icon: Wallet },
+          { name: 'Recruitment', path: `${prefix}/recruitment`, icon: UserPlus },
+          { name: 'Performance', path: `${prefix}/performance`, icon: TrendingUp },
+          { name: 'Reports', path: `${prefix}/reports`, icon: BarChart3 },
+          { name: 'Monitoring Logs', path: `${prefix}/screenshots`, icon: Camera },
+          { name: 'Notifications', path: `${prefix}/notifications`, icon: Bell },
+          { name: 'Settings', path: `${prefix}/settings`, icon: Settings },
         ];
     }
   };
@@ -700,24 +698,22 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
         className="fixed top-0 left-0 w-full z-[200] border-b bg-white dark:bg-[#08100e] flex items-center transition-colors duration-300 ease-in-out"
         style={{ height: '70px', borderColor: isDarkMode ? '#1a2d29' : '#e2eae7' }}
       >
-        {/* Brand Block / Logo (Fixed width matching expanded sidebar) */}
+        {/* Brand Block / Logo (Always visible in top bar) */}
         <Link
-          to={activeRole === 'admin' ? '/dashboard' : `/${activeRole}/dashboard`}
+          to={activeRole === 'admin' ? '/admin/dashboard' : `/${activeRole}/dashboard`}
           className="px-4 flex items-center no-underline hover:opacity-90 transition-all duration-300 gap-3 shrink-0 h-full overflow-hidden"
-          style={{ width: showExpandedSidebar ? '250px' : '72px' }}
+          style={{ width: showExpandedSidebar ? '250px' : '200px' }}
         >
-          <div className="w-10 h-10 bg-[#00a76b] rounded-full flex items-center justify-center flex-shrink-0 shadow-sm transition-all duration-300 hover:scale-105">
+          <div className="w-10 h-10 bg-[#00a76b] rounded-xl flex items-center justify-center flex-shrink-0 shadow-sm transition-all duration-300 hover:scale-105">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M12 3c0 4.5-4.5 9-9 9 4.5 0 9 4.5 9 9 0-4.5 4.5-9 9-9-4.5 0-9-4.5-9-9z" />
               <path d="M18 5h4M20 3v4" strokeWidth="2" />
             </svg>
           </div>
-          {showExpandedSidebar && (
-            <div className="flex flex-col items-start leading-tight animate-in fade-in duration-200">
-              <span className="text-[16px] font-bold text-[#1f2937] dark:text-white tracking-tight whitespace-nowrap">Fluid HR</span>
-              <span className="text-[11px] font-semibold text-[#829e92] dark:text-[#a3b3af] whitespace-nowrap">Workforce OS</span>
-            </div>
-          )}
+          <div className="flex flex-col items-start leading-tight animate-in fade-in duration-200">
+            <span className="text-[16px] font-bold text-[#1f2937] dark:text-white tracking-tight whitespace-nowrap">Fluid HR</span>
+            <span className="text-[11px] font-semibold text-[#829e92] dark:text-[#a3b3af] whitespace-nowrap">Workforce OS</span>
+          </div>
         </Link>
 
         {/* Top Bar Controls */}
@@ -815,18 +811,14 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
               )}
             </div>
 
-            {/* ⏱️ GLOBAL INACTIVITY TRACKER STATUS */}
+            {/* ⏱️ GLOBAL INACTIVITY TRACKER STATUS (TEXT ONLY) */}
             {isTrackingActive ? (
               <span className="text-xs font-bold text-[#00a76b] dark:text-[#34d399] flex items-center gap-1.5 select-none">
                 <span className="w-2 h-2 rounded-full bg-[#00a76b] animate-pulse"></span>
                 <span>Active</span>
               </span>
             ) : (
-              <span
-                onClick={handleResume}
-                className="text-xs font-bold text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300 cursor-pointer flex items-center gap-1.5 select-none no-underline"
-                title="Click to resume timer"
-              >
+              <span className="text-xs font-bold text-amber-600 dark:text-amber-400 flex items-center gap-1.5 select-none">
                 <span className="w-2 h-2 rounded-full bg-amber-500"></span>
                 <span>Paused</span>
               </span>

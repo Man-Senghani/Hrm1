@@ -18,7 +18,7 @@ import {
 
 import QuickActionsRow from '../../components/QuickActionsRow';
 import ActionConfirmModal from '../../components/ActionConfirmModal';
-import { getImageUrl } from '@shared/services/api';
+import { getImageUrl, formatDate } from '@shared/services/api';
 
 const COLORS = ['#00a76b', '#3b82f6', '#f43f5e', '#f59e0b', '#8b5cf6', '#64748b'];
 
@@ -620,13 +620,26 @@ const AdminDashboard = () => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <Card className="p-6 flex flex-col justify-between hover:!border-[#00a76b] dark:hover:!border-[#34d399] transition-colors duration-300">
           <div>
-            <div className="flex justify-between items-center mb-6">
+            <div className="flex justify-between items-center mb-6 gap-2">
               <h3 className="font-bold text-gray-900 dark:text-white">Team Leave Overview</h3>
-              <CustomDropdown
-                value={leavePeriod}
-                onChange={setLeavePeriod}
-                options={['This Month', 'This Week', 'This Year', 'All Time', 'Today']}
-              />
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    navigate(`/${pathRole}/leave`);
+                  }}
+                  className="text-xs font-bold text-[#00a76b] hover:underline cursor-pointer whitespace-nowrap z-10"
+                >
+                  View All
+                </button>
+                <CustomDropdown
+                  value={leavePeriod}
+                  onChange={setLeavePeriod}
+                  options={['This Month', 'This Week', 'This Year', 'All Time', 'Today']}
+                />
+              </div>
             </div>
             {(() => {
               const app = currentLeaveOverview.approved || 0;
@@ -682,9 +695,6 @@ const AdminDashboard = () => {
               );
             })()}
           </div>
-          <button onClick={() => navigate(`/${pathRole}/leave`)} className="w-full mt-3 bg-gray-50 hover:bg-gray-100 text-gray-700 font-bold py-2 rounded-xl text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer">
-            View Team Leave <ChevronRight size={14} />
-          </button>
         </Card>
 
         <Card className="p-6 flex flex-col justify-between hover:!border-[#f59e0b] dark:hover:!border-[#fbbf24] transition-colors duration-300">
@@ -857,7 +867,7 @@ const AdminDashboard = () => {
           <div className="flex-1 overflow-y-auto">
             {pendingApprovals.length > 0 ? (
               <div className="space-y-3">
-                {pendingApprovals.map((approval) => (
+                {pendingApprovals.slice(0, 3).map((approval) => (
                   <div
                     key={approval._id}
                     onClick={() => setSelectedLeaveApproval(approval)}
@@ -876,7 +886,7 @@ const AdminDashboard = () => {
                         </div>
                         <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 mt-1 flex items-center gap-1.5">
                           <Calendar size={13} className="text-gray-400 dark:text-gray-400" />
-                          {approval.details}
+                          {formatDate(approval.details)}
                         </p>
                         {approval.reason && (
                           <p className="text-xs text-gray-400 dark:text-gray-400 italic mt-1 line-clamp-1 max-w-md">

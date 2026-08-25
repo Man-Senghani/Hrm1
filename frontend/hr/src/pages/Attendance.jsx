@@ -841,32 +841,35 @@ const Attendance = () => {
       // Step 2: Build clean daily activity rows
       cleanSessions.forEach((session, idx) => {
         const startOrResume = session.start || session.resume;
-        const pauseOrEnd = session.pause || session.end;
+        const isLastSession = idx === cleanSessions.length - 1;
+        const nextSession = cleanSessions[idx + 1];
+
+        let pauseOrEnd = session.pause || session.end;
+        if (!pauseOrEnd && nextSession) {
+          pauseOrEnd = nextSession.start || nextSession.resume;
+        }
 
         if (startOrResume) {
           const resumeStr = new Date(startOrResume).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
-          let pauseStr = 'Running...';
+          let pauseStr = '--:--';
           let totalStr = '0m';
 
           if (pauseOrEnd) {
             pauseStr = new Date(pauseOrEnd).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
             const diffSecs = Math.max(0, Math.floor((new Date(pauseOrEnd).getTime() - new Date(startOrResume).getTime()) / 1000));
             totalStr = formatMinutes(diffSecs);
-          } else {
-            const isLastSession = idx === cleanSessions.length - 1;
+          } else if (isLastSession) {
             const isToday = log.date === getLocalYYYYMMDD(new Date());
 
-            if (isLastSession && isToday && log.status === 'active') {
+            if (isToday && log.status === 'active') {
               pauseStr = 'Running...';
               const diffSecs = Math.max(0, Math.floor((Date.now() - new Date(startOrResume).getTime()) / 1000));
               totalStr = formatMinutes(diffSecs);
-            } else if (log.endTime) {
-              pauseStr = new Date(log.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
-              const diffSecs = Math.max(0, Math.floor((new Date(log.endTime).getTime() - new Date(startOrResume).getTime()) / 1000));
-              totalStr = formatMinutes(diffSecs);
             } else {
-              pauseStr = '--:--';
-              totalStr = '0m';
+              const effectiveEnd = log.idleStart || log.endTime || log.updatedAt || Date.now();
+              pauseStr = new Date(effectiveEnd).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+              const diffSecs = Math.max(0, Math.floor((new Date(effectiveEnd).getTime() - new Date(startOrResume).getTime()) / 1000));
+              totalStr = formatMinutes(diffSecs);
             }
           }
 
@@ -1990,7 +1993,11 @@ const Attendance = () => {
                       </div>
                     </td>
                     <td className="px-3 py-1.5">
-                      <span className="text-[11.5px] font-semibold text-slate-700 dark:text-slate-300">{record.date}</span>
+                      <span className="text-[11.5px] font-semibold text-slate-700 dark:text-slate-300">
+                        {record.date && record.date.includes('-') && record.date.split('-')[0].length === 4
+                          ? `${record.date.split('T')[0].split('-')[2]}/${record.date.split('T')[0].split('-')[1]}/${record.date.split('T')[0].split('-')[0]}`
+                          : record.date}
+                      </span>
                     </td>
                     <td className="px-3 py-1.5">
                       <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold rounded-full border ${sc.bg} ${sc.text} ${sc.border}`}>

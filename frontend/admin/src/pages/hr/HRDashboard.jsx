@@ -8,7 +8,7 @@ import {
   Download, Activity, ShieldAlert, Gift, Cake, ShieldCheck, Layers, Check, X,
   PartyPopper, Heart, Sparkles, Send
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Area, AreaChart, BarChart, Bar
@@ -18,7 +18,7 @@ import {
 
 import QuickActionsRow from '../../components/QuickActionsRow';
 import ActionConfirmModal from '../../components/ActionConfirmModal';
-import { getImageUrl } from '@shared/services/api';
+import { getImageUrl, formatDate } from '@shared/services/api';
 
 const COLORS = ['#00a76b', '#3b82f6', '#f43f5e', '#f59e0b', '#8b5cf6', '#64748b'];
 
@@ -91,6 +91,8 @@ const CustomDropdown = ({ value, onChange, options, className = '' }) => {
 
 const HRDashboard = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const pathRole = location.pathname.startsWith('/admin') ? 'admin' : 'hr';
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState(null);
   const [dashboardData, setDashboardData] = useState(null);
@@ -607,13 +609,26 @@ const HRDashboard = () => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <Card className="p-6 flex flex-col justify-between hover:!border-[#00a76b] dark:hover:!border-[#34d399] transition-colors duration-300">
           <div>
-            <div className="flex justify-between items-center mb-6">
+            <div className="flex justify-between items-center mb-6 gap-2">
               <h3 className="font-bold text-gray-900 dark:text-white">Team Leave Overview</h3>
-              <CustomDropdown
-                value={leavePeriod}
-                onChange={setLeavePeriod}
-                options={['This Month', 'This Week', 'This Year', 'All Time', 'Today']}
-              />
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    navigate(`/${pathRole}/leave`);
+                  }}
+                  className="text-xs font-bold text-[#00a76b] hover:underline cursor-pointer whitespace-nowrap z-10"
+                >
+                  View All
+                </button>
+                <CustomDropdown
+                  value={leavePeriod}
+                  onChange={setLeavePeriod}
+                  options={['This Month', 'This Week', 'This Year', 'All Time', 'Today']}
+                />
+              </div>
             </div>
             {(() => {
               const app = currentLeaveOverview.approved || 0;
@@ -840,7 +855,7 @@ const HRDashboard = () => {
           <div className="flex-1 overflow-y-auto">
             {pendingApprovals.filter(a => a.role?.toLowerCase() !== 'hr' && a.role?.toLowerCase() !== 'admin').length > 0 ? (
               <div className="space-y-3">
-                {pendingApprovals.filter(a => a.role?.toLowerCase() !== 'hr' && a.role?.toLowerCase() !== 'admin').map((approval) => (
+                {pendingApprovals.filter(a => a.role?.toLowerCase() !== 'hr' && a.role?.toLowerCase() !== 'admin').slice(0, 3).map((approval) => (
                   <div
                     key={approval._id}
                     onClick={() => setSelectedLeaveApproval(approval)}
@@ -859,7 +874,7 @@ const HRDashboard = () => {
                         </div>
                         <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 mt-1 flex items-center gap-1.5">
                           <Calendar size={13} className="text-gray-400 dark:text-gray-400" />
-                          {approval.details}
+                          {formatDate(approval.details)}
                         </p>
                         {approval.reason && (
                           <p className="text-xs text-gray-400 dark:text-gray-400 italic mt-1 line-clamp-1 max-w-md">

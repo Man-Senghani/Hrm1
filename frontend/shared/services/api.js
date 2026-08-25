@@ -44,4 +44,36 @@ export const getImageUrl = (path) => {
   return `${base}${cleanPath}`;
 };
 
+export const formatDate = (dateInput) => {
+  if (!dateInput || dateInput === 'N/A' || dateInput === '--') return 'N/A';
+  try {
+    if (typeof dateInput === 'string' && dateInput.includes(' - ')) {
+      return dateInput.split(' - ').map(d => formatDate(d.trim())).join(' - ');
+    }
+    if (typeof dateInput === 'string' && dateInput.match(/^\d{4}-\d{2}-\d{2}/)) {
+      const parts = dateInput.split('T')[0].split('-');
+      return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    }
+    if (typeof dateInput === 'string' && dateInput.match(/^\d{1,2}\/\d{1,2}\/\d{4}$/)) {
+      const parts = dateInput.split('/');
+      const p0 = parts[0].padStart(2, '0');
+      const p1 = parts[1].padStart(2, '0');
+      const p2 = parts[2];
+      if (parseInt(p0, 10) > 12) return `${p0}/${p1}/${p2}`;
+      if (parseInt(p1, 10) > 12) return `${p1}/${p0}/${p2}`;
+      return `${p1}/${p0}/${p2}`;
+    }
+    const d = new Date(dateInput);
+    if (isNaN(d.getTime())) return String(dateInput);
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    return `${day}/${month}/${year}`;
+  } catch (e) {
+    return String(dateInput);
+  }
+};
+
+export const formatDateDDMMYYYY = formatDate;
+
 export default api;

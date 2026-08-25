@@ -29,7 +29,7 @@ const HREmployees = () => {
   const userStr = sessionStorage.getItem('user') || localStorage.getItem('user');
   const userObj = userStr ? JSON.parse(userStr) : {};
   const currentRole = (userObj.role || (window.location.pathname.startsWith('/manager') ? 'manager' : window.location.pathname.startsWith('/hr') ? 'hr' : 'admin')).toLowerCase();
-  const targetPrefix = currentRole === 'admin' ? '' : `/${currentRole}`;
+  const targetPrefix = `/${currentRole}`;
 
   const [currentPage, setCurrentPage] = useState(1);
 
@@ -161,9 +161,16 @@ const HREmployees = () => {
   const formatDate = (dateStr) => {
     if (!dateStr) return 'N/A';
     try {
+      if (typeof dateStr === 'string' && dateStr.match(/^\d{4}-\d{2}-\d{2}/)) {
+        const parts = dateStr.split('T')[0].split('-');
+        return `${parts[2]}/${parts[1]}/${parts[0]}`;
+      }
       const date = new Date(dateStr);
       if (isNaN(date.getTime())) return dateStr;
-      return dateStr.substring(0, 10);
+      const day = String(date.getDate()).padStart(2, '0');
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const year = date.getFullYear();
+      return `${day}/${month}/${year}`;
     } catch (e) {
       return dateStr;
     }
