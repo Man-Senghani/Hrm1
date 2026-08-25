@@ -49,4 +49,8 @@ FluidHR-Tracker.zip
 # Hostinger Build Artifacts
 hostinger_public_html/
 *.zip
+*.pem
+*.pub
+deploy_key*
+
 

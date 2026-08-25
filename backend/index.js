@@ -303,7 +303,7 @@ app.use((req, res) => {
 });
 
 // 🔌 Database Connection & Server Start
-const MONGO_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/hrms';
+const MONGO_URI = process.env.MONGODB_URI || process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/hrms';
 const PORT = process.env.PORT || 5000;
 
 console.log('Connecting to MongoDB...');

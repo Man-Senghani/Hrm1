@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - develop
+      - main
     paths:
       - 'frontend/**'
       - '.github/workflows/deploy-frontend-ssh.yml'
@@ -23,14 +24,27 @@ jobs:
           node-version: 20
           cache: 'npm'
 
+      - name: 🌐 Determine Target Path and API URL
+        id: env_config
+        run: |
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            echo "Target: PRODUCTION (Live Root)"
+            echo "remote_path=${{ secrets.HOSTINGER_PROD_PATH || 'domains/aupanishad.tech/public_html' }}" >> $GITHUB_OUTPUT
+            echo "api_url=${{ secrets.PROD_API_URL || 'https://hrm1-1-zli1.onrender.com' }}" >> $GITHUB_OUTPUT
+          else
+            echo "Target: STAGING"
+            echo "remote_path=${{ secrets.HOSTINGER_REMOTE_PATH || 'domains/aupanishad.tech/public_html/hrm-staging' }}" >> $GITHUB_OUTPUT
+            echo "api_url=https://hrm1-wljp.onrender.com" >> $GITHUB_OUTPUT
+          fi
+
       - name: 📦 Install Root Dependencies
         run: npm ci || npm install
 
       - name: ⚙️ Build All 5 Frontend Portals
         env:
-          VITE_API_URL: https://hrm1-wljp.onrender.com
+          VITE_API_URL: ${{ steps.env_config.outputs.api_url }}
         run: |
-          echo "Building Login Portal..."
+          echo "Building Login Portal with API: $VITE_API_URL..."
           npm run build --prefix frontend/login
 
           echo "Building Admin Portal..."
@@ -90,13 +104,14 @@ jobs:
           EOF
 
       - name: 🚀 Deploy to Hostinger via SSH Rsync
-        uses: easingthemes/ssh-deploy@v5.1.0
-        with:
-          SSH_PRIVATE_KEY: ${{ secrets.HOSTINGER_SSH_KEY }}
-          REMOTE_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
-          REMOTE_USER: ${{ secrets.HOSTINGER_SSH_USER }}
-          REMOTE_PORT: ${{ secrets.HOSTINGER_SSH_PORT || 65002 }}
-          SOURCE: "build_output/"
-          TARGET: ${{ secrets.HOSTINGER_REMOTE_PATH || 'domains/aupanishad.tech/public_html' }}
-          ARGS: "-rlgoDzvc -i --delete"
-          EXCLUDE: "/.git/, /node_modules/"
+        env:
+          SSHPASS: ${{ secrets.HOSTINGER_SSH_PASSWORD }}
+          SSH_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+          SSH_USER: ${{ secrets.HOSTINGER_SSH_USER }}
+          SSH_PORT: ${{ secrets.HOSTINGER_SSH_PORT || '65002' }}
+          REMOTE_PATH: ${{ steps.env_config.outputs.remote_path }}
+        run: |
+          sudo apt-get update -y && sudo apt-get install -y sshpass rsync
+          export SSHPASS
+          echo "Syncing build files to Hostinger destination: $REMOTE_PATH"
+          sshpass -e rsync -avz --delete -e "ssh -o StrictHostKeyChecking=no -p $SSH_PORT" build_output/ $SSH_USER@$SSH_HOST:$REMOTE_PATH/
