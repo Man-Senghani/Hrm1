@@ -1,0 +1,102 @@
+name: Deploy Frontend to Hostinger (SSH)
+
+on:
+  push:
+    branches:
+      - develop
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/deploy-frontend-ssh.yml'
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+
+      - name: 🟢 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: 📦 Install Root Dependencies
+        run: npm ci || npm install
+
+      - name: ⚙️ Build All 5 Frontend Portals
+        env:
+          VITE_API_URL: https://hrm1-wljp.onrender.com
+        run: |
+          echo "Building Login Portal..."
+          npm run build --prefix frontend/login
+
+          echo "Building Admin Portal..."
+          npm run build --prefix frontend/admin
+
+          echo "Building HR Portal..."
+          npm run build --prefix frontend/hr
+
+          echo "Building Employee Portal..."
+          npm run build --prefix frontend/employee
+
+          echo "Building Manager Portal..."
+          npm run build --prefix frontend/manager
+
+      - name: 🗂️ Assemble Production Static Bundle
+        run: |
+          mkdir -p build_output/admin
+          mkdir -p build_output/hr
+          mkdir -p build_output/employee
+          mkdir -p build_output/manager
+
+          cp -r frontend/login/dist/* build_output/
+          cp -r frontend/admin/dist/* build_output/admin/
+          cp -r frontend/hr/dist/* build_output/hr/
+          cp -r frontend/employee/dist/* build_output/employee/
+          cp -r frontend/manager/dist/* build_output/manager/
+
+          cat << 'EOF' > build_output/.htaccess
+          <IfModule mod_rewrite.c>
+            RewriteEngine On
+            RewriteBase /
+
+            RewriteCond %{REQUEST_URI} ^/admin
+            RewriteCond %{REQUEST_FILENAME} !-f
+            RewriteCond %{REQUEST_FILENAME} !-d
+            RewriteRule ^admin/.*$ /admin/index.html [L]
+
+            RewriteCond %{REQUEST_URI} ^/hr
+            RewriteCond %{REQUEST_FILENAME} !-f
+            RewriteCond %{REQUEST_FILENAME} !-d
+            RewriteRule ^hr/.*$ /hr/index.html [L]
+
+            RewriteCond %{REQUEST_URI} ^/employee
+            RewriteCond %{REQUEST_FILENAME} !-f
+            RewriteCond %{REQUEST_FILENAME} !-d
+            RewriteRule ^employee/.*$ /employee/index.html [L]
+
+            RewriteCond %{REQUEST_URI} ^/manager
+            RewriteCond %{REQUEST_FILENAME} !-f
+            RewriteCond %{REQUEST_FILENAME} !-d
+            RewriteRule ^manager/.*$ /manager/index.html [L]
+
+            RewriteCond %{REQUEST_FILENAME} !-f
+            RewriteCond %{REQUEST_FILENAME} !-d
+            RewriteRule . /index.html [L]
+          </IfModule>
+          EOF
+
+      - name: 🚀 Deploy to Hostinger via SSH Rsync
+        uses: easingthemes/ssh-deploy@v5.1.0
+        with:
+          SSH_PRIVATE_KEY: ${{ secrets.HOSTINGER_SSH_KEY }}
+          REMOTE_HOST: ${{ secrets.HOSTINGER_SSH_HOST }}
+          REMOTE_USER: ${{ secrets.HOSTINGER_SSH_USER }}
+          REMOTE_PORT: ${{ secrets.HOSTINGER_SSH_PORT || 65002 }}
+          SOURCE: "build_output/"
+          TARGET: ${{ secrets.HOSTINGER_REMOTE_PATH || 'domains/aupanishad.tech/public_html' }}
+          ARGS: "-rlgoDzvc -i --delete"
+          EXCLUDE: "/.git/, /node_modules/"
