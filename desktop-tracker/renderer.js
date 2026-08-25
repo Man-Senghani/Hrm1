@@ -87,34 +87,73 @@ const statusEl = document.getElementById('status-display');
 const syncIndicator = document.getElementById('sync-indicator');
 
 // ============================================================
-// 🌐 SYSTEM-WIDE IDLE DETECTION
+// 🌐 SYSTEM-WIDE IDLE DETECTION & AUTO-RESUME
 // ============================================================
 // Receives idleSeconds from powerMonitor.getSystemIdleTime()
 // in the main process — covers ALL applications on the PC.
 // ============================================================
+let isAutoResuming = false;
+
+async function autoResumeFromIdle() {
+  if (isAutoResuming || status === 'ACTIVE' || status === 'PAUSED' || status === 'COMPLETED' || status === 'OFFLINE') return;
+  if (!authToken) return;
+  isAutoResuming = true;
+
+  console.log('⚡ [AUTO RESUME] User activity detected on PC — restoring ACTIVE state');
+
+  // 🚀 OPTIMISTIC UI: Instantly restore active state and freeze inactive time
+  status = 'ACTIVE';
+  isIdle = false;
+  isSessionRunning = true;
+  idleNotificationSent = false;
+  lastStartOrResumeTime = Date.now();
+  lastAppliedActive = activeSeconds;
+  lastAppliedInactive = inactiveSeconds;
+  lastAppliedTime = Date.now();
+
+  stopIdleReminderLoop();
+  updateDisplay();
+  updateUI();
+
+  try {
+    const res = await fetch(`${API_BASE}/resume`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${authToken}` }
+    });
+    if (res.ok) {
+      const data = await res.json().catch(() => ({}));
+      if (data?.session) {
+        applyServerState(data.session);
+      }
+    }
+  } catch (err) {
+    console.error('[AUTO RESUME ERROR]', err);
+  } finally {
+    isAutoResuming = false;
+  }
+}
+
 if (window.electronAPI?.onSystemIdleStatus) {
   window.electronAPI.onSystemIdleStatus(({ idleSeconds, isIdle: systemIsIdle }) => {
     lastSystemIdleSeconds = idleSeconds;
 
-    if (status !== 'ACTIVE' || !isSessionRunning) return;
-
-    // 🛡️ Never trigger idle if session was started or resumed less than 60 seconds ago
-    const sessionElapsed = Math.floor((Date.now() - lastStartOrResumeTime) / 1000);
-    if (sessionElapsed < 60) {
-      return;
-    }
-
-    if (systemIsIdle && idleSeconds >= 60) {
-      // Only trigger once per idle event
-      if (status === 'ACTIVE' && !idleNotificationSent) {
-        const effectiveIdleSeconds = Math.min(idleSeconds, sessionElapsed);
-        triggerIdle(effectiveIdleSeconds);
-      }
-    } else if (idleSeconds < 5) {
-      // Activity detected anywhere on PC while ACTIVE resets notification flag
-      if (status === 'ACTIVE') {
+    // Case 1: Currently ACTIVE — check if user has gone idle (no activity for 60s)
+    if (status === 'ACTIVE' && isSessionRunning) {
+      const sessionElapsed = Math.floor((Date.now() - lastStartOrResumeTime) / 1000);
+      if (sessionElapsed >= 60 && systemIsIdle && idleSeconds >= 60) {
+        if (!idleNotificationSent) {
+          const effectiveIdleSeconds = Math.min(idleSeconds, sessionElapsed);
+          triggerIdle(effectiveIdleSeconds);
+        }
+      } else if (idleSeconds < 5) {
         idleNotificationSent = false;
         isIdle = false;
+      }
+    }
+    // Case 2: Currently IDLE — as soon as mouse/keyboard activity is detected anywhere on PC:
+    else if (status === 'IDLE' || isIdle) {
+      if (idleSeconds < 5) {
+        autoResumeFromIdle();
       }
     }
   });
@@ -256,12 +295,6 @@ function applyServerState(data) {
     }
     lastAppliedTime = Date.now();
   } else if (serverStatus === 'active' && data.isRunning) {
-    // 🛡️ CRITICAL GUARD: If local state is currently IDLE (awaiting user to click RESUME),
-    // do NOT let a delayed background status poll overwrite IDLE back to ACTIVE!
-    if ((status === 'IDLE' || isIdle) && Date.now() - lastStartOrResumeTime >= 5000) {
-      return;
-    }
-
     status = 'ACTIVE';
     isIdle = false;
     idleNotificationSent = false;
