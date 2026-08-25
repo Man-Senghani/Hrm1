@@ -525,6 +525,15 @@ exports.getDashboardStats = async (req, res) => {
         pendingApprovals: pendingLeaves.map(l => {
           const diffDays = Math.max(1, Math.round((new Date(l.endDate) - new Date(l.startDate)) / (1000 * 60 * 60 * 24)) + 1);
           const isCancelReq = l.status === 'cancellation_pending';
+          const formatDDMMYYYY = (dStr) => {
+            if (!dStr) return '';
+            const d = new Date(dStr);
+            if (isNaN(d.getTime())) return String(dStr);
+            const day = String(d.getDate()).padStart(2, '0');
+            const month = String(d.getMonth() + 1).padStart(2, '0');
+            const year = d.getFullYear();
+            return `${day}/${month}/${year}`;
+          };
           return {
             _id: l._id,
             type: isCancelReq ? 'Cancellation Requested' : 'Leave Request',
@@ -540,7 +549,7 @@ exports.getDashboardStats = async (req, res) => {
             reason: isCancelReq ? (l.cancellationReason || l.reason || 'Cancellation requested') : (l.reason || 'No reason provided'),
             status: l.status || 'pending',
             date: l.createdAt,
-            details: `${new Date(l.startDate).toLocaleDateString()} - ${new Date(l.endDate).toLocaleDateString()}`
+            details: `${formatDDMMYYYY(l.startDate)} - ${formatDDMMYYYY(l.endDate)}`
           };
         }),
         announcements,

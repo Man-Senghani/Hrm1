@@ -127,7 +127,7 @@ const PendingApprovalQueue = ({ onAction }) => {
   const formatDate = (dateString) => {
     if (!dateString) return '-';
     return new Date(dateString).toLocaleDateString('en-GB', {
-      day: '2-digit', month: 'short', year: 'numeric'
+      day: '2-digit', month: '2-digit', year: 'numeric'
     });
   };
 

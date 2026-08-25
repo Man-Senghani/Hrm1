@@ -192,8 +192,8 @@ const App = () => {
           <Route path="/select-role" element={<Navigate to="/login" replace />} />
           <Route path="/login/:role" element={<Navigate to="/login" replace />} />
 
-          {/* ADMIN MODULE (Root & Base routes) */}
-          <Route path="/" element={
+          {/* ADMIN MODULE */}
+          <Route path="/admin" element={
             <ProtectedRoute allowedRole="admin">
               <MainLayout />
             </ProtectedRoute>
@@ -233,8 +233,9 @@ const App = () => {
             <Route path="designations" element={<Designations />} />
           </Route>
 
-          {/* Fallbacks for nested prefixes */}
-          <Route path="/admin/*" element={<Navigate to="/" replace />} />
+          {/* Root Redirects */}
+          <Route path="/" element={<Navigate to="/admin/dashboard" replace />} />
+          <Route path="/dashboard" element={<Navigate to="/admin/dashboard" replace />} />
 
           {/* HR MODULE */}
           <Route path="/hr" element={

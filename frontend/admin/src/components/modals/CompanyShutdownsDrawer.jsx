@@ -32,7 +32,7 @@ const CompanyShutdownsDrawer = ({ isOpen, onClose }) => {
   if (!isOpen) return null;
 
   const formatDate = (d) =>
-    new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+    new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
   const filtered = shutdowns.filter(s =>
     !search ||
