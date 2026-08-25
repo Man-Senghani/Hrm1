@@ -845,7 +845,7 @@ exports.getMyLeaves = async (req, res) => {
 exports.getMyLeaveQuotas = async (req, res) => {
   try {
     const LeaveBalance = require('../models/LeaveBalance');
-    const balances = await LeaveBalance.find({ employeeId: req.user.id });
+    const LeavePolicy = require('../models/LeavePolicy');
 
     let quotas = {
       sick: 10,
@@ -857,13 +857,18 @@ exports.getMyLeaveQuotas = async (req, res) => {
       otherLeaves: 0
     };
 
-    balances.forEach(b => {
-      if (b.sickLeave) quotas.sick += b.sickLeave;
-      if (b.casualLeave) quotas.casual += b.casualLeave;
-      if (b.earnedLeave && b.earnedLeave !== 1.5) quotas.earned += (b.earnedLeave - 1.5);
-      if (b.compOff) quotas.compOff += b.compOff;
-      if (b.otherLeaves) quotas.otherLeaves += b.otherLeaves;
-    });
+    try {
+      const activePolicies = await LeavePolicy.find({ status: { $regex: /^active$/i } });
+      activePolicies.forEach(p => {
+        const type = (p.type || p.name || '').toLowerCase();
+        if (type.includes('sick')) quotas.sick = p.annualAllowance || quotas.sick;
+        else if (type.includes('casual')) quotas.casual = p.annualAllowance || quotas.casual;
+        else if (type.includes('earned') || type.includes('annual')) quotas.earned = p.annualAllowance || quotas.earned;
+        else if (type.includes('emergency')) quotas.emergency = p.annualAllowance || quotas.emergency;
+        else if (type.includes('comp')) quotas.compOff = p.annualAllowance || quotas.compOff;
+        else if (type.includes('optional')) quotas.optionalHoliday = p.annualAllowance || quotas.optionalHoliday;
+      });
+    } catch (err) {}
 
     Object.keys(quotas).forEach(k => {
       quotas[k] = Math.round(quotas[k]);

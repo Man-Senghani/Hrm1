@@ -367,7 +367,19 @@ const STATUS_COLORS = {
 const PIE_COLORS = ['#10b981', '#f59e0b', '#ef4444', '#3b82f6', '#8b5cf6'];
 
 // ────────────────────────────── HELPERS ──────────────────────────────
-const getWorkingHours = (clockIn, clockOut, totalHours, record) => {
+const getWorkingHours = (clockIn, clockOut, totalHours, record, activeLiveSecs) => {
+  // 0. Priority 0: Live active seconds for today's active ongoing session
+  if (activeLiveSecs && typeof activeLiveSecs === 'number' && activeLiveSecs > 0) {
+    const isTodayRec = record && record.date && (
+      (typeof record.date === 'string' && record.date.split('T')[0] === getLocalYYYYMMDD(new Date()))
+    );
+    if (isTodayRec && (!record.clockOut || record.clockOut === '--' || !record.checkOutTime)) {
+      const h = Math.floor(activeLiveSecs / 3600);
+      const m = Math.floor((activeLiveSecs % 3600) / 60);
+      return `${h}h ${m}m`;
+    }
+  }
+
   // 1. Priority 1: Actual tracked active seconds (timer logs excluding breaks)
   const activeSecs = record?.totalActiveTime ?? record?.activeTime ?? record?.trackedTime;
   if (activeSecs !== undefined && activeSecs !== null && typeof activeSecs === 'number' && activeSecs > 0) {
@@ -526,9 +538,46 @@ const Attendance = () => {
   }, []);
 
   const [todayLiveStatus, setTodayLiveStatus] = useState(null);
+  const [liveActiveSeconds, setLiveActiveSeconds] = useState(0);
+  const [liveSessionStatus, setLiveSessionStatus] = useState(null);
+  const timeFetchRef = useRef(Date.now());
   const [teamLiveSessions, setTeamLiveSessions] = useState([]);
   const [isHolidaysDrawerOpen, setIsHolidaysDrawerOpen] = useState(false);
   const [holidays, setHolidays] = useState([]);
+
+  const fetchLiveTimeStatus = useCallback(async () => {
+    const token = sessionStorage.getItem('token');
+    if (!token) return;
+    try {
+      const res = await axios.get('/api/time/status', { headers: { Authorization: `Bearer ${token}` } });
+      const data = res.data;
+      setLiveSessionStatus(data);
+      setTodayLiveStatus(data);
+      timeFetchRef.current = Date.now();
+      setLiveActiveSeconds(data?.activeTime || 0);
+    } catch (err) { }
+  }, []);
+
+  useEffect(() => {
+    fetchLiveTimeStatus();
+    const statusInterval = setInterval(fetchLiveTimeStatus, 3000);
+    return () => clearInterval(statusInterval);
+  }, [fetchLiveTimeStatus]);
+
+  useEffect(() => {
+    let timerInterval = null;
+    if (liveSessionStatus && liveSessionStatus.hasActiveSession && liveSessionStatus.isRunning && liveSessionStatus.status === 'active') {
+      const baseActive = liveSessionStatus.activeTime || 0;
+      const baseTs = timeFetchRef.current || Date.now();
+      timerInterval = setInterval(() => {
+        const elapsed = Math.floor((Date.now() - baseTs) / 1000);
+        setLiveActiveSeconds(baseActive + Math.max(0, elapsed));
+      }, 1000);
+    }
+    return () => {
+      if (timerInterval) clearInterval(timerInterval);
+    };
+  }, [liveSessionStatus]);
 
   useEffect(() => {
     const fetchHolidays = async () => {
@@ -623,6 +672,11 @@ const Attendance = () => {
   }, [todayLiveStatus, todayRecord]);
 
   const todayTotalHoursDisplay = useMemo(() => {
+    if (liveActiveSeconds > 0) {
+      const h = Math.floor(liveActiveSeconds / 3600);
+      const m = Math.floor((liveActiveSeconds % 3600) / 60);
+      return `${h}h ${m}m`;
+    }
     if (todayLiveStatus?.activeTime && typeof todayLiveStatus.activeTime === 'number' && todayLiveStatus.activeTime > 0) {
       const secs = todayLiveStatus.activeTime;
       const h = Math.floor(secs / 3600);
@@ -630,10 +684,10 @@ const Attendance = () => {
       return `${h}h ${m}m`;
     }
     if (todayRecord) {
-      return getWorkingHours(todayRecord.clockIn, todayRecord.clockOut, todayRecord.totalHours, todayRecord);
+      return getWorkingHours(todayRecord.clockIn, todayRecord.clockOut, todayRecord.totalHours, todayRecord, liveActiveSeconds);
     }
     return '--';
-  }, [todayLiveStatus, todayRecord]);
+  }, [liveActiveSeconds, todayLiveStatus, todayRecord]);
 
   const activeStats = useMemo(() => {
     return viewContext === 'employee'
@@ -1121,7 +1175,7 @@ const Attendance = () => {
         if (!isNaN(d.getTime())) {
           return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
         }
-      } catch (e) {}
+      } catch (e) { }
       return String(rawDate);
     };
 
@@ -1961,7 +2015,7 @@ const Attendance = () => {
                         {(() => {
                           const cIn = record.clockIn || record.clock_in || (record.checkInTime ? new Date(record.checkInTime).toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false }) : null);
                           const cOut = record.clockOut || record.clock_out || (record.checkOutTime ? new Date(record.checkOutTime).toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false }) : null);
-                          return getWorkingHours(cIn, cOut, record.totalHours, record);
+                          return getWorkingHours(cIn, cOut, record.totalHours, record, liveActiveSeconds);
                         })()}
                       </span>
                     </td>

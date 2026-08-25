@@ -524,17 +524,10 @@ const EmployeeDashboard = () => {
   };
 
   const approvedLeavesArray = leaves.filter(l => l.status?.toLowerCase() === 'approved');
-  const usedEarned = approvedLeavesArray.filter(l => getCatKey(l.leaveType) === 'earned').reduce((acc, curr) => acc + getLeaveDays(curr), 0);
-  const usedSick = approvedLeavesArray.filter(l => getCatKey(l.leaveType) === 'sick').reduce((acc, curr) => acc + getLeaveDays(curr), 0);
-  const usedCasual = approvedLeavesArray.filter(l => getCatKey(l.leaveType) === 'casual').reduce((acc, curr) => acc + getLeaveDays(curr), 0);
-  const usedCompOff = approvedLeavesArray.filter(l => getCatKey(l.leaveType) === 'compoff').reduce((acc, curr) => acc + getLeaveDays(curr), 0);
-  const usedOptional = approvedLeavesArray.filter(l => getCatKey(l.leaveType) === 'optional').reduce((acc, curr) => acc + getLeaveDays(curr), 0);
-
-  const totalAllocated = Math.round((leaveQuotas.earned || 20) + (leaveQuotas.sick || 10) + (leaveQuotas.casual || 12) + (leaveQuotas.compOff || 3) + (leaveQuotas.optionalHoliday || 1));
-  const totalUsedLeaves = Math.round(usedEarned + usedSick + usedCasual + usedOptional + usedCompOff);
-  const totalLeaveBalance = Math.round(Math.max(0, totalAllocated - totalUsedLeaves));
-
   const approvedLeavesDays = Math.round(approvedLeavesArray.reduce((acc, curr) => acc + getLeaveDays(curr), 0));
+  const totalAllocated = Math.round((leaveQuotas.earned || 20) + (leaveQuotas.sick || 10) + (leaveQuotas.casual || 12) + (leaveQuotas.emergency || 5) + (leaveQuotas.compOff || 3) + (leaveQuotas.optionalHoliday || 1));
+  const totalUsedLeaves = approvedLeavesDays;
+  const totalLeaveBalance = Math.round(Math.max(0, totalAllocated - totalUsedLeaves));
   const pendingLeaves = leaves.filter(l => l.status?.toLowerCase() === 'pending' || l.status?.toLowerCase() === 'cancellation_pending').length;
   const leavesTakenThisMonth = leaves.filter(l => l.status === 'approved' && new Date(l.startDate).getMonth() === new Date().getMonth()).length;
 
@@ -876,7 +869,6 @@ const EmployeeDashboard = () => {
                           <Cell
                             key={`cell-${index}`}
                             fill={entry.color}
-                            opacity={hoveredTaskIndex === null || hoveredTaskIndex === index ? 1 : 0.35}
                             style={{ transition: 'all 0.2s ease', cursor: 'pointer' }}
                           />
                         ))}
@@ -1091,8 +1083,7 @@ const EmployeeDashboard = () => {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
           {/* Total Leaves */}
           <div
-            onClick={() => navigate('/employee/leave')}
-            className="group border border-gray-200/80 dark:border-gray-800/80 hover:!border-blue-500 dark:hover:!border-blue-400 transition-all duration-300 rounded-xl px-3.5 py-2.5 flex items-center justify-between bg-white dark:bg-[#151c28] cursor-pointer select-none"
+            className="group border border-gray-200/80 dark:border-gray-800/80 hover:!border-blue-500 dark:hover:!border-blue-400 transition-all duration-300 rounded-xl px-3.5 py-2.5 flex items-center justify-between bg-white dark:bg-[#151c28] select-none"
           >
             <div className="flex items-center gap-2.5 min-w-0">
               <div className="bg-blue-50 dark:bg-blue-950/60 p-1.5 rounded-lg text-blue-600 dark:text-blue-400 transition-colors duration-300 border border-blue-100 dark:border-blue-900/40 shrink-0">
@@ -1105,8 +1096,7 @@ const EmployeeDashboard = () => {
 
           {/* Used Leaves */}
           <div
-            onClick={() => navigate('/employee/leave')}
-            className="group border border-gray-200/80 dark:border-gray-800/80 hover:!border-amber-500 dark:hover:!border-amber-400 transition-all duration-300 rounded-xl px-3.5 py-2.5 flex items-center justify-between bg-white dark:bg-[#151c28] cursor-pointer select-none"
+            className="group border border-gray-200/80 dark:border-gray-800/80 hover:!border-amber-500 dark:hover:!border-amber-400 transition-all duration-300 rounded-xl px-3.5 py-2.5 flex items-center justify-between bg-white dark:bg-[#151c28] select-none"
           >
             <div className="flex items-center gap-2.5 min-w-0">
               <div className="bg-amber-50 dark:bg-amber-950/60 p-1.5 rounded-lg text-amber-600 dark:text-amber-400 transition-colors duration-300 border border-amber-100 dark:border-amber-900/40 shrink-0">
@@ -1119,8 +1109,7 @@ const EmployeeDashboard = () => {
 
           {/* Pending Leaves */}
           <div
-            onClick={() => navigate('/employee/leave')}
-            className="group border border-gray-200/80 dark:border-gray-800/80 hover:!border-purple-500 dark:hover:!border-purple-400 transition-all duration-300 rounded-xl px-3.5 py-2.5 flex items-center justify-between bg-white dark:bg-[#151c28] cursor-pointer select-none"
+            className="group border border-gray-200/80 dark:border-gray-800/80 hover:!border-purple-500 dark:hover:!border-purple-400 transition-all duration-300 rounded-xl px-3.5 py-2.5 flex items-center justify-between bg-white dark:bg-[#151c28] select-none"
           >
             <div className="flex items-center gap-2.5 min-w-0">
               <div className="bg-purple-50 dark:bg-purple-950/60 p-1.5 rounded-lg text-purple-600 dark:text-purple-400 transition-colors duration-300 border border-purple-100 dark:border-purple-900/40 shrink-0">
@@ -1133,8 +1122,7 @@ const EmployeeDashboard = () => {
 
           {/* Approved Leaves */}
           <div
-            onClick={() => navigate('/employee/leave')}
-            className="group border border-gray-200/80 dark:border-gray-800/80 hover:!border-emerald-500 dark:hover:!border-emerald-400 transition-all duration-300 rounded-xl px-3.5 py-2.5 flex items-center justify-between bg-white dark:bg-[#151c28] cursor-pointer select-none"
+            className="group border border-gray-200/80 dark:border-gray-800/80 hover:!border-emerald-500 dark:hover:!border-emerald-400 transition-all duration-300 rounded-xl px-3.5 py-2.5 flex items-center justify-between bg-white dark:bg-[#151c28] select-none"
           >
             <div className="flex items-center gap-2.5 min-w-0">
               <div className="bg-emerald-50 dark:bg-emerald-950/60 p-1.5 rounded-lg text-emerald-600 dark:text-emerald-400 transition-colors duration-300 border border-emerald-100 dark:border-emerald-900/40 shrink-0">
