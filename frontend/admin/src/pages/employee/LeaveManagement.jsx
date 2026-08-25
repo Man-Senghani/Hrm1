@@ -410,8 +410,10 @@ const LeaveManagement = ({ isChild = false }) => {
   const elAllowance = policies.find(p => getCatKey(p.type || p.name) === 'earned')?.annualAllowance ?? (QUOTAS.earned || 20);
   const cfEarned = policies.find(p => getCatKey(p.type || p.name) === 'earned')?.carryForwardLimit ?? 5;
 
+  const approvedLeavesArray = leaves.filter(l => l.status?.toLowerCase() === 'approved');
+  const approvedLeavesDays = Math.round(approvedLeavesArray.reduce((acc, curr) => acc + getLeaveDays(curr), 0));
   const totalAllocated = Math.round((QUOTAS.earned || 20) + (QUOTAS.sick || 10) + (QUOTAS.casual || 12) + (QUOTAS.emergency || 5) + (QUOTAS.compOff || 3) + (QUOTAS.optionalHoliday || 1));
-  const totalUsed = Math.round(usedEarned + usedSick + usedCasual + usedEmergency + usedCompOff + usedOptional);
+  const totalUsed = approvedLeavesDays;
   const totalBalance = Math.round(Math.max(0, totalAllocated - totalUsed));
   const activeLeaveTypesCount = 5;
   const pendingCount = leaves.filter(l => l.status?.toLowerCase() === 'pending' || l.status?.toLowerCase() === 'cancellation_pending').length;

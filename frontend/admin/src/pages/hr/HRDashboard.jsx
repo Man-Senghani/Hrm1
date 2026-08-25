@@ -486,7 +486,6 @@ const HRDashboard = () => {
                           <Cell
                             key={`cell-${index}`}
                             fill={COLORS[index % COLORS.length]}
-                            opacity={hoveredRoleIndex === null || hoveredRoleIndex === index ? 1 : 0.35}
                             style={{ transition: 'all 0.2s ease', cursor: 'pointer' }}
                           />
                         ))}
@@ -557,7 +556,6 @@ const HRDashboard = () => {
                           <Cell
                             key={`cell-${index}`}
                             fill={['#3b82f6', '#f43f5e', '#f59e0b'][index % 3]}
-                            opacity={hoveredGenderIndex === null || hoveredGenderIndex === index ? 1 : 0.35}
                             style={{ transition: 'all 0.2s ease', cursor: 'pointer' }}
                           />
                         ))}

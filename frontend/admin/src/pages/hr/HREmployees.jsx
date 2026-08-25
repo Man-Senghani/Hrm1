@@ -28,7 +28,7 @@ const HREmployees = () => {
   const navigate = useNavigate();
   const userStr = sessionStorage.getItem('user') || localStorage.getItem('user');
   const userObj = userStr ? JSON.parse(userStr) : {};
-  const currentRole = userObj.role || 'admin';
+  const currentRole = (userObj.role || (window.location.pathname.startsWith('/manager') ? 'manager' : window.location.pathname.startsWith('/hr') ? 'hr' : 'admin')).toLowerCase();
   const targetPrefix = currentRole === 'admin' ? '' : `/${currentRole}`;
 
   const [currentPage, setCurrentPage] = useState(1);
@@ -285,14 +285,18 @@ const HREmployees = () => {
                         <input type="checkbox" checked={tempFilterRole.includes('all')} onChange={() => handleRoleToggle('all')} className="accent-[#00a76b] cursor-pointer" />
                         All Roles
                       </label>
-                      <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-700 dark:text-gray-200">
-                        <input type="checkbox" checked={tempFilterRole.includes('admin')} onChange={() => handleRoleToggle('admin')} className="accent-[#00a76b] cursor-pointer" />
-                        Admins
-                      </label>
-                      <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-700 dark:text-gray-200">
-                        <input type="checkbox" checked={tempFilterRole.includes('hr')} onChange={() => handleRoleToggle('hr')} className="accent-[#00a76b] cursor-pointer" />
-                        HR Officers
-                      </label>
+                      {currentRole === 'admin' && (
+                        <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-700 dark:text-gray-200">
+                          <input type="checkbox" checked={tempFilterRole.includes('admin')} onChange={() => handleRoleToggle('admin')} className="accent-[#00a76b] cursor-pointer" />
+                          Admins
+                        </label>
+                      )}
+                      {(currentRole === 'admin' || currentRole === 'hr') && (
+                        <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-700 dark:text-gray-200">
+                          <input type="checkbox" checked={tempFilterRole.includes('hr')} onChange={() => handleRoleToggle('hr')} className="accent-[#00a76b] cursor-pointer" />
+                          HR Officers
+                        </label>
+                      )}
                       <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-700 dark:text-gray-200">
                         <input type="checkbox" checked={tempFilterRole.includes('manager')} onChange={() => handleRoleToggle('manager')} className="accent-[#00a76b] cursor-pointer" />
                         Managers
