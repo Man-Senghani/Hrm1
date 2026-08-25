@@ -213,7 +213,11 @@ function applyServerState(data) {
     return;
   }
 
-  if (!data?.hasActiveSession) {
+  if (!data?.hasActiveSession && serverStatus !== 'active' && serverStatus !== 'idle' && serverStatus !== 'paused') {
+    // Only transition to OFFLINE if we are not actively in a session locally
+    if (status === 'ACTIVE' && isSessionRunning) {
+      return; // 🛡️ Protect active session against transient network blips
+    }
     status = 'OFFLINE';
     activeSeconds = 0;
     inactiveSeconds = 0;

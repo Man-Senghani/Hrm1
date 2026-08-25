@@ -21,8 +21,13 @@ const IDLE_THRESHOLD_SECONDS = 60; // 1 minute (60 seconds)
 
 // ── HELPERS ───────────────────────────────────────────────
 const getToday = () => {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  });
+  return formatter.format(new Date());
 };
 
 const isDBConnected = () => mongoose.connection.readyState === 1;
@@ -361,28 +366,17 @@ exports.updateActivity = async (req, res) => {
       if (isIdleSignal) {
         // ── Idle transition ──
         if (!session.idleApplied) {
-          // ✅ Dynamic Rewind: Transfer the full inactivity detection period from active time to idle time
-          const rawRewind = Math.max(0, req.body.idleSeconds || IDLE_THRESHOLD_SECONDS);
-
-          // Add any elapsed active seconds since last heartbeat
-          session.activeTime += Math.max(0, sinceHeartbeat);
-
-          // Full rewind: move the entire idle period from activeTime to idleTime
-          const actualRewind = Math.min(session.activeTime, rawRewind);
-          session.activeTime = Math.max(0, session.activeTime - actualRewind);
-
-          session.inactivityCount += 1;
-          session.idleTime = (session.idleTime || 0) + actualRewind;
+          // Flush active duration up to idle transition into activeTime
+          session.activeTime += flushSegment(session, now);
+          session.segmentStart = null;
           session.idleStart = now; // 🕒 Ongoing idle time accumulates from now
+          session.inactivityCount += 1;
           session.idleApplied = true;
 
-          const idleTimeStart = new Date(now.getTime() - actualRewind * 1000);
           const lastIdx = session.sessions.length - 1;
           if (lastIdx >= 0 && !session.sessions[lastIdx].pause && !session.sessions[lastIdx].end) {
-            session.sessions[lastIdx].pause = idleTimeStart;
+            session.sessions[lastIdx].pause = now;
           }
-
-          console.log(`[IDLE DYNAMIC] User ${id} — status set to idle, activeTime rewound by ${actualRewind}s to ${session.activeTime}s, idleTime increased to ${session.idleTime}s`);
         }
 
         session.status = 'idle';
@@ -404,10 +398,8 @@ exports.updateActivity = async (req, res) => {
         return res.json(buildPayload(session));
 
       } else if (isActiveSignal) {
-        // ── Normal active heartbeat (No Auto-Pause) ──
-        session.activeTime += Math.max(0, sinceHeartbeat);
+        // ── Normal active heartbeat ──
         session.lastHeartbeat = now;
-        session.segmentStart = now;
       }
 
     } else if (session.status === 'idle') {
