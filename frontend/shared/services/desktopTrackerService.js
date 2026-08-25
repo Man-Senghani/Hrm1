@@ -67,7 +67,7 @@ export const startDesktopTracker = async (token) => {
     window.addEventListener('blur', onBlur);
 
     // Launch custom protocol with server origin
-    const serverHost = window.location.origin;
+    const serverHost = import.meta.env?.VITE_API_URL || 'https://hrm1-wljp.onrender.com';
     const protocolUrl = `fluidhr-tracker://start?token=${encodeURIComponent(token || '')}&server=${encodeURIComponent(serverHost)}`;
     
     // Create invisible iframe or navigation

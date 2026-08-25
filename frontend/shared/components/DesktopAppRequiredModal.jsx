@@ -47,7 +47,7 @@ const DesktopAppRequiredModal = ({
 
   const handleLaunchApp = () => {
     const userToken = token || (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('token') : '');
-    const serverHost = window.location.origin;
+    const serverHost = import.meta.env?.VITE_API_URL || 'https://hrm1-wljp.onrender.com';
     window.location.href = `fluidhr-tracker://start?token=${encodeURIComponent(userToken || '')}&server=${encodeURIComponent(serverHost)}`;
   };
 

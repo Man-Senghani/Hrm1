@@ -91,22 +91,24 @@ const syncIndicator = document.getElementById('sync-indicator');
 // ============================================================
 // Receives idleSeconds from powerMonitor.getSystemIdleTime()
 // in the main process — covers ALL applications on the PC.
-// This is the ONLY source for idle detection.
-// window.addEventListener is NOT used for this purpose.
 // ============================================================
 if (window.electronAPI?.onSystemIdleStatus) {
   window.electronAPI.onSystemIdleStatus(({ idleSeconds, isIdle: systemIsIdle }) => {
     lastSystemIdleSeconds = idleSeconds;
 
+    if (status !== 'ACTIVE' || !isSessionRunning) return;
+
     // 🛡️ Never trigger idle if session was started or resumed less than 60 seconds ago
-    if (Date.now() - lastStartOrResumeTime < 60000) {
+    const sessionElapsed = Math.floor((Date.now() - lastStartOrResumeTime) / 1000);
+    if (sessionElapsed < 60) {
       return;
     }
 
     if (systemIsIdle && idleSeconds >= 60) {
       // Only trigger once per idle event
       if (status === 'ACTIVE' && !idleNotificationSent) {
-        triggerIdle(idleSeconds);
+        const effectiveIdleSeconds = Math.min(idleSeconds, sessionElapsed);
+        triggerIdle(effectiveIdleSeconds);
       }
     } else if (idleSeconds < 5) {
       // Activity detected anywhere on PC while ACTIVE resets notification flag
@@ -145,30 +147,17 @@ async function loadSession() {
   }
 
   const savedServer = await window.electronAPI.getStoreValue('serverHost');
-  if (savedServer) {
+  if (savedServer && !savedServer.includes('localhost') && !savedServer.includes('127.0.0.1') && !savedServer.includes('aupanishad.tech')) {
     BACKEND_HOST = savedServer;
   } else {
     BACKEND_HOST = PRODUCTION_BACKEND_URL;
-  }
-
-  // 2. Discover backend host (prefer local only if actively running)
-  const candidateHosts = [
-    'http://localhost:5000',
-    'http://127.0.0.1:5000',
-    'http://localhost:4000',
-    'http://127.0.0.1:4000'
-  ];
-  for (const host of candidateHosts) {
-    try {
-      const res = await fetch(`${host}/api/health`, { signal: AbortSignal.timeout(200) }).catch(() => null);
-      if (res && res.ok) {
-        BACKEND_HOST = host;
-        console.log(`🔌 Local development backend detected! Connected to ${host}`);
-        break;
-      }
-    } catch (_) {}
+    FRONTEND_HOST = PRODUCTION_FRONTEND_URL;
+    if (window.electronAPI?.setStoreValue) {
+      await window.electronAPI.setStoreValue('serverHost', PRODUCTION_BACKEND_URL);
+    }
   }
   API_BASE = `${BACKEND_HOST}/api/time`;
+  console.log('🚀 Desktop Tracker Initialized with BACKEND_HOST:', BACKEND_HOST, 'API_BASE:', API_BASE);
 
   if (!authToken) {
     showAuthSection();
@@ -331,9 +320,7 @@ async function triggerIdle(idleSeconds = 60) {
   isIdle = true;
   isSessionRunning = false;
 
-  // 🛡️ Rewind the idle duration from activeSeconds so active time does not count idle period
-  activeSeconds = Math.max(0, activeSeconds - idleSeconds);
-  inactiveSeconds += idleSeconds;
+  // 🛡️ Preserve all genuine active work time — freeze activeSeconds and accumulate idle seconds
   lastAppliedActive = activeSeconds;
   lastAppliedInactive = inactiveSeconds;
   lastAppliedTime = Date.now();
@@ -794,7 +781,10 @@ function redirectToWebLogin() {
 if (window.electronAPI?.onDeepLinkServer) {
   window.electronAPI.onDeepLinkServer(async (serverUrl) => {
     if (serverUrl && typeof serverUrl === 'string') {
-      const cleanUrl = serverUrl.replace(/\/+$/, '');
+      let cleanUrl = serverUrl.replace(/\/+$/, '');
+      if (cleanUrl.includes('aupanishad.tech') || cleanUrl.includes(':3000')) {
+        cleanUrl = PRODUCTION_BACKEND_URL;
+      }
       console.log('Server URL received via deep link:', cleanUrl);
       BACKEND_HOST = cleanUrl;
       API_BASE = `${BACKEND_HOST}/api/time`;
@@ -812,6 +802,13 @@ if (window.electronAPI?.onDeepLinkToken) {
     console.log('Auth token received via deep link.');
     authToken = token;
     await window.electronAPI.setStoreValue('authToken', authToken);
+
+    if (BACKEND_HOST.includes('aupanishad.tech') || BACKEND_HOST.includes(':3000')) {
+      BACKEND_HOST = PRODUCTION_BACKEND_URL;
+      API_BASE = `${BACKEND_HOST}/api/time`;
+      await window.electronAPI.setStoreValue('serverHost', BACKEND_HOST);
+    }
+
     hideAuthSection();
     await fetchUserProfile();
     initSocket();
@@ -885,6 +882,9 @@ async function logout() {
 
   authToken = '';
   await window.electronAPI.setStoreValue('authToken', '');
+  await window.electronAPI.setStoreValue('serverHost', PRODUCTION_BACKEND_URL);
+  BACKEND_HOST = PRODUCTION_BACKEND_URL;
+  API_BASE = `${BACKEND_HOST}/api/time`;
   stopPolling();
   stopHeartbeat();
   stopScreenshotLoop();
