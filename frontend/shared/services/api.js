@@ -1,7 +1,20 @@
-import axios from 'axios';
-
 // 🛰️ DYNAMIC ENDPOINT CONFIGURATION
-export const API_BASE_URL = import.meta.env.VITE_API_URL || (typeof window !== 'undefined' ? window.location.origin : '');
+const getDynamicApiUrl = () => {
+  if (import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL;
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname;
+    if (host.includes('hrm-staging.aupanishad.tech')) {
+      return 'https://hrm1-wljp.onrender.com';
+    }
+    if (host.includes('aupanishad.tech')) {
+      return 'https://hrm1-1-zli1.onrender.com';
+    }
+    return window.location.origin;
+  }
+  return '';
+};
+
+export const API_BASE_URL = getDynamicApiUrl();
 
 const api = axios.create({
   baseURL: `${API_BASE_URL}/api`,

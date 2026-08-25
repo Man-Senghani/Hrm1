@@ -19,6 +19,7 @@ import {
   Camera,
   FileText,
   MessageSquare,
+  Bell,
   Settings as SettingsIcon
 } from 'lucide-react';
 
@@ -94,6 +95,7 @@ function App() {
     { label: 'Activity Logs', icon: Camera, path: '/screenshots' },
     { label: 'Documents', icon: FileText, path: '/documents' },
     { label: 'Team Chat', icon: MessageSquare, path: '/chat' },
+    { label: 'Notifications', icon: Bell, path: '/notifications' },
   ];
 
   return (

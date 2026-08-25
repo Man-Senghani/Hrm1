@@ -1,0 +1,1 @@
+import{n as e,t}from"./jsx-runtime-DIAExeAg.js";import n from"./HREmployees-B-SKWHlx.js";e();var r=t(),i=()=>(0,r.jsx)(n,{});export{i as default};

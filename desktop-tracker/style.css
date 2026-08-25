@@ -334,7 +334,18 @@ body {
 .ctrl-btn.primary { background: var(--accent-orange); color: white; }
 .ctrl-btn.secondary { background: var(--bg-card); color: var(--text-white); border: 1px solid rgba(0, 0, 0, 0.08); box-shadow: 0 2px 6px rgba(0, 0, 0, 0.02); }
 .ctrl-btn.accent { background: var(--accent-gold); color: black; }
-.ctrl-btn.danger { background: rgba(239, 68, 68, 0.08); color: var(--danger); border: 1px solid var(--danger); margin-top: 12px; }
+.ctrl-btn.danger {
+    background: linear-gradient(135deg, #EF4444 0%, #DC2626 100%);
+    color: #ffffff;
+    border: none;
+    box-shadow: 0 4px 14px rgba(239, 68, 68, 0.35);
+    margin-top: 12px;
+}
+.ctrl-btn.danger:hover {
+    background: linear-gradient(135deg, #DC2626 0%, #B91C1C 100%);
+    box-shadow: 0 6px 20px rgba(239, 68, 68, 0.5);
+    transform: translateY(-2px);
+}
 
 .ctrl-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 15px rgba(0, 0, 0, 0.06); }
 .ctrl-btn:active { transform: translateY(0); }

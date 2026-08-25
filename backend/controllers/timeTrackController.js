@@ -433,7 +433,19 @@ exports.getSessionStatus = async (req, res) => {
       employeeId: targetId, date: today
     }).sort({ createdAt: -1 });
 
+    const attendance = await Attendance.findOne({ user: targetId, date: today });
+    const isAttendanceCheckedOut = attendance && (attendance.checkOutTime || attendance.clockOut);
+
     if (!session) {
+      if (isAttendanceCheckedOut) {
+        return res.json({
+          hasActiveSession: false,
+          status: 'completed',
+          isRunning: false,
+          activeTime: Math.floor((attendance.totalHours || 0) * 3600),
+          idleTime: 0
+        });
+      }
       return res.json({
         hasActiveSession: false,
         status: 'OFFLINE',
@@ -443,12 +455,12 @@ exports.getSessionStatus = async (req, res) => {
       });
     }
 
-    if (session.status === 'completed') {
+    if (session.status === 'completed' || isAttendanceCheckedOut) {
       return res.json({
         hasActiveSession: false,
         status: 'completed',
         isRunning: false,
-        activeTime: Math.floor(session.activeTime || 0),
+        activeTime: Math.floor(session.activeTime || (attendance?.totalHours ? attendance.totalHours * 3600 : 0)),
         idleTime: Math.floor(session.idleTime || 0)
       });
     }

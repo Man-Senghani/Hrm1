@@ -4,9 +4,10 @@ import { BrowserRouter } from 'react-router-dom'
 import axios from 'axios'
 import './index.css'
 import App from './App.jsx'
+import { API_BASE_URL } from '@shared/services/api';
 
 // 🛰️ DYNAMIC AXIOS BASE URL CONFIGURATION
-axios.defaults.baseURL = import.meta.env.VITE_API_URL || '';
+axios.defaults.baseURL = API_BASE_URL;
 
 // Attach authorization token
 axios.interceptors.request.use((config) => {

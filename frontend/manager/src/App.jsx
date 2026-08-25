@@ -14,7 +14,8 @@ import {
   MessageSquare,
   Globe,
   Briefcase,
-  User
+  User,
+  Bell
 } from 'lucide-react';
 
 const ManagerDashboard = lazy(() => import('./pages/ManagerDashboard'));
@@ -27,6 +28,7 @@ const ManagerProjects = lazy(() => import('./pages/ManagerProjects'));
 const LeaveManagement = lazy(() => import('./pages/LeaveManagement'));
 const Holidays = lazy(() => import('./pages/Holidays'));
 const MyEvents = lazy(() => import('./pages/MyEvents'));
+const Notifications = lazy(() => import('./pages/Notifications'));
 const Profile = lazy(() => import('@shared/pages/Profile'));
 const Settings = lazy(() => import('@shared/pages/Settings'));
 const Chat = lazy(() => import('@shared/pages/Chat'));
@@ -70,6 +72,7 @@ function App() {
     { label: 'Team Chat', icon: MessageSquare, path: '/chat' },
     { label: 'Company Holidays', icon: Globe, path: '/holidays' },
     { label: 'Events', icon: Briefcase, path: '/events' },
+    { label: 'Notifications', icon: Bell, path: '/notifications' },
     { label: 'My Profile', icon: User, path: '/profile' },
   ];
 
@@ -96,6 +99,7 @@ function App() {
             <Route path="/leaves" element={<LeaveManagement />} />
             <Route path="/holidays" element={<Holidays />} />
             <Route path="/events" element={<MyEvents />} />
+            <Route path="/notifications" element={<Notifications />} />
             <Route path="/chat" element={<Chat />} />
             <Route path="/profile" element={<Profile />} />
             <Route path="/settings" element={<Settings />} />

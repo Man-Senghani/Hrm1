@@ -150,12 +150,7 @@ if (window.electronAPI?.onSystemIdleStatus) {
         isIdle = false;
       }
     }
-    // Case 2: Currently IDLE — as soon as mouse/keyboard activity is detected anywhere on PC:
-    else if (status === 'IDLE' || isIdle) {
-      if (idleSeconds < 5) {
-        autoResumeFromIdle();
-      }
-    }
+    // 🛑 NO AUTO-RESUME: When paused by idle, timer remains paused until user explicitly clicks RESUME button
   });
 }
 

@@ -4,10 +4,11 @@ import { BrowserRouter } from 'react-router-dom';
 import axios from 'axios';
 import App from './App';
 import ErrorBoundary from '@shared/components/ErrorBoundary';
+import { API_BASE_URL } from '@shared/services/api';
 import './index.css';
 
 // Automatically route API requests to same origin or VITE_API_URL
-axios.defaults.baseURL = import.meta.env.VITE_API_URL || '';
+axios.defaults.baseURL = API_BASE_URL;
 
 // Attach auth token if available
 axios.interceptors.request.use((config) => {
