@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import axios from 'axios';
 import toast from 'react-hot-toast';
@@ -75,11 +75,11 @@ const CustomDropdown = ({ value, onChange, options, className = '' }) => {
                   onChange(opt);
                   setIsOpen(false);
                 }}
-                className={`w-full text-left px-3 py-2 text-xs font-medium transition-colors flex items-center justify-between cursor-pointer ${isSelected ? 'bg-[#00a76b]/10 text-[#00a76b] font-bold' : 'text-gray-700 hover:bg-gray-50'
+                className={`w-full text-left px-3 py-2 text-xs font-medium transition-colors flex items-center justify-between cursor-pointer ${isSelected ? 'bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 font-bold' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-[#28231e]'
                   }`}
               >
                 <span>{optLabel}</span>
-                {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-[#00a76b]"></span>}
+                {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-blue-600 dark:bg-blue-400"></span>}
               </button>
             );
           })}
@@ -471,9 +471,9 @@ const AdminDashboard = () => {
                     <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#9ca3af', fontWeight: 600, letterSpacing: '1px' }} dy={15} />
                     <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#9ca3af', fontWeight: 600 }} tickMargin={12} allowDecimals={false} />
                     <Tooltip contentStyle={{ borderRadius: '12px', border: '1px solid #38332c', backgroundColor: '#1e1a17', color: '#fff', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.5)' }} />
-                    {displayData.some(d => d.present > 0) && <Line type="monotone" dataKey="present" stroke="#00a76b" strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} />}
-                    {displayData.some(d => d.absent > 0) && <Line type="monotone" dataKey="absent" stroke="#f43f5e" strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} />}
-                    {displayData.some(d => d.late > 0) && <Line type="monotone" dataKey="late" stroke="#f59e0b" strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} />}
+                    {displayData.some(d => d.present > 0) && <Line type="monotone" dataKey="present" stroke="#00a76b" strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} isAnimationActive={false} />}
+                    {displayData.some(d => d.absent > 0) && <Line type="monotone" dataKey="absent" stroke="#f43f5e" strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} isAnimationActive={false} />}
+                    {displayData.some(d => d.late > 0) && <Line type="monotone" dataKey="late" stroke="#f59e0b" strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} isAnimationActive={false} />}
                   </LineChart>
                 </ResponsiveContainer>
               );
@@ -498,6 +498,7 @@ const AdminDashboard = () => {
                         outerRadius={105}
                         paddingAngle={2}
                         dataKey="value"
+                        isAnimationActive={false}
                         onMouseEnter={(_, index) => setHoveredDeptIndex(index)}
                         onMouseLeave={() => setHoveredDeptIndex(null)}
                       >
@@ -568,6 +569,7 @@ const AdminDashboard = () => {
                         outerRadius={105}
                         paddingAngle={2}
                         dataKey="value"
+                        isAnimationActive={false}
                         onMouseEnter={(_, index) => setHoveredGenderIndex(index)}
                         onMouseLeave={() => setHoveredGenderIndex(null)}
                       >
@@ -636,9 +638,11 @@ const AdminDashboard = () => {
                     e.stopPropagation();
                     navigate(`/${pathRole}/leave`);
                   }}
-                  className="text-xs font-bold text-[#00a76b] hover:underline cursor-pointer whitespace-nowrap z-10"
+                  className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-950/40 px-2 py-1 rounded-lg flex items-center gap-0.5 transition-all cursor-pointer whitespace-nowrap"
+                  title="View All Leaves"
                 >
-                  View All
+                  <span>View All</span>
+                  <ChevronRight size={13} strokeWidth={2.5} />
                 </button>
                 <CustomDropdown
                   value={leavePeriod}
@@ -808,7 +812,7 @@ const AdminDashboard = () => {
                 hoverBorder: 'hover:border-indigo-400 dark:hover:border-indigo-500',
                 hoverBg: 'hover:bg-indigo-50/40 dark:hover:bg-indigo-950/20',
                 hoverText: 'group-hover:text-indigo-600 dark:group-hover:text-indigo-400',
-                path: '/departments'
+                path: '#'
               },
               {
                 label: 'Create Job',
@@ -818,7 +822,7 @@ const AdminDashboard = () => {
                 hoverBorder: 'hover:border-purple-400 dark:hover:border-purple-500',
                 hoverBg: 'hover:bg-purple-50/40 dark:hover:bg-purple-950/20',
                 hoverText: 'group-hover:text-purple-600 dark:group-hover:text-purple-400',
-                path: '/recruitment'
+                path: '#'
               },
               {
                 label: 'Approve Leave',
@@ -838,7 +842,7 @@ const AdminDashboard = () => {
                 hoverBorder: 'hover:border-orange-400 dark:hover:border-orange-500',
                 hoverBg: 'hover:bg-orange-50/40 dark:hover:bg-orange-950/20',
                 hoverText: 'group-hover:text-orange-600 dark:group-hover:text-orange-400',
-                path: '/payroll'
+                path: '#'
               },
               {
                 label: 'Announcement',
@@ -853,7 +857,14 @@ const AdminDashboard = () => {
             ].map((action, i) => (
               <button
                 key={i}
-                onClick={() => navigate(action.path)}
+                onClick={(e) => {
+                  if (action.path === '#') {
+                    e?.preventDefault();
+                    window.location.hash = '#';
+                  } else {
+                    navigate(action.path);
+                  }
+                }}
                 className={`flex flex-col items-center justify-center py-4 px-3 border border-gray-100 dark:border-[#2b2722] bg-white dark:bg-[#1a1714] rounded-2xl ${action.hoverBorder} ${action.hoverBg} transition-all group cursor-pointer shadow-2xs hover:shadow-md`}
               >
                 <div className={`p-2.5 rounded-2xl mb-2 ${action.bg} ${action.color} group-hover:scale-110 transition-transform`}>
@@ -1092,7 +1103,8 @@ const AdminDashboard = () => {
         </Card>
       </div>
 
-      {/* 7. Bottom Row (Analytics) */}
+      {/* 7. Bottom Row (Analytics) - Hidden per user request */}
+      {/*
       <Card className="p-6 hover:!border-purple-500 dark:hover:!border-purple-400 transition-colors duration-300">
         <div className="flex justify-between items-center mb-6">
           <h3 className="font-bold text-gray-900 dark:text-white">HR Analytics</h3>
@@ -1132,15 +1144,16 @@ const AdminDashboard = () => {
           ))}
         </div>
       </Card>
+      */}
 
       {/* Leave Details Modal */}
       {selectedLeaveApproval && createPortal(
         <div
-          className="fixed inset-0 z-[99999] flex items-center justify-center p-4 sm:p-6 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
+          className="fixed inset-0 z-[99999] bg-black/50 backdrop-blur-xs flex justify-end animate-in fade-in duration-200"
           onClick={() => setSelectedLeaveApproval(null)}
         >
           <div
-            className="bg-white rounded-3xl max-w-lg w-full shadow-2xl border border-gray-100 relative my-auto flex flex-col max-h-[90vh] overflow-hidden transform animate-in zoom-in-95 duration-200"
+            className="bg-white dark:bg-[#161311] w-full max-w-md h-full shadow-2xl border-l border-gray-100 dark:border-[#28251e] flex flex-col overflow-hidden transform animate-in slide-in-from-right duration-300"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header (Fixed at top) */}

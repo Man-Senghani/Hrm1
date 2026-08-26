@@ -22,8 +22,10 @@ const EmployeeDetail = () => {
         console.error(err);
         if (err.response && err.response.status === 403) {
           setErrorMsg('Access Denied: You do not have permission to view this profile.');
+        } else if (err.response && err.response.status === 404) {
+          setErrorMsg('Employee Profile Not Found');
         } else {
-          setErrorMsg('Node Not Found');
+          setErrorMsg(err.response?.data?.message || 'Error loading profile');
         }
       } finally {
         setLoading(false);
@@ -32,8 +34,8 @@ const EmployeeDetail = () => {
     fetchEmployee();
   }, [id]);
 
-  if (loading) return <div className="p-10 animate-pulse font-black text-xs uppercase tracking-widest">Scanning Registry...</div>;
-  if (errorMsg) return <div className="p-10 font-black text-xs uppercase tracking-widest text-[#F6465D]">{errorMsg}</div>;
+  if (loading) return <div className="p-10 animate-pulse font-black text-xs uppercase tracking-widest text-slate-500">Scanning Registry...</div>;
+  if (errorMsg) return <div className="p-10 font-bold text-sm text-[#F6465D] bg-red-50 dark:bg-red-950/40 rounded-xl m-6 border border-red-200 dark:border-red-800">{errorMsg}</div>;
   if (!employee) return <div className="p-10 font-black text-xs uppercase tracking-widest text-[#F6465D]">Node Not Found</div>;
 
   return (

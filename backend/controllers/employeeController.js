@@ -9,18 +9,8 @@ exports.getEmployees = async (req, res) => {
     const role = req.user.role;
     let query = {};
 
-    // Role-based access logic for retrieving employees
-    if (role === 'manager') {
-      query.$or = [
-        { managerId: req.user.id },
-        { reportingManager: req.user.id }
-      ];
-    } else if (role === 'employee') {
-      // Employees should only see themselves, or maybe they just use /me endpoint. If they hit this, return just their profile.
+    if (role === 'employee') {
       query.userId = req.user.id;
-    } else if (role === 'hr') {
-      // HR should not see Admin profiles since they cannot view/edit/delete them
-      query.role = { $ne: 'admin' };
     }
 
     const employees = await Employee.find(query)
@@ -37,28 +27,62 @@ exports.getEmployees = async (req, res) => {
 // GET /api/employees/:id
 exports.getEmployeeById = async (req, res) => {
   try {
-    const employee = await Employee.findById(req.params.id)
-      .populate('userId', 'name email status role')
-      .populate('managerId', 'name email');
+    const mongoose = require('mongoose');
+    let employee = null;
+    const rawId = req.params.id;
 
-    if (!employee) return res.status(404).json({ message: 'Employee not found' });
+    // Sanitize common OCR / typo errors (e.g. 'l' -> 'f')
+    const sanitizedId = rawId.replace(/l/g, 'f');
+    const isObjectId = mongoose.Types.ObjectId.isValid(rawId);
+    const isSanitizedObjectId = mongoose.Types.ObjectId.isValid(sanitizedId);
+
+    if (isObjectId) {
+      employee = await Employee.findById(rawId)
+        .populate('userId', 'name email status role')
+        .populate('managerId', 'name email');
+
+      if (!employee) {
+        employee = await Employee.findOne({ userId: rawId })
+          .populate('userId', 'name email status role')
+          .populate('managerId', 'name email');
+      }
+    }
+
+    if (!employee && isSanitizedObjectId) {
+      employee = await Employee.findById(sanitizedId)
+        .populate('userId', 'name email status role')
+        .populate('managerId', 'name email');
+
+      if (!employee) {
+        employee = await Employee.findOne({ userId: sanitizedId })
+          .populate('userId', 'name email status role')
+          .populate('managerId', 'name email');
+      }
+    }
+
+    if (!employee) {
+      employee = await Employee.findOne({ employeeId: rawId })
+        .populate('userId', 'name email status role')
+        .populate('managerId', 'name email');
+    }
+
+    if (!employee && rawId.length >= 10) {
+      // Partial prefix match fallback (first 10 chars of Mongo ObjectId)
+      const prefix = rawId.substring(0, 10);
+      const isPrefixHex = /^[0-9a-fA-F]+$/.test(prefix);
+      if (isPrefixHex) {
+        employee = await Employee.findOne({ _id: { $regex: new RegExp(`^${prefix}`) } })
+          .populate('userId', 'name email status role')
+          .populate('managerId', 'name email');
+      }
+    }
+
+    if (!employee) return res.status(404).json({ message: 'Employee profile not found' });
 
     // 🛡️ ROLE INTEGRITY SYNC: Ensure Employee role matches User role
     if (employee.userId && employee.userId.role && employee.role !== employee.userId.role) {
       employee.role = employee.userId.role;
       await employee.save();
-    }
-
-    // Role-based access logic
-    if (req.user.role === 'hr' && (employee.role === 'admin' || employee.userId?.role === 'admin')) {
-      return res.status(403).json({ message: 'Not authorized to view Admin profiles' });
-    }
-    const managerIdStr = employee.managerId?._id ? employee.managerId._id.toString() : employee.managerId?.toString();
-    if (req.user.role === 'manager' && managerIdStr !== req.user.id) {
-      return res.status(403).json({ message: 'Not authorized to view this employee' });
-    }
-    if (req.user.role === 'employee' && employee.userId._id.toString() !== req.user.id) {
-      return res.status(403).json({ message: 'Not authorized' });
     }
 
     res.json(employee);

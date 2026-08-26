@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useLocation, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import toast from 'react-hot-toast';
@@ -697,13 +698,53 @@ const Attendance = () => {
 
   const todayStr = getLocalYYYYMMDD(new Date());
 
+  // ── Combined Records (Attendance Documents + Active Live Sessions) ──
+  const allCombinedRecords = useMemo(() => {
+    const combined = [...records];
+
+    teamLiveSessions.forEach(s => {
+      if (!s.date) return;
+      const dStr = typeof s.date === 'string' ? s.date.split('T')[0] : getLocalYYYYMMDD(new Date(s.date));
+      if (dStr === todayStr) {
+        const empUser = s.employeeId || s.user;
+        const empId = empUser?._id || empUser?.id || (typeof empUser === 'string' ? empUser : null);
+
+        const exists = combined.some(r => {
+          const uId = r.user?._id || r.user?.id || (typeof r.user === 'string' ? r.user : r._id);
+          const rDateStr = typeof r.date === 'string' ? r.date.split('T')[0] : getLocalYYYYMMDD(new Date(r.date));
+          return empId && String(uId) === String(empId) && rDateStr === todayStr;
+        });
+
+        if (!exists) {
+          const cInTime = s.startTime ? new Date(s.startTime).toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false }) : '--:--';
+          const cOutTime = s.endTime ? new Date(s.endTime).toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false }) : '--:--';
+
+          combined.push({
+            _id: `live_${s._id || empId || Math.random()}`,
+            user: typeof empUser === 'object' && empUser !== null ? empUser : { _id: empId, name: s.employeeName || s.userName || 'Team Member' },
+            date: todayStr,
+            status: (s.status === 'paused' || s.status === 'break') ? 'On Break' : 'Present',
+            clockIn: cInTime,
+            clockOut: cOutTime,
+            checkInTime: s.startTime,
+            checkOutTime: s.endTime,
+            totalHours: s.activeTime ? (s.activeTime / 3600).toFixed(2) : 0,
+            isLiveSession: true
+          });
+        }
+      }
+    });
+
+    return combined;
+  }, [records, teamLiveSessions, todayStr]);
+
   const todayRecords = useMemo(() => {
-    return records.filter(r => {
+    return allCombinedRecords.filter(r => {
       if (!r.date) return false;
       const dStr = typeof r.date === 'string' ? r.date.split('T')[0] : getLocalYYYYMMDD(new Date(r.date));
       return dStr === todayStr;
     });
-  }, [records, todayStr]);
+  }, [allCombinedRecords, todayStr]);
 
   const todaySummaryFromBackend = useMemo(() => weeklyChartData.find(d => d.date === todayStr), [weeklyChartData, todayStr]);
 
@@ -733,42 +774,55 @@ const Attendance = () => {
   }, [todayRecords, todaySummaryFromBackend, viewContext, teamStats]);
 
   const teamPresentCount = useMemo(() => {
-    const uniquePresentUsers = new Set();
+    const isHr = userRole === 'hr' || userRole.includes('hr');
+    const isManager = userRole === 'manager' || userRole.includes('manager') || userRole === 'team_manager';
 
-    records.forEach(r => {
-      if (!r.date) return;
+    const todayFiltered = allCombinedRecords.filter(r => {
       const dStr = typeof r.date === 'string' ? r.date.split('T')[0] : getLocalYYYYMMDD(new Date(r.date));
-      if (dStr === todayStr) {
-        const st = (r.status || '').toLowerCase();
-        if (['present', 'late', 'half day', 'working'].includes(st) || (r.clockIn && r.clockIn !== '--') || r.checkInTime) {
-          const empId = r.user?._id || r.user?.id || (typeof r.user === 'string' ? r.user : r._id);
-          if (empId) uniquePresentUsers.add(String(empId));
-        }
+      if (dStr !== todayStr) return false;
+
+      const role = (r.user?.role || '').toLowerCase();
+      const name = (r.user?.name || '').toLowerCase();
+      if (isHr) {
+        if (role === 'admin' || role === 'superadmin' || name.includes('admin')) return false;
+      } else if (isManager) {
+        if (role === 'admin' || role === 'hr' || role === 'superadmin' || name.includes('admin') || name.includes('hr manager')) return false;
       }
+      return true;
     });
 
-    teamLiveSessions.forEach(s => {
-      if (!s.date) return;
-      const dStr = typeof s.date === 'string' ? s.date.split('T')[0] : getLocalYYYYMMDD(new Date(s.date));
-      if (dStr === todayStr) {
-        const isSessionActiveOrDone = !!(s.startTime || s.isRunning || (s.status && ['active', 'working', 'paused', 'break', 'completed'].includes(s.status.toLowerCase())) || (s.activeTime && s.activeTime > 0));
-        if (isSessionActiveOrDone) {
-          const empId = s.employeeId?._id || s.employeeId?.id || (typeof s.employeeId === 'string' ? s.employeeId : s._id);
-          if (empId) uniquePresentUsers.add(String(empId));
-        }
+    const uniquePresentUsers = new Set();
+    todayFiltered.forEach(r => {
+      const st = (r.status || '').toLowerCase();
+      if (['present', 'late', 'half day', 'working', 'on break'].includes(st) || (r.clockIn && r.clockIn !== '--') || r.checkInTime) {
+        const empId = r.user?._id || r.user?.id || (typeof r.user === 'string' ? r.user : r._id);
+        if (empId) uniquePresentUsers.add(String(empId));
       }
     });
 
     return uniquePresentUsers.size;
-  }, [records, teamLiveSessions, summaryStats, todayStr]);
+  }, [allCombinedRecords, userRole, todayStr]);
 
   const teamCurrentLiveCount = useMemo(() => {
+    const isHr = userRole === 'hr' || userRole.includes('hr');
+    const isManager = userRole === 'manager' || userRole.includes('manager') || userRole === 'team_manager';
+
     return teamLiveSessions.filter(s => {
       if (!s.date) return false;
       const dStr = typeof s.date === 'string' ? s.date.split('T')[0] : getLocalYYYYMMDD(new Date(s.date));
-      return dStr === todayStr && s.isRunning && s.status === 'active';
+      if (dStr !== todayStr || !s.isRunning || s.status !== 'active') return false;
+
+      const emp = s.employeeId || s.user;
+      const role = (emp?.role || '').toLowerCase();
+      const name = (emp?.name || s.employeeName || s.userName || '').toLowerCase();
+      if (isHr) {
+        if (role === 'admin' || role === 'superadmin' || name.includes('admin')) return false;
+      } else if (isManager) {
+        if (role === 'admin' || role === 'hr' || role === 'superadmin' || name.includes('admin') || name.includes('hr manager')) return false;
+      }
+      return true;
     }).length;
-  }, [teamLiveSessions, todayStr]);
+  }, [teamLiveSessions, todayStr, userRole]);
 
   const teamOnBreakCount = useMemo(() => {
     return teamLiveSessions.filter(s => {
@@ -1003,11 +1057,9 @@ const Attendance = () => {
 
   useEffect(() => { fetchAttendance(); }, [fetchAttendance]);
 
-
-
   // ── Filtered & Sorted ──
   const filteredRecords = useMemo(() => {
-    let filtered = [...records];
+    let filtered = [...allCombinedRecords];
 
     if (userRole === 'hr') {
       filtered = filtered.filter(r => {
@@ -1077,7 +1129,7 @@ const Attendance = () => {
       return sortDir === 'asc' ? cmp : -cmp;
     });
     return filtered;
-  }, [records, searchQuery, statusFilter, dateFilter, sortField, sortDir, viewMode]);
+  }, [allCombinedRecords, searchQuery, statusFilter, dateFilter, sortField, sortDir, viewMode]);
 
   const totalPages = Math.ceil(filteredRecords.length / pageSize);
   const paginatedRecords = filteredRecords.slice((currentPage - 1) * pageSize, currentPage * pageSize);
@@ -1217,18 +1269,27 @@ const Attendance = () => {
     URL.revokeObjectURL(url);
   };
 
+  const [overrideModalTarget, setOverrideModalTarget] = useState(null);
+  const [isSubmittingOverride, setIsSubmittingOverride] = useState(false);
+
   // Override / Reopen Accidental Checkout
-  const handleOverrideCheckout = async (record) => {
+  const handleOverrideCheckout = (record) => {
     const userId = record.user?._id || record.user?.id || record.user;
     if (!userId) {
       toast.error('Unable to identify employee for override.');
       return;
     }
+    setOverrideModalTarget(record);
+  };
+
+  const confirmOverrideSubmit = async () => {
+    if (!overrideModalTarget) return;
+    const record = overrideModalTarget;
+    const userId = record.user?._id || record.user?.id || record.user;
     const empName = record.user?.name || 'Employee';
-    const confirmOverride = window.confirm(`Reopen session for ${empName}? This will clear today's checkout and resume time tracking.`);
-    if (!confirmOverride) return;
 
     try {
+      setIsSubmittingOverride(true);
       const res = await axios.post(`/api/attendance/override-checkout/${userId}`, {}, {
         headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` }
       });
@@ -1236,6 +1297,9 @@ const Attendance = () => {
       fetchAttendance();
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to override checkout.');
+    } finally {
+      setIsSubmittingOverride(false);
+      setOverrideModalTarget(null);
     }
   };
 
@@ -1285,20 +1349,19 @@ const Attendance = () => {
         {/* Left: View Mode Navigation Tabs */}
         <div>
           {userRole !== 'employee' && (
-            <div className="inline-flex items-center bg-slate-100/90 dark:bg-[#112822] p-1.5 rounded-2xl border border-slate-200/70 dark:border-[#1a3830] shadow-xs gap-1 flex-wrap sm:flex-nowrap">
+            <div className="bg-white dark:bg-[#181612] p-1 rounded-xl border border-slate-200/80 dark:border-[#38352e] shadow-xs inline-flex items-center">
               <button
                 type="button"
                 onClick={() => {
                   setAppViewMode('attendance');
                   setViewContext('employee');
                 }}
-                className={`flex items-center gap-2 px-3.5 py-2 text-xs font-bold rounded-xl transition-all duration-200 cursor-pointer ${appViewMode === 'attendance' && viewContext === 'employee'
-                  ? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-md shadow-emerald-500/25 scale-[1.02]'
-                  : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+                className={`px-6 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${appViewMode === 'attendance' && viewContext === 'employee'
+                  ? 'bg-[#00a76b] text-white shadow-sm'
+                  : 'text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-white'
                   }`}
               >
-                <Calendar size={14} className={appViewMode === 'attendance' && viewContext === 'employee' ? 'text-white' : 'text-emerald-500'} />
-                <span>My Attendance</span>
+                My Attendance
               </button>
               <button
                 type="button"
@@ -1306,13 +1369,12 @@ const Attendance = () => {
                   setAppViewMode('attendance');
                   setViewContext('team');
                 }}
-                className={`flex items-center gap-2 px-3.5 py-2 text-xs font-bold rounded-xl transition-all duration-200 cursor-pointer ${appViewMode === 'attendance' && viewContext === 'team'
-                  ? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-md shadow-emerald-500/25 scale-[1.02]'
-                  : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+                className={`px-6 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${appViewMode === 'attendance' && viewContext === 'team'
+                  ? 'bg-[#00a76b] text-white shadow-sm'
+                  : 'text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-white'
                   }`}
               >
-                <Users size={14} className={appViewMode === 'attendance' && viewContext === 'team' ? 'text-white' : 'text-emerald-500'} />
-                <span>My Team Attendance</span>
+                My Team Attendance
               </button>
             </div>
           )}
@@ -2095,6 +2157,53 @@ const Attendance = () => {
         onClose={() => setIsHolidaysDrawerOpen(false)}
         holidays={holidays}
       />
+
+      {/* ⚡ Custom Modal for Override Checkout */}
+      {overrideModalTarget && createPortal(
+        <div
+          className="fixed inset-0 z-[999999] flex items-center justify-center bg-black/60 backdrop-blur-md p-4 animate-in fade-in duration-200"
+          onClick={(e) => { if (e.target === e.currentTarget) setOverrideModalTarget(null); }}
+        >
+          <div className="bg-white dark:bg-[#161311] border border-gray-150 dark:border-[#28251e] rounded-3xl max-w-sm w-full p-6 shadow-2xl text-center space-y-4 relative">
+            <div className="mx-auto w-14 h-14 rounded-full bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-900/50 flex items-center justify-center shadow-inner">
+              <AlertTriangle size={28} />
+            </div>
+
+            <div>
+              <h3 className="text-lg font-extrabold text-gray-900 dark:text-white">Reopen Attendance Session</h3>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Override Accidental Checkout</p>
+            </div>
+
+            <div className="bg-gray-50 dark:bg-[#1f1b17] p-4 rounded-2xl border border-gray-100 dark:border-[#28251e] space-y-2 text-center">
+              <p className="text-xs text-gray-700 dark:text-gray-200 font-medium leading-relaxed">
+                Reopen session for <strong className="text-gray-900 dark:text-white font-extrabold">{overrideModalTarget.user?.name || 'Employee'}</strong>?
+              </p>
+              <p className="text-[11px] text-amber-600 dark:text-amber-400 font-semibold leading-normal">
+                ⚠️ This will clear today's checkout record and resume live time tracking.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-center gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setOverrideModalTarget(null)}
+                className="flex-1 py-2.5 rounded-xl text-xs font-bold text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-[#25201b] hover:bg-gray-200 dark:hover:bg-[#302a24] transition-colors cursor-pointer border-none"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmOverrideSubmit}
+                disabled={isSubmittingOverride}
+                className="flex-1 py-2.5 rounded-xl text-xs font-extrabold text-white bg-amber-600 hover:bg-amber-700 shadow-md shadow-amber-600/20 transition-all cursor-pointer border-none flex items-center justify-center gap-1.5 disabled:opacity-50"
+              >
+                {isSubmittingOverride ? 'Reopening...' : 'Reopen Session'}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 };

@@ -1,37 +1,30 @@
-const mongoose = require('mongoose');
-const dotenv = require('dotenv');
-dotenv.config({ path: './.env' });
+const path = require('path');
+const mongoose = require(path.join(__dirname, '../backend/node_modules/mongoose'));
+require(path.join(__dirname, '../backend/node_modules/dotenv')).config({ path: path.join(__dirname, '../backend/.env') });
 
-const mongoUri = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/hrms';
-console.log('Connecting to', mongoUri);
+const User = require('../backend/models/User');
+const Employee = require('../backend/models/Employee');
 
-mongoose.connect(mongoUri).then(async () => {
-  const User = require('../backend/models/User');
-  const Employee = require('../backend/models/Employee');
-  
-  const employees = await Employee.find({})
-    .populate('userId', 'name email status role')
-    .populate('managerId', 'name email');
-    
-  console.log('Total employees in DB:', employees.length);
-  const rishi = await User.findOne({ name: 'Rishi Patel' });
-  if (rishi) {
-    console.log('Rishi Patel User ID:', rishi._id);
-    const managedByRishi = await Employee.find({
-      $or: [
-        { managerId: rishi._id },
-        { reportingManager: rishi._id }
-      ]
-    });
-    console.log('Employees managed by Rishi:', managedByRishi.length);
-    managedByRishi.forEach(emp => {
-      console.log(`- ${emp.fullName}, managerId: ${emp.managerId}, reportingManager: ${emp.reportingManager}`);
-    });
-  } else {
-    console.log('Rishi Patel not found');
-  }
+async function inspect() {
+  await mongoose.connect(process.env.MONGODB_URI);
+  console.log("Connected to Mongo");
+
+  const byIdUser = await User.findById('6a61ed265980804df7137feb').catch(() => null);
+  console.log("User by ID 6a61ed265980804df7137feb:", byIdUser);
+
+  const byUserIdEmp = await Employee.findOne({ userId: '6a61ed265980804df7137feb' });
+  console.log("Employee by userId 6a61ed265980804df7137feb:", byUserIdEmp);
+
+  const snehaEmps = await Employee.find({ fullName: /sneha/i });
+  console.log("Sneha Employees:", snehaEmps);
+
+  const snehaUsers = await User.find({ name: /sneha/i });
+  console.log("Sneha Users:", snehaUsers);
+
   process.exit(0);
-}).catch(err => {
+}
+
+inspect().catch(err => {
   console.error(err);
   process.exit(1);
 });

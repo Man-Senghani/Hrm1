@@ -137,8 +137,8 @@ const TeamLeaveCalendar = () => {
         <div className="grid grid-cols-7 gap-y-1 mb-2 flex-1">
           {days.map((d, i) => (
             <div key={i} className="flex flex-col items-center justify-center h-8">
-              <span className={`w-7 h-7 flex items-center justify-center rounded-full text-sm font-semibold
-                ${d.isCurrentMonth ? (d.isToday ? 'bg-indigo-600 text-white shadow-md' : 'text-gray-900 dark:text-white hover:bg-gray-100 cursor-pointer') : 'text-gray-300 dark:text-gray-600'}
+              <span className={`w-7 h-7 flex items-center justify-center rounded-full text-sm font-semibold transition-colors
+                ${d.isCurrentMonth ? (d.isToday ? 'bg-indigo-600 text-white shadow-md' : 'text-gray-900 dark:text-white hover:bg-gray-100 dark:hover:bg-gray-800 dark:hover:text-white cursor-pointer') : 'text-gray-300 dark:text-gray-600'}
               `}>
                 {d.day}
               </span>

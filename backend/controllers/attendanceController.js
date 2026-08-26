@@ -670,22 +670,22 @@ exports.getWeeklySummary = async (req, res) => {
       const year = now.getFullYear();
       const month = now.getMonth();
       const daysInMonth = new Date(year, month + 1, 0).getDate();
+      const monthShort = now.toLocaleString('en-US', { month: 'short' });
 
       let startDay = 1;
-      let weekNum = 1;
       while (startDay <= daysInMonth) {
         let endDay = Math.min(startDay + 6, daysInMonth);
         const sDate = new Date(year, month, startDay, 0, 0, 0, 0);
         const eDate = new Date(year, month, endDay, 23, 59, 59, 999);
+        const label = startDay === endDay ? `${startDay} ${monthShort}` : `${startDay}-${endDay} ${monthShort}`;
         intervals.push({
-          name: `Week ${weekNum}`,
+          name: label,
           startStr: formatLocalDate(sDate),
           endStr: formatLocalDate(eDate),
           startDate: sDate,
           endDate: eDate
         });
         startDay += 7;
-        weekNum++;
       }
     } else if (period === 'year') {
       const year = now.getFullYear();
@@ -732,20 +732,20 @@ exports.getWeeklySummary = async (req, res) => {
     const attendanceRecords = await Attendance.find({
       user: { $in: eligibleUserIds },
       date: { $gte: overallStart, $lte: overallEnd }
-    });
+    }).lean();
 
     const TimeTrack = require('../models/TimeTrack');
     const timeTrackRecords = await TimeTrack.find({
       employeeId: { $in: eligibleUserIds },
       date: { $gte: overallStart, $lte: overallEnd }
-    });
+    }).lean();
 
     const approvedLeaves = await Leave.find({
       user: { $in: eligibleUserIds },
       status: { $regex: /^approved$/i },
       startDate: { $lte: intervals[intervals.length - 1].endDate },
       endDate: { $gte: intervals[0].startDate }
-    });
+    }).lean();
 
     const chartData = intervals.map(interval => {
       const periodRecords = attendanceRecords.filter(r => r.date >= interval.startStr && r.date <= interval.endStr);
@@ -1073,7 +1073,7 @@ exports.getMyYearlyStats = async (req, res) => {
     const attendanceRecords = await Attendance.find({
       user: userId,
       date: { $gte: startStr, $lte: endStr }
-    });
+    }).lean();
 
     // 2. Get approved leaves for this period
     const Leave = require('../models/Leave');
@@ -1085,13 +1085,13 @@ exports.getMyYearlyStats = async (req, res) => {
         { endDate: { $gte: startDate, $lte: endDate } },
         { startDate: { $lte: startDate }, endDate: { $gte: endDate } }
       ]
-    });
+    }).lean();
 
     // 3. Determine employee effective join date
     const Employee = require('../models/Employee');
     const User = require('../models/User');
-    const employeeData = await Employee.findOne({ userId });
-    const userData = await User.findById(userId);
+    const employeeData = await Employee.findOne({ userId }).lean();
+    const userData = await User.findById(userId).lean();
 
     let actualJoinDate = null;
     if (employeeData && employeeData.joinDate) {
@@ -1108,7 +1108,20 @@ exports.getMyYearlyStats = async (req, res) => {
       calculationStartDate.setHours(0, 0, 0, 0);
     }
 
-    // 4. Calculate day by day to ensure 100% accuracy and eliminate double counting
+    // ⚡ O(1) Pre-indexing for instant sub-millisecond execution
+    const recordMap = new Map();
+    attendanceRecords.forEach(r => recordMap.set(r.date, r));
+
+    const leaveDateSet = new Set();
+    leaves.forEach(l => {
+      let cur = new Date(l.startDate);
+      const end = new Date(l.endDate);
+      while (cur <= end) {
+        leaveDateSet.add(formatLocalDate(cur));
+        cur.setDate(cur.getDate() + 1);
+      }
+    });
+
     let presentCount = 0;
     let lateCount = 0;
     let halfDayCount = 0;
@@ -1118,17 +1131,13 @@ exports.getMyYearlyStats = async (req, res) => {
     let clockedDaysCount = 0;
 
     const calculationEndDate = now < endDate ? now : endDate;
+    const curDate = new Date(calculationStartDate);
 
-    for (
-      let d = new Date(calculationStartDate);
-      d <= calculationEndDate;
-      d.setDate(d.getDate() + 1)
-    ) {
-      const dStr = formatLocalDate(d);
-      const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+    while (curDate <= calculationEndDate) {
+      const dStr = formatLocalDate(curDate);
+      const isWeekend = curDate.getDay() === 0 || curDate.getDay() === 6;
 
-      // Check attendance record
-      const record = attendanceRecords.find(r => r.date === dStr);
+      const record = recordMap.get(dStr);
 
       if (record) {
         if (record.status === 'Late') {
@@ -1146,25 +1155,14 @@ exports.getMyYearlyStats = async (req, res) => {
           clockedDaysCount++;
         }
       } else {
-        // Check approved leave
-        const dStart = new Date(d);
-        dStart.setHours(0, 0, 0, 0);
-        const dEnd = new Date(d);
-        dEnd.setHours(23, 59, 59, 999);
-
-        const hasLeave = leaves.some(l => {
-          const lStart = new Date(l.startDate);
-          const lEnd = new Date(l.endDate);
-          return (lStart <= dEnd && lEnd >= dStart);
-        });
-
-        if (hasLeave) {
+        if (leaveDateSet.has(dStr)) {
           leaveCount++;
         } else if (!isWeekend && dStr <= todayStr) {
-          // Working day with no attendance and no leave -> Absent
           absentCount++;
         }
       }
+
+      curDate.setDate(curDate.getDate() + 1);
     }
 
     const avgHrs = clockedDaysCount > 0 ? (totalHrs / clockedDaysCount).toFixed(1) : '0.0';

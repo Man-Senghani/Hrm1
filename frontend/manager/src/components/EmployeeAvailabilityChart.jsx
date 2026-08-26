@@ -46,6 +46,7 @@ const EmployeeAvailabilityChart = ({ trigger }) => {
   // Prepare data for recharts
   const chartData = legend.map(item => ({
     name: item.label,
+    key: item.key,
     value: activeData ? activeData[item.key] : 0,
     color: item.hex
   })).filter(item => item.value > 0);
@@ -72,11 +73,14 @@ const EmployeeAvailabilityChart = ({ trigger }) => {
                 paddingAngle={3}
                 dataKey="value"
                 stroke="none"
-                onMouseEnter={(_, index) => setHoveredItem(legend[index])}
+                onMouseEnter={(_, index) => {
+                  const item = legend.find(l => l.key === chartData[index]?.key);
+                  if (item) setHoveredItem(item);
+                }}
                 onMouseLeave={() => setHoveredItem(null)}
               >
                 {chartData.map((entry, index) => {
-                  const isHovered = hoveredItem?.key === legend[index]?.key;
+                  const isHovered = hoveredItem?.key === entry.key;
                   return (
                     <Cell
                       key={`cell-${index}`}
@@ -99,7 +103,7 @@ const EmployeeAvailabilityChart = ({ trigger }) => {
             {/* Center Text */}
             <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
               <span className="text-3xl font-black text-gray-900 dark:text-white">
-                {hoveredItem ? activeData[hoveredItem.key] : total}
+                {hoveredItem ? (activeData ? (activeData[hoveredItem.key] ?? 0) : 0) : total}
               </span>
               <span className="text-[10px] text-gray-500 font-bold text-center leading-tight mt-1 uppercase tracking-widest">
                 {hoveredItem ? hoveredItem.label : 'Total'}
@@ -120,12 +124,12 @@ const EmployeeAvailabilityChart = ({ trigger }) => {
                   className={`flex items-center justify-between gap-3 font-semibold cursor-pointer py-1.5 px-3 rounded-lg transition-all duration-150 ${hoveredItem?.key === item.key ? 'bg-gray-100 dark:bg-gray-800 scale-[1.02]' : 'hover:bg-gray-50 dark:hover:bg-gray-800/30'}`}
                 >
                   <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                    <div className={`w-3 h-3 rounded-full shrink-0 ${item.color}`}></div>
-                    <span className="text-gray-700 dark:text-gray-300 text-left text-base">{item.label}</span>
+                    <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${item.color}`}></div>
+                    <span className="text-gray-700 dark:text-gray-300 text-left text-xs font-semibold">{item.label}</span>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    <span className="text-gray-900 dark:text-white font-bold text-base">{val}</span>
-                    <span className="text-gray-400 text-sm w-12 text-right">({pct}%)</span>
+                    <span className="text-gray-900 dark:text-white font-bold text-xs">{val}</span>
+                    <span className="text-gray-400 text-[11px] font-medium w-10 text-right">({pct}%)</span>
                   </div>
                 </div>
               );

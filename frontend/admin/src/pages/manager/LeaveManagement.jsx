@@ -16,6 +16,7 @@ import UpcomingLeavesDrawer from '../../components/modals/UpcomingLeavesDrawer';
 
 const LeaveManagement = () => {
   const [stats, setStats] = useState(null);
+  const [dynamicCounts, setDynamicCounts] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [viewMode, setViewMode] = useState('manager');
@@ -54,15 +55,15 @@ const LeaveManagement = () => {
     return <div className="flex h-screen items-center justify-center">Loading dashboard...</div>;
   }
 
-  const activeStats = (stats && stats.totalEmployees > 0) ? stats : {
-    pending: 0,
-    onLeaveToday: 0,
-    upcoming: 0,
-    availabilityPercent: 0,
-    availableCount: 0,
-    totalEmployees: 0,
-    thisMonthRequests: 0,
-    growth: 0
+  const activeStats = {
+    pending: dynamicCounts?.pending ?? (stats?.pending || 0),
+    onLeaveToday: dynamicCounts?.on_leave_today ?? (stats?.onLeaveToday || 0),
+    upcoming: dynamicCounts?.upcoming ?? (stats?.upcoming || 0),
+    thisMonthRequests: dynamicCounts?.this_month ?? (stats?.thisMonthRequests || 0),
+    availabilityPercent: stats?.availabilityPercent || 0,
+    availableCount: stats?.availableCount || 0,
+    totalEmployees: stats?.totalEmployees || 0,
+    growth: stats?.growth || 0
   };
 
   return (
@@ -111,12 +112,14 @@ const LeaveManagement = () => {
         
             {/* Pending Approvals */}
             <div
+              onClick={() => { window.dispatchEvent(new CustomEvent('trigger-filter-leave-table', { detail: 'pending' })); scrollToSection('pending-queue'); }}
               onMouseEnter={() => setHoveredCardIndex(0)}
               onMouseLeave={() => setHoveredCardIndex(null)}
               style={{
                 borderColor: hoveredCardIndex === 0 ? '#a855f7' : undefined,
                 borderWidth: '2px',
-                borderStyle: 'solid'
+                borderStyle: 'solid',
+                boxShadow: hoveredCardIndex === 0 ? '0 0 16px rgba(168, 85, 247, 0.35)' : undefined
               }}
               className="bg-white dark:bg-[#1e293b] py-3.5 px-5 rounded-2xl border-gray-100 dark:border-gray-800 shadow-sm flex flex-col justify-between min-h-[140px] transition-all cursor-pointer group"
             >
@@ -130,17 +133,19 @@ const LeaveManagement = () => {
                 <span className="text-3xl font-bold text-gray-900 dark:text-white tabular-nums">{activeStats?.pending || 0}</span>
                 <span className="text-sm font-medium text-gray-500 mb-0.5">Requests</span>
               </div>
-              <button onClick={() => scrollToSection('pending-queue')} className="text-indigo-600 text-sm font-bold hover:underline self-start cursor-pointer border-none bg-transparent">View all &rarr;</button>
+              <button onClick={(e) => { e.stopPropagation(); window.dispatchEvent(new CustomEvent('trigger-filter-leave-table', { detail: 'pending' })); scrollToSection('pending-queue'); }} className="text-indigo-600 text-sm font-bold hover:underline self-start cursor-pointer border-none bg-transparent">View all &rarr;</button>
             </div>
 
             {/* Employees On Leave Today */}
             <div
+              onClick={() => { window.dispatchEvent(new CustomEvent('trigger-filter-leave-table', { detail: 'on_leave_today' })); scrollToSection('pending-queue'); }}
               onMouseEnter={() => setHoveredCardIndex(1)}
               onMouseLeave={() => setHoveredCardIndex(null)}
               style={{
                 borderColor: hoveredCardIndex === 1 ? '#10b981' : undefined,
                 borderWidth: '2px',
-                borderStyle: 'solid'
+                borderStyle: 'solid',
+                boxShadow: hoveredCardIndex === 1 ? '0 0 16px rgba(16, 185, 129, 0.35)' : undefined
               }}
               className="bg-white dark:bg-[#1e293b] py-3.5 px-5 rounded-2xl border-gray-100 dark:border-gray-800 shadow-sm flex flex-col justify-between min-h-[140px] transition-all cursor-pointer group"
             >
@@ -154,17 +159,19 @@ const LeaveManagement = () => {
                 <span className="text-3xl font-bold text-gray-900 dark:text-white tabular-nums">{activeStats?.onLeaveToday || 0}</span>
                 <span className="text-sm font-medium text-gray-500 mb-0.5">Employees</span>
               </div>
-              <button onClick={() => setIsLeaveTodayDrawerOpen(true)} className="text-indigo-600 text-sm font-bold hover:underline self-start cursor-pointer border-none bg-transparent">View details &rarr;</button>
+              <button onClick={(e) => { e.stopPropagation(); window.dispatchEvent(new CustomEvent('trigger-filter-leave-table', { detail: 'on_leave_today' })); scrollToSection('pending-queue'); }} className="text-indigo-600 text-sm font-bold hover:underline self-start cursor-pointer border-none bg-transparent">View details &rarr;</button>
             </div>
 
             {/* Upcoming Leaves */}
             <div
+              onClick={() => { window.dispatchEvent(new CustomEvent('trigger-filter-leave-table', { detail: 'upcoming' })); scrollToSection('pending-queue'); }}
               onMouseEnter={() => setHoveredCardIndex(2)}
               onMouseLeave={() => setHoveredCardIndex(null)}
               style={{
                 borderColor: hoveredCardIndex === 2 ? '#f59e0b' : undefined,
                 borderWidth: '2px',
-                borderStyle: 'solid'
+                borderStyle: 'solid',
+                boxShadow: hoveredCardIndex === 2 ? '0 0 16px rgba(245, 158, 11, 0.35)' : undefined
               }}
               className="bg-white dark:bg-[#1e293b] py-3.5 px-5 rounded-2xl border-gray-100 dark:border-gray-800 shadow-sm flex flex-col justify-between min-h-[140px] transition-all cursor-pointer group"
             >
@@ -181,7 +188,7 @@ const LeaveManagement = () => {
                 <span className="text-3xl font-bold text-gray-900 dark:text-white tabular-nums">{activeStats?.upcoming || 0}</span>
                 <span className="text-sm font-medium text-gray-500 mb-0.5">Employees</span>
               </div>
-              <button onClick={() => setIsUpcomingLeavesDrawerOpen(true)} className="text-indigo-600 text-sm font-bold hover:underline self-start cursor-pointer border-none bg-transparent">View details &rarr;</button>
+              <button onClick={(e) => { e.stopPropagation(); window.dispatchEvent(new CustomEvent('trigger-filter-leave-table', { detail: 'upcoming' })); scrollToSection('pending-queue'); }} className="text-indigo-600 text-sm font-bold hover:underline self-start cursor-pointer border-none bg-transparent">View details &rarr;</button>
             </div>
 
             {/* Team Availability */}
@@ -191,7 +198,8 @@ const LeaveManagement = () => {
               style={{
                 borderColor: hoveredCardIndex === 3 ? '#3b82f6' : undefined,
                 borderWidth: '2px',
-                borderStyle: 'solid'
+                borderStyle: 'solid',
+                boxShadow: hoveredCardIndex === 3 ? '0 0 16px rgba(59, 130, 246, 0.35)' : undefined
               }}
               className="bg-white dark:bg-[#1e293b] py-3.5 px-5 rounded-2xl border-gray-100 dark:border-gray-800 shadow-sm flex flex-col justify-between min-h-[140px] transition-all cursor-pointer group"
             >
@@ -215,12 +223,14 @@ const LeaveManagement = () => {
 
             {/* This Month Requests */}
             <div
+              onClick={() => { window.dispatchEvent(new CustomEvent('trigger-filter-leave-table', { detail: 'this_month' })); scrollToSection('pending-queue'); }}
               onMouseEnter={() => setHoveredCardIndex(4)}
               onMouseLeave={() => setHoveredCardIndex(null)}
               style={{
                 borderColor: hoveredCardIndex === 4 ? '#6366f1' : undefined,
                 borderWidth: '2px',
-                borderStyle: 'solid'
+                borderStyle: 'solid',
+                boxShadow: hoveredCardIndex === 4 ? '0 0 16px rgba(99, 102, 241, 0.35)' : undefined
               }}
               className="bg-white dark:bg-[#1e293b] py-3.5 px-5 rounded-2xl border-gray-100 dark:border-gray-800 shadow-sm flex flex-col justify-between min-h-[140px] transition-all cursor-pointer group"
             >
@@ -242,14 +252,14 @@ const LeaveManagement = () => {
                   </span>
                 </div>
               </div>
-              <button onClick={() => scrollToSection('leave-analytics')} className="text-indigo-600 text-sm font-bold hover:underline self-start cursor-pointer border-none bg-transparent">View details &rarr;</button>
+              <button onClick={(e) => { e.stopPropagation(); window.dispatchEvent(new CustomEvent('trigger-filter-leave-table', { detail: 'this_month' })); scrollToSection('pending-queue'); }} className="text-indigo-600 text-sm font-bold hover:underline self-start cursor-pointer border-none bg-transparent">View details &rarr;</button>
             </div>
 
           </div>
 
       {/* Pending Approval Queue - Full Width */}
       <div id="pending-queue" className="mb-6">
-        <PendingApprovalQueue onAction={triggerRefresh} />
+        <PendingApprovalQueue onAction={triggerRefresh} onCountsUpdate={setDynamicCounts} />
       </div>
 
       {/* Quick Actions */}

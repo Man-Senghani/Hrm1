@@ -16,6 +16,7 @@ import EmployeeLeaveManagement from '../components/EmployeeLeaveManagement';
 
 const LeaveManagement = () => {
   const [stats, setStats] = useState(null);
+  const [dynamicCounts, setDynamicCounts] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [viewMode, setViewMode] = useState('manager');
@@ -54,15 +55,15 @@ const LeaveManagement = () => {
     return <div className="flex h-screen items-center justify-center">Loading dashboard...</div>;
   }
 
-  const activeStats = (stats && stats.totalEmployees > 0) ? stats : {
-    pending: 0,
-    onLeaveToday: 0,
-    upcoming: 0,
-    availabilityPercent: 0,
-    availableCount: 0,
-    totalEmployees: 0,
-    thisMonthRequests: 0,
-    growth: 0
+  const activeStats = {
+    pending: dynamicCounts?.pending ?? (stats?.pending || 0),
+    onLeaveToday: dynamicCounts?.on_leave_today ?? (stats?.onLeaveToday || 0),
+    upcoming: dynamicCounts?.upcoming ?? (stats?.upcoming || 0),
+    thisMonthRequests: dynamicCounts?.this_month ?? (stats?.thisMonthRequests || 0),
+    availabilityPercent: stats?.availabilityPercent || 0,
+    availableCount: stats?.availableCount || 0,
+    totalEmployees: stats?.totalEmployees || 0,
+    growth: stats?.growth || 0
   };
 
   return (
@@ -111,6 +112,7 @@ const LeaveManagement = () => {
         
             {/* Pending Approvals */}
             <div
+              onClick={() => { window.dispatchEvent(new CustomEvent('trigger-filter-leave-table', { detail: 'pending' })); scrollToSection('pending-queue'); }}
               onMouseEnter={() => setHoveredCardIndex(0)}
               onMouseLeave={() => setHoveredCardIndex(null)}
               style={{
@@ -131,11 +133,12 @@ const LeaveManagement = () => {
                 <span className="text-3xl font-bold text-gray-900 dark:text-white tabular-nums">{activeStats?.pending || 0}</span>
                 <span className="text-sm font-medium text-gray-500 mb-0.5">Requests</span>
               </div>
-              <button onClick={() => scrollToSection('pending-queue')} className="text-indigo-600 text-sm font-bold hover:underline self-start cursor-pointer border-none bg-transparent">View all &rarr;</button>
+              <button onClick={(e) => { e.stopPropagation(); window.dispatchEvent(new CustomEvent('trigger-filter-leave-table', { detail: 'pending' })); scrollToSection('pending-queue'); }} className="text-indigo-600 text-sm font-bold hover:underline self-start cursor-pointer border-none bg-transparent">View all &rarr;</button>
             </div>
 
             {/* Employees On Leave Today */}
             <div
+              onClick={() => { window.dispatchEvent(new CustomEvent('trigger-filter-leave-table', { detail: 'on_leave_today' })); scrollToSection('pending-queue'); }}
               onMouseEnter={() => setHoveredCardIndex(1)}
               onMouseLeave={() => setHoveredCardIndex(null)}
               style={{
@@ -156,11 +159,12 @@ const LeaveManagement = () => {
                 <span className="text-3xl font-bold text-gray-900 dark:text-white tabular-nums">{activeStats?.onLeaveToday || 0}</span>
                 <span className="text-sm font-medium text-gray-500 mb-0.5">Employees</span>
               </div>
-              <button onClick={() => setIsLeaveTodayDrawerOpen(true)} className="text-indigo-600 text-sm font-bold hover:underline self-start cursor-pointer border-none bg-transparent">View details &rarr;</button>
+              <button onClick={(e) => { e.stopPropagation(); window.dispatchEvent(new CustomEvent('trigger-filter-leave-table', { detail: 'on_leave_today' })); scrollToSection('pending-queue'); }} className="text-indigo-600 text-sm font-bold hover:underline self-start cursor-pointer border-none bg-transparent">View details &rarr;</button>
             </div>
 
             {/* Upcoming Leaves */}
             <div
+              onClick={() => { window.dispatchEvent(new CustomEvent('trigger-filter-leave-table', { detail: 'upcoming' })); scrollToSection('pending-queue'); }}
               onMouseEnter={() => setHoveredCardIndex(2)}
               onMouseLeave={() => setHoveredCardIndex(null)}
               style={{
@@ -184,7 +188,7 @@ const LeaveManagement = () => {
                 <span className="text-3xl font-bold text-gray-900 dark:text-white tabular-nums">{activeStats?.upcoming || 0}</span>
                 <span className="text-sm font-medium text-gray-500 mb-0.5">Employees</span>
               </div>
-              <button onClick={() => setIsUpcomingLeavesDrawerOpen(true)} className="text-indigo-600 text-sm font-bold hover:underline self-start cursor-pointer border-none bg-transparent">View details &rarr;</button>
+              <button onClick={(e) => { e.stopPropagation(); window.dispatchEvent(new CustomEvent('trigger-filter-leave-table', { detail: 'upcoming' })); scrollToSection('pending-queue'); }} className="text-indigo-600 text-sm font-bold hover:underline self-start cursor-pointer border-none bg-transparent">View details &rarr;</button>
             </div>
 
             {/* Team Availability */}
@@ -219,6 +223,7 @@ const LeaveManagement = () => {
 
             {/* This Month Requests */}
             <div
+              onClick={() => { window.dispatchEvent(new CustomEvent('trigger-filter-leave-table', { detail: 'this_month' })); scrollToSection('pending-queue'); }}
               onMouseEnter={() => setHoveredCardIndex(4)}
               onMouseLeave={() => setHoveredCardIndex(null)}
               style={{
@@ -247,14 +252,14 @@ const LeaveManagement = () => {
                   </span>
                 </div>
               </div>
-              <button onClick={() => scrollToSection('leave-analytics')} className="text-indigo-600 text-sm font-bold hover:underline self-start cursor-pointer border-none bg-transparent">View details &rarr;</button>
+              <button onClick={(e) => { e.stopPropagation(); window.dispatchEvent(new CustomEvent('trigger-filter-leave-table', { detail: 'this_month' })); scrollToSection('pending-queue'); }} className="text-indigo-600 text-sm font-bold hover:underline self-start cursor-pointer border-none bg-transparent">View details &rarr;</button>
             </div>
 
           </div>
 
       {/* Pending Approval Queue - Full Width */}
       <div id="pending-queue" className="mb-6">
-        <PendingApprovalQueue onAction={triggerRefresh} />
+        <PendingApprovalQueue onAction={triggerRefresh} onCountsUpdate={setDynamicCounts} />
       </div>
 
       {/* Quick Actions */}

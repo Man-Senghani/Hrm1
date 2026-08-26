@@ -48,4 +48,8 @@ hostinger_public_html/
 *.pub
 deploy_key*
 
+# Scratch
+scratch/
+
+
 

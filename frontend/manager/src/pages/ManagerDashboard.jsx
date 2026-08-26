@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import {
@@ -270,13 +270,21 @@ const ManagerDashboard = () => {
     fetchAll();
   }, [fetchAll]);
 
+  const attTrendCacheRef = useRef({});
+
   const fetchAttTrend = useCallback(async (filter = attFilter) => {
+    if (attTrendCacheRef.current[filter]) {
+      setAttTrendData(attTrendCacheRef.current[filter]);
+      return;
+    }
     try {
-      const periodParam = filter === 'monthly' ? 'month' : 'week';
-      const res = await api(`/api/attendance/summary/weekly?period=${periodParam}`);
-      const list = res.data?.this_week || [];
+      const [weekRes, monthRes] = await Promise.all([
+        api('/api/attendance/summary/weekly?period=week'),
+        api('/api/attendance/summary/weekly?period=month')
+      ]);
+
       const totalTeamCount = teamMembers.length || 1;
-      const formatted = list.map(item => {
+      const formatTrend = (list) => (list || []).map(item => {
         const working = (item.Present || 0) + (item.Late || 0) + (item['Half Day'] || 0);
         const rate = totalTeamCount > 0 ? Math.round((working / totalTeamCount) * 100) : 0;
         return {
@@ -286,7 +294,11 @@ const ManagerDashboard = () => {
           total: totalTeamCount
         };
       });
-      setAttTrendData(formatted);
+
+      attTrendCacheRef.current['weekly'] = formatTrend(weekRes.data?.this_week);
+      attTrendCacheRef.current['monthly'] = formatTrend(monthRes.data?.this_week);
+
+      setAttTrendData(attTrendCacheRef.current[filter] || []);
     } catch (e) {
       console.error('Error fetching attendance trend:', e);
     }
@@ -343,37 +355,80 @@ const ManagerDashboard = () => {
       };
     });
 
-  // ─ Task Chart Data ─
-  const taskStatusGroups = { todo: 0, inprogress: 0, inreview: 0, completed: 0, blocked: 0 };
-  tasks.forEach(t => {
-    const s = (t.status || '').toLowerCase().replace(/[^a-z]/g, '');
-    if (s.includes('todo') || s.includes('ongoing')) taskStatusGroups.todo++;
-    else if (s.includes('progress') || s.includes('pending')) taskStatusGroups.inprogress++;
-    else if (s.includes('review')) taskStatusGroups.inreview++;
-    else if (s.includes('block') || s.includes('needtoimprove')) taskStatusGroups.blocked++;
-    else if (s.includes('complet') || s.includes('done')) taskStatusGroups.completed++;
-    else taskStatusGroups.todo++;
-  });
+  // ─ Dynamic Task Chart Data by Period ─
+  const filteredTasks = useMemo(() => {
+    if (!Array.isArray(tasks) || tasks.length === 0) return [];
+    const now = new Date();
+    
+    if (taskFilter === 'weekly') {
+      const currentDay = now.getDay();
+      const mondayDiff = currentDay === 0 ? -6 : 1 - currentDay;
+      const weekStart = new Date(now);
+      weekStart.setDate(now.getDate() + mondayDiff);
+      weekStart.setHours(0, 0, 0, 0);
 
-  let donutData = [
-    { name: 'To Do', value: taskStatusGroups.todo, color: '#22c55e' },
-    { name: 'In Progress', value: taskStatusGroups.inprogress, color: '#3b82f6' },
-    { name: 'In Review', value: taskStatusGroups.inreview, color: '#f59e0b' },
-    { name: 'Completed', value: taskStatusGroups.completed, color: '#a855f7' },
-    { name: 'Blocked', value: taskStatusGroups.blocked, color: '#ef4444' }
-  ];
-  let totalTasksSum = donutData.reduce((acc, curr) => acc + curr.value, 0);
+      return tasks.filter(t => {
+        const d = new Date(t.createdAt || t.dueDate || Date.now());
+        return d >= weekStart;
+      });
+    } else {
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+      return tasks.filter(t => {
+        const d = new Date(t.createdAt || t.dueDate || Date.now());
+        return d >= monthStart;
+      });
+    }
+  }, [tasks, taskFilter]);
 
-  if (totalTasksSum === 0) {
-    donutData = [
+  const taskStatusGroups = useMemo(() => {
+    const groups = { todo: 0, inprogress: 0, inreview: 0, completed: 0, blocked: 0 };
+    filteredTasks.forEach(t => {
+      const s = (t.status || '').toLowerCase().replace(/[^a-z]/g, '');
+      if (s.includes('todo') || s.includes('ongoing')) groups.todo++;
+      else if (s.includes('progress') || s.includes('pending')) groups.inprogress++;
+      else if (s.includes('review')) groups.inreview++;
+      else if (s.includes('block') || s.includes('needtoimprove')) groups.blocked++;
+      else if (s.includes('complet') || s.includes('done')) groups.completed++;
+      else groups.todo++;
+    });
+    return groups;
+  }, [filteredTasks]);
+
+  const donutData = useMemo(() => {
+    const hasRealTasks = filteredTasks.length > 0;
+    
+    if (hasRealTasks) {
+      return [
+        { name: 'To Do', value: taskStatusGroups.todo, color: '#22c55e' },
+        { name: 'In Progress', value: taskStatusGroups.inprogress, color: '#3b82f6' },
+        { name: 'In Review', value: taskStatusGroups.inreview, color: '#f59e0b' },
+        { name: 'Completed', value: taskStatusGroups.completed, color: '#a855f7' },
+        { name: 'Blocked', value: taskStatusGroups.blocked, color: '#ef4444' }
+      ];
+    }
+    
+    if (taskFilter === 'weekly') {
+      return [
+        { name: 'To Do', value: 3, color: '#22c55e' },
+        { name: 'In Progress', value: 5, color: '#3b82f6' },
+        { name: 'In Review', value: 2, color: '#f59e0b' },
+        { name: 'Completed', value: 8, color: '#a855f7' },
+        { name: 'Blocked', value: 1, color: '#ef4444' }
+      ];
+    }
+    
+    return [
       { name: 'To Do', value: 8, color: '#22c55e' },
       { name: 'In Progress', value: 14, color: '#3b82f6' },
       { name: 'In Review', value: 6, color: '#f59e0b' },
       { name: 'Completed', value: 20, color: '#a855f7' },
       { name: 'Blocked', value: 3, color: '#ef4444' }
     ];
-    totalTasksSum = 51;
-  }
+  }, [filteredTasks, taskStatusGroups, taskFilter]);
+
+  const totalTasksSum = useMemo(() => {
+    return donutData.reduce((acc, curr) => acc + curr.value, 0);
+  }, [donutData]);
 
   // ─ Kanban Data ─
   const kanbanColumns = [
@@ -926,17 +981,21 @@ const ManagerDashboard = () => {
           <SectionHeader title="Quick Actions" />
           <div className="flex-1 grid grid-cols-3 gap-3">
             {[
-              { icon: <ClipboardList size={20} />, label: 'Assign Task', color: '#22c55e', bg: 'bg-[#f0fdf4] dark:bg-green-950/40 text-[#22c55e] dark:text-[#34d399]', hoverClass: 'hover:!border-[#22c55e] dark:hover:!border-[#34d399]', path: '/manager/task-management/create' },
-              { icon: <Briefcase size={20} />, label: 'Create Project', color: '#3b82f6', bg: 'bg-[#eff6ff] dark:bg-blue-950/40 text-[#3b82f6] dark:text-[#60a5fa]', hoverClass: 'hover:!border-[#3b82f6] dark:hover:!border-[#60a5fa]', path: '/manager/projects' },
-              { icon: <UserCheck size={20} />, label: 'Approve Leave', color: '#f59e0b', bg: 'bg-[#fffbeb] dark:bg-amber-950/40 text-[#f59e0b] dark:text-[#fbbf24]', hoverClass: 'hover:!border-[#f59e0b] dark:hover:!border-[#fbbf24]', path: '/manager/leave' },
-              { icon: <TrendingUp size={20} />, label: 'Team Report', color: '#a855f7', bg: 'bg-[#f3e8ff] dark:bg-purple-950/40 text-[#a855f7] dark:text-[#c084fc]', hoverClass: 'hover:!border-[#a855f7] dark:hover:!border-[#c084fc]', path: '/manager/reports' },
-              { icon: <CalendarIcon size={20} />, label: 'Schedule Meeting', color: '#ef4444', bg: 'bg-[#fee2e2] dark:bg-red-950/40 text-[#ef4444] dark:text-[#f87171]', hoverClass: 'hover:!border-[#ef4444] dark:hover:!border-[#f87171]', path: '/manager/events' },
-              { icon: <Star size={20} />, label: 'Performance Review', color: '#14b8a6', bg: 'bg-[#ccfbf1] dark:bg-teal-950/40 text-[#14b8a6] dark:text-[#2dd4bf]', hoverClass: 'hover:!border-[#14b8a6] dark:hover:!border-[#2dd4bf]', path: '/manager/performance' },
+              { icon: <ClipboardList size={20} />, label: 'Assign Task', color: '#22c55e', bg: 'bg-[#f0fdf4] dark:bg-green-950/40 text-[#22c55e] dark:text-[#34d399]', hoverClass: 'hover:!border-[#22c55e] dark:hover:!border-[#34d399]', path: '#' },
+              { icon: <Briefcase size={20} />, label: 'Create Project', color: '#3b82f6', bg: 'bg-[#eff6ff] dark:bg-blue-950/40 text-[#3b82f6] dark:text-[#60a5fa]', hoverClass: 'hover:!border-[#3b82f6] dark:hover:!border-[#60a5fa]', path: '#' },
+              { icon: <UserCheck size={20} />, label: 'Approve Leave', color: '#f59e0b', bg: 'bg-[#fffbeb] dark:bg-amber-950/40 text-[#f59e0b] dark:text-[#fbbf24]', hoverClass: 'hover:!border-[#f59e0b] dark:hover:!border-[#fbbf24]', path: '/leave' },
+              { icon: <TrendingUp size={20} />, label: 'Team Report', color: '#a855f7', bg: 'bg-[#f3e8ff] dark:bg-purple-950/40 text-[#a855f7] dark:text-[#c084fc]', hoverClass: 'hover:!border-[#a855f7] dark:hover:!border-[#c084fc]', path: '#' },
+              { icon: <CalendarIcon size={20} />, label: 'Schedule Meeting', color: '#ef4444', bg: 'bg-[#fee2e2] dark:bg-red-950/40 text-[#ef4444] dark:text-[#f87171]', hoverClass: 'hover:!border-[#ef4444] dark:hover:!border-[#f87171]', path: '#' },
+              { icon: <Star size={20} />, label: 'Performance Review', color: '#14b8a6', bg: 'bg-[#ccfbf1] dark:bg-teal-950/40 text-[#14b8a6] dark:text-[#2dd4bf]', hoverClass: 'hover:!border-[#14b8a6] dark:hover:!border-[#2dd4bf]', path: '#' },
             ].map((action, i) => (
               <button
                 key={i}
                 className={`flex flex-col items-center justify-center gap-2 rounded-2xl border border-gray-200 dark:border-[#28251e] bg-white dark:bg-[#161311] ${action.hoverClass} transition-colors h-full cursor-pointer group`}
-                onClick={() => navigate(action.path)}
+                onClick={() => {
+                  if (action.path && action.path !== '#') {
+                    navigate(action.path);
+                  }
+                }}
               >
                 <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-transform group-hover:scale-110 ${action.bg}`}>
                   {action.icon}
@@ -988,18 +1047,22 @@ const ManagerDashboard = () => {
             </div>
 
             {/* Scrollable Content List */}
-            <div className="flex-1 overflow-y-auto px-6 py-3 space-y-3 custom-scrollbar">
+            <div className="flex-1 overflow-y-auto overflow-x-hidden px-6 py-3 space-y-3 custom-scrollbar">
               {allMembersAvailability
                 .filter(m => m.name.toLowerCase().includes(availabilitySearch.toLowerCase()) || m.role.toLowerCase().includes(availabilitySearch.toLowerCase()))
                 .map((member, i) => (
-                  <div key={i} className="flex items-center justify-between p-3.5 rounded-2xl border border-gray-100 dark:border-[#28251e] bg-white dark:bg-[#161311] shadow-xs hover:border-[#00a76b]/40 transition-all">
-                    <div className="flex items-center gap-3">
+                  <div key={i} className="flex items-center justify-between p-3.5 rounded-2xl border border-gray-100 dark:border-[#28251e] bg-white dark:bg-[#161311] shadow-xs hover:border-[#00a76b]/40 transition-all gap-3 overflow-hidden">
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
                       <div className="w-10 h-10 rounded-full bg-gray-100 dark:bg-[#25201b] border border-gray-200/60 dark:border-[#28251e] flex items-center justify-center text-sm font-bold text-gray-700 dark:text-gray-300 shrink-0">
                         {member.name.charAt(0)}
                       </div>
-                      <div className="min-w-0">
-                        <h4 className="text-sm font-bold text-[#0f172a] dark:text-white truncate">{member.name}</h4>
-                        <p className="text-xs font-semibold text-gray-500 dark:text-[#a3a094] mt-0.5 truncate">{member.role}</p>
+                      <div className="min-w-0 flex-1 overflow-hidden">
+                        <h4 className="text-sm font-bold text-[#0f172a] dark:text-white leading-snug break-all break-words line-clamp-3" style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
+                          {member.name}
+                        </h4>
+                        <p className="text-xs font-semibold text-gray-500 dark:text-[#a3a094] mt-0.5 break-all break-words line-clamp-2" style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
+                          {member.role}
+                        </p>
                       </div>
                     </div>
                     <span className="text-[11px] font-bold px-3 py-1 rounded-full border flex items-center gap-1.5 bg-transparent whitespace-nowrap shrink-0 ml-2" style={{ color: member.color, borderColor: member.color }}>

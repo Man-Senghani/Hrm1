@@ -33,10 +33,19 @@ const QuickActions = () => {
   const [hoveredIndex, setHoveredIndex] = React.useState(null);
 
   const actions = [
-    { label: 'Approve Leave', icon: CheckCircle, color: 'text-emerald-600 dark:text-emerald-400', borderColor: '#10b981', glowColor: 'rgba(16, 185, 129, 0.45)', bgIcon: 'bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-100 dark:border-emerald-900/40', onClick: () => window.scrollTo({ top: 0, behavior: 'smooth' }) },
+    { 
+      label: 'Approve Leave', 
+      icon: CheckCircle, 
+      color: 'text-emerald-600 dark:text-emerald-400', 
+      borderColor: '#10b981', 
+      glowColor: 'rgba(16, 185, 129, 0.45)', 
+      bgIcon: 'bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-100 dark:border-emerald-900/40', 
+      onClick: () => {
+        const pathRole = window.location.pathname.split('/')[1] || 'manager';
+        window.location.href = `/${pathRole}/leave`;
+      } 
+    },
     { label: 'Bulk Approval', icon: Users, color: 'text-purple-600 dark:text-purple-400', borderColor: '#8b5cf6', glowColor: 'rgba(139, 92, 246, 0.45)', bgIcon: 'bg-purple-50 dark:bg-purple-950/50 border border-purple-100 dark:border-purple-900/40', onClick: () => window.dispatchEvent(new CustomEvent('trigger-bulk-approval')) },
-    { label: 'Team Calendar', icon: Calendar, color: 'text-orange-600 dark:text-orange-400', borderColor: '#f97316', glowColor: 'rgba(249, 115, 22, 0.45)', bgIcon: 'bg-orange-50 dark:bg-orange-950/50 border border-orange-100 dark:border-orange-900/40', onClick: () => window.scrollTo({ top: 500, behavior: 'smooth' }) },
-    { label: 'Team Leave Balance', icon: Clock, color: 'text-blue-600 dark:text-blue-400', borderColor: '#3b82f6', glowColor: 'rgba(59, 130, 246, 0.45)', bgIcon: 'bg-blue-50 dark:bg-blue-950/50 border border-blue-100 dark:border-blue-900/40', onClick: () => window.scrollTo({ top: 500, behavior: 'smooth' }) },
     { label: 'Download Report', icon: Download, color: 'text-emerald-600 dark:text-emerald-400', borderColor: '#059669', glowColor: 'rgba(5, 150, 105, 0.45)', bgIcon: 'bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-100 dark:border-emerald-900/40', onClick: () => handleExport('pdf') },
     { label: 'Export to Excel', icon: FileSpreadsheet, color: 'text-emerald-600 dark:text-emerald-400', borderColor: '#059669', glowColor: 'rgba(5, 150, 105, 0.45)', bgIcon: 'bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-100 dark:border-emerald-900/40', onClick: () => handleExport('xlsx') }
   ];
@@ -44,7 +53,7 @@ const QuickActions = () => {
   return (
     <div className="mb-6">
       <h3 className="text-sm font-bold text-gray-900 dark:text-white mb-4 ml-1">Quick Actions</h3>
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {actions.map((action, i) => {
           const isHovered = hoveredIndex === i;
           return (

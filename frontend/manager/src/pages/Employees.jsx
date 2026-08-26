@@ -100,7 +100,7 @@ const HREmployees = () => {
       alert(`Viewing demo profile for ${id}`);
       return;
     }
-    navigate(`/${pathRole}/employees/view/${id}`);
+    navigate(`/employees/view/${id}`);
   };
 
   const handleExportCSV = () => {

@@ -138,6 +138,7 @@ function App() {
             <Route path="/manager/employees" element={<Employees />} />
             <Route path="/employees/view/:id" element={<EmployeeDetail />} />
             <Route path="/manager/employees/view/:id" element={<EmployeeDetail />} />
+            <Route path="/manager/manager/employees/view/:id" element={<EmployeeDetail />} />
             <Route path="/attendance" element={<Attendance />} />
             <Route path="/manager/attendance" element={<Attendance />} />
             <Route path="/tasks" element={<ManagerTasks />} />

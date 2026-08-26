@@ -24,20 +24,20 @@ router.put('/cancel/:id', protect, cancelLeave);
 router.post('/request-cancellation/:id', protect, requestLeaveCancellation);
 
 // 👨‍💼 Manager Routes
-router.get('/on-leave-today', protect, authorize('manager', 'hr', 'admin'), require('../controllers/leaveController').getEmployeesOnLeaveToday);
-router.get('/upcoming-leaves', protect, authorize('manager', 'hr', 'admin'), require('../controllers/leaveController').getUpcomingLeavesList);
-router.get('/manager/summary', protect, authorize('manager', 'admin'), require('../controllers/leaveController').getManagerStats);
-router.get('/manager/pending', protect, authorize('manager', 'admin'), require('../controllers/leaveController').getTeamLeaves);
-router.get('/manager/availability', protect, authorize('manager', 'admin'), require('../controllers/leaveController').getAvailabilityStats);
-router.get('/manager/calendar', protect, authorize('manager', 'admin'), require('../controllers/leaveController').getManagerCalendar);
-router.get('/manager/balances', protect, authorize('manager', 'admin'), require('../controllers/leaveController').getTeamLeaveBalances);
-router.get('/manager/monthly-trend', protect, authorize('manager', 'admin'), require('../controllers/leaveController').getLeaveMonthlyTrend);
-router.get('/manager/department-analytics', protect, authorize('manager', 'admin'), require('../controllers/leaveController').getDepartmentAnalytics);
-router.put('/manager/bulk-approve', protect, authorize('manager', 'admin'), require('../controllers/leaveController').bulkApproveLeaves);
-router.get('/manager/export', protect, authorize('manager', 'admin'), require('../controllers/leaveController').exportTeamLeaves);
+router.get('/on-leave-today', protect, authorize('manager', 'hr', 'admin', 'employee'), require('../controllers/leaveController').getEmployeesOnLeaveToday);
+router.get('/upcoming-leaves', protect, authorize('manager', 'hr', 'admin', 'employee'), require('../controllers/leaveController').getUpcomingLeavesList);
+router.get('/manager/summary', protect, authorize('manager', 'hr', 'admin', 'employee'), require('../controllers/leaveController').getManagerStats);
+router.get('/manager/pending', protect, authorize('manager', 'hr', 'admin', 'employee'), require('../controllers/leaveController').getTeamLeaves);
+router.get('/manager/availability', protect, authorize('manager', 'hr', 'admin', 'employee'), require('../controllers/leaveController').getAvailabilityStats);
+router.get('/manager/calendar', protect, authorize('manager', 'hr', 'admin', 'employee'), require('../controllers/leaveController').getManagerCalendar);
+router.get('/manager/balances', protect, authorize('manager', 'hr', 'admin', 'employee'), require('../controllers/leaveController').getTeamLeaveBalances);
+router.get('/manager/monthly-trend', protect, authorize('manager', 'hr', 'admin', 'employee'), require('../controllers/leaveController').getLeaveMonthlyTrend);
+router.get('/manager/department-analytics', protect, authorize('manager', 'hr', 'admin', 'employee'), require('../controllers/leaveController').getDepartmentAnalytics);
+router.put('/manager/bulk-approve', protect, authorize('manager', 'hr', 'admin', 'employee'), require('../controllers/leaveController').bulkApproveLeaves);
+router.get('/manager/export', protect, authorize('manager', 'hr', 'admin', 'employee'), require('../controllers/leaveController').exportTeamLeaves);
 
-router.get('/manager', protect, authorize('manager', 'admin'), getManagerLeaves);
-router.put('/manager-approve/:id', protect, authorize('manager', 'admin'), managerApprove);
+router.get('/manager', protect, authorize('manager', 'hr', 'admin', 'employee'), getManagerLeaves);
+router.put('/manager-approve/:id', protect, authorize('manager', 'hr', 'admin', 'employee'), managerApprove);
 
 // 🧑‍💼 HR Routes
 router.get('/hr', protect, authorize('hr', 'admin'), getHRLeaves);

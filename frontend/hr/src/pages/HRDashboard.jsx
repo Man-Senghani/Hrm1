@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import axios from 'axios';
 import toast from 'react-hot-toast';
@@ -75,11 +75,11 @@ const CustomDropdown = ({ value, onChange, options, className = '' }) => {
                   onChange(opt);
                   setIsOpen(false);
                 }}
-                className={`w-full text-left px-3 py-2 text-xs font-medium transition-colors flex items-center justify-between cursor-pointer ${isSelected ? 'bg-[#00a76b]/10 text-[#00a76b] font-bold' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-[#28231e]'
+                className={`w-full text-left px-3 py-2 text-xs font-medium transition-colors flex items-center justify-between cursor-pointer ${isSelected ? 'bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 font-bold' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-[#28231e]'
                   }`}
               >
                 <span>{optLabel}</span>
-                {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-[#00a76b]"></span>}
+                {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-blue-600 dark:bg-blue-400"></span>}
               </button>
             );
           })}
@@ -109,10 +109,47 @@ const HRDashboard = () => {
   const [leavePeriod, setLeavePeriod] = useState('This Month');
   const [recruitmentPeriod, setRecruitmentPeriod] = useState('This Month');
   const [payrollPeriod, setPayrollPeriod] = useState(new Date().toLocaleString('default', { month: 'long', year: 'numeric' }));
+  const [joinerPeriod, setJoinerPeriod] = useState('All');
   const [selectedLeaveApproval, setSelectedLeaveApproval] = useState(null);
   const [hoveredStatCard, setHoveredStatCard] = useState(null);
   const [hoveredRoleIndex, setHoveredRoleIndex] = useState(null);
   const [hoveredGenderIndex, setHoveredGenderIndex] = useState(null);
+
+  const recentJoinersList = dashboardData?.recentJoiners || [];
+
+  const filteredRecentJoiners = useMemo(() => {
+    if (!recentJoinersList || !Array.isArray(recentJoinersList)) return [];
+    if (joinerPeriod === 'All' || joinerPeriod === 'All Time') return recentJoinersList;
+
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth();
+
+    return recentJoinersList.filter(rj => {
+      if (!rj.joinDate) return false;
+      const d = new Date(rj.joinDate);
+      const y = d.getFullYear();
+      const m = d.getMonth();
+
+      if (joinerPeriod === 'This Month') {
+        return y === currentYear && m === currentMonth;
+      }
+      if (joinerPeriod === 'Last Month') {
+        const lastMonthDate = new Date(currentYear, currentMonth - 1, 1);
+        return y === lastMonthDate.getFullYear() && m === lastMonthDate.getMonth();
+      }
+      if (joinerPeriod === 'This Year') {
+        return y === currentYear;
+      }
+      if (joinerPeriod === 'Last Year') {
+        return y === currentYear - 1;
+      }
+      if (joinerPeriod === 'Future Month' || joinerPeriod === 'Future Joiners') {
+        return d > now || (y > currentYear || (y === currentYear && m > currentMonth));
+      }
+      return true;
+    });
+  }, [recentJoinersList, joinerPeriod]);
 
   // Wishes states
   const [wishedEvents, setWishedEvents] = useState([]);
@@ -453,9 +490,9 @@ const HRDashboard = () => {
                   <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#9ca3af', fontWeight: 600, letterSpacing: '1px' }} dy={15} />
                   <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#9ca3af', fontWeight: 600 }} tickMargin={12} allowDecimals={false} />
                   <Tooltip contentStyle={{ borderRadius: '12px', border: '1px solid #38332c', backgroundColor: '#1e1a17', color: '#fff', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.5)' }} />
-                  {charts.attendanceOverview.some(d => d.present > 0) && <Line type="monotone" dataKey="present" stroke="#00a76b" strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} />}
-                  {charts.attendanceOverview.some(d => d.absent > 0) && <Line type="monotone" dataKey="absent" stroke="#f43f5e" strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} />}
-                  {charts.attendanceOverview.some(d => d.late > 0) && <Line type="monotone" dataKey="late" stroke="#f59e0b" strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} />}
+                  {charts.attendanceOverview.some(d => d.present > 0) && <Line type="monotone" dataKey="present" stroke="#00a76b" strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} isAnimationActive={false} />}
+                  {charts.attendanceOverview.some(d => d.absent > 0) && <Line type="monotone" dataKey="absent" stroke="#f43f5e" strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} isAnimationActive={false} />}
+                  {charts.attendanceOverview.some(d => d.late > 0) && <Line type="monotone" dataKey="late" stroke="#f59e0b" strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} isAnimationActive={false} />}
                 </LineChart>
               </ResponsiveContainer>
             ) : (
@@ -481,6 +518,7 @@ const HRDashboard = () => {
                         outerRadius={105}
                         paddingAngle={2}
                         dataKey="value"
+                        isAnimationActive={false}
                         onMouseEnter={(_, index) => setHoveredRoleIndex(index)}
                         onMouseLeave={() => setHoveredRoleIndex(null)}
                       >
@@ -551,6 +589,7 @@ const HRDashboard = () => {
                         outerRadius={105}
                         paddingAngle={2}
                         dataKey="value"
+                        isAnimationActive={false}
                         onMouseEnter={(_, index) => setHoveredGenderIndex(index)}
                         onMouseLeave={() => setHoveredGenderIndex(null)}
                       >
@@ -619,9 +658,11 @@ const HRDashboard = () => {
                     e.stopPropagation();
                     navigate(`/${pathRole}/leave`);
                   }}
-                  className="text-xs font-bold text-[#00a76b] hover:underline cursor-pointer whitespace-nowrap z-10"
+                  className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-950/40 px-2 py-1 rounded-lg flex items-center gap-0.5 transition-all cursor-pointer whitespace-nowrap"
+                  title="View All Leaves"
                 >
-                  View All
+                  <span>View All</span>
+                  <ChevronRight size={13} strokeWidth={2.5} />
                 </button>
                 <CustomDropdown
                   value={leavePeriod}
@@ -790,7 +831,10 @@ const HRDashboard = () => {
                 hoverBorder: 'hover:!border-indigo-400 dark:hover:!border-indigo-500',
                 hoverBg: 'hover:bg-indigo-50/40 dark:hover:bg-indigo-950/20',
                 hoverText: 'group-hover:text-indigo-600 dark:group-hover:text-indigo-400',
-                onClick: () => navigate('/departments')
+                onClick: (e) => {
+                  e?.preventDefault();
+                  window.location.hash = '#';
+                }
               },
               {
                 label: 'Create Job',
@@ -800,7 +844,10 @@ const HRDashboard = () => {
                 hoverBorder: 'hover:!border-purple-400 dark:hover:!border-purple-500',
                 hoverBg: 'hover:bg-purple-50/40 dark:hover:bg-purple-950/20',
                 hoverText: 'group-hover:text-purple-600 dark:group-hover:text-purple-400',
-                onClick: () => navigate('/recruitment')
+                onClick: (e) => {
+                  e?.preventDefault();
+                  window.location.hash = '#';
+                }
               },
               {
                 label: 'Approve Leave',
@@ -810,7 +857,10 @@ const HRDashboard = () => {
                 hoverBorder: 'hover:!border-[#00a76b] dark:hover:!border-[#00a76b]',
                 hoverBg: 'hover:bg-green-50/40 dark:hover:bg-green-950/20',
                 hoverText: 'group-hover:text-[#00a76b] dark:group-hover:text-[#00a76b]',
-                onClick: () => navigate('/leave', { state: { viewMode: 'hr', filter: 'pending' } })
+                onClick: (e) => {
+                  e?.preventDefault();
+                  navigate(`/${pathRole}/leave`, { state: { viewMode: 'hr', filter: 'pending' } });
+                }
               },
               {
                 label: 'Run Payroll',
@@ -820,7 +870,10 @@ const HRDashboard = () => {
                 hoverBorder: 'hover:!border-orange-400 dark:hover:!border-orange-500',
                 hoverBg: 'hover:bg-orange-50/40 dark:hover:bg-orange-950/20',
                 hoverText: 'group-hover:text-orange-600 dark:group-hover:text-orange-400',
-                onClick: () => navigate('/payroll')
+                onClick: (e) => {
+                  e?.preventDefault();
+                  window.location.hash = '#';
+                }
               },
               {
                 label: 'Announcement',
@@ -830,7 +883,10 @@ const HRDashboard = () => {
                 hoverBorder: 'hover:!border-red-400 dark:hover:!border-red-500',
                 hoverBg: 'hover:bg-red-50/40 dark:hover:bg-red-950/20',
                 hoverText: 'group-hover:text-red-600 dark:group-hover:text-red-400',
-                onClick: () => navigate('/notifications')
+                onClick: (e) => {
+                  e?.preventDefault();
+                  navigate(`/${pathRole}/notifications`);
+                }
               },
             ].map((action, i) => (
               <button
@@ -847,15 +903,15 @@ const HRDashboard = () => {
           </div>
         </Card>
 
-        <Card className="p-6 flex flex-col h-[420px] lg:col-span-8 xl:col-span-8 hover:!border-blue-500 dark:hover:!border-blue-400 transition-colors duration-300">
+        <Card className="p-6 flex flex-col min-h-[440px] max-h-[540px] lg:col-span-8 xl:col-span-8 hover:!border-blue-500 dark:hover:!border-blue-400 transition-colors duration-300">
           <div className="flex justify-between items-center mb-6">
-            <h3 className="font-bold text-gray-900 dark:text-white">Pending Approvals</h3>
+            <h3 className="font-bold text-gray-900 dark:text-white">Pending Approvals ({pendingApprovals.length})</h3>
             <button onClick={() => navigate('/leave', { state: { viewMode: 'hr', filter: 'pending' } })} className="text-xs font-bold text-[#00a76b] hover:underline cursor-pointer">View All</button>
           </div>
-          <div className="flex-1 overflow-y-auto">
-            {pendingApprovals.filter(a => a.role?.toLowerCase() !== 'hr' && a.role?.toLowerCase() !== 'admin').length > 0 ? (
+          <div className="flex-1 overflow-y-auto pr-1 space-y-3">
+            {pendingApprovals.filter(a => a.role?.toLowerCase() !== 'admin').length > 0 ? (
               <div className="space-y-3">
-                {pendingApprovals.filter(a => a.role?.toLowerCase() !== 'hr' && a.role?.toLowerCase() !== 'admin').slice(0, 3).map((approval) => (
+                {pendingApprovals.filter(a => a.role?.toLowerCase() !== 'admin').map((approval) => (
                   <div
                     key={approval._id}
                     onClick={() => setSelectedLeaveApproval(approval)}
@@ -924,11 +980,16 @@ const HRDashboard = () => {
       {/* 6. Fifth Row (Recent Joiners, Birthdays, Announcements) */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <Card className="p-6 h-[320px] flex flex-col hover:!border-sky-500 dark:hover:!border-sky-400 transition-colors duration-300">
-          <div className="flex justify-between items-center mb-6">
-            <h3 className="font-bold text-gray-900 dark:text-white">Recent Joiners</h3>
+          <div className="flex justify-between items-center mb-6 gap-2">
+            <h3 className="font-bold text-gray-900 dark:text-white shrink-0">Recent Joiners</h3>
+            <CustomDropdown
+              value={joinerPeriod}
+              onChange={setJoinerPeriod}
+              options={['All', 'This Month', 'Last Month', 'This Year', 'Last Year', 'Future Month']}
+            />
           </div>
           <div className="space-y-4 flex-1 overflow-y-auto pr-2">
-            {recentJoiners.length > 0 ? recentJoiners.map((rj) => (
+            {filteredRecentJoiners.length > 0 ? filteredRecentJoiners.map((rj) => (
               <div key={rj._id} className="flex justify-between items-center">
                 <div className="flex items-center gap-3">
                   <img src={rj.profileImage ? getImageUrl(rj.profileImage) : `https://ui-avatars.com/api/?name=${encodeURIComponent(rj.name)}&background=random`} alt={rj.name} className="w-10 h-10 rounded-full border-2 border-white dark:border-[#2b2722] shadow-sm object-cover" />
@@ -939,7 +1000,7 @@ const HRDashboard = () => {
                 </div>
                 <span className="text-[11px] font-bold text-gray-400 dark:text-gray-400">{new Date(rj.joinDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
               </div>
-            )) : <p className="text-sm text-gray-400 text-center py-4">No recent joiners</p>}
+            )) : <p className="text-sm text-gray-400 text-center py-4">No joiners found for {joinerPeriod}</p>}
           </div>
         </Card>
 
@@ -1075,7 +1136,8 @@ const HRDashboard = () => {
         </Card>
       </div>
 
-      {/* 7. Bottom Row (Analytics) */}
+      {/* 7. Bottom Row (Analytics) - Hidden per user request */}
+      {/*
       <Card className="p-6 hover:!border-purple-500 dark:hover:!border-purple-400 transition-colors duration-300">
         <div className="flex justify-between items-center mb-6">
           <h3 className="font-bold text-gray-900 dark:text-white">HR Analytics</h3>
@@ -1115,15 +1177,16 @@ const HRDashboard = () => {
           ))}
         </div>
       </Card>
+      */}
 
       {/* Leave Details Modal */}
       {selectedLeaveApproval && createPortal(
         <div
-          className="fixed inset-0 z-[99999] flex items-center justify-center p-4 sm:p-6 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
+          className="fixed inset-0 z-[99999] bg-black/50 backdrop-blur-xs flex justify-end animate-in fade-in duration-200"
           onClick={() => setSelectedLeaveApproval(null)}
         >
           <div
-            className="bg-white dark:bg-[#161311] rounded-3xl max-w-lg w-full shadow-2xl border border-gray-100 dark:border-[#28251e] relative my-auto flex flex-col max-h-[90vh] overflow-hidden transform animate-in zoom-in-95 duration-200"
+            className="bg-white dark:bg-[#161311] w-full max-w-md h-full shadow-2xl border-l border-gray-100 dark:border-[#28251e] flex flex-col overflow-hidden transform animate-in slide-in-from-right duration-300"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header (Fixed at top) */}

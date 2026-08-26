@@ -5,7 +5,7 @@ import { toast } from 'react-hot-toast';
 import {
   Calendar, Clock, Plane, CheckCircle2, Plus, Search,
   SlidersHorizontal, Download, X, AlertCircle, Info,
-  ArrowRight, User, FileText, ChevronLeft, ChevronRight, MoreHorizontal, CalendarDays, ChevronDown
+  ArrowRight, User, FileText, ChevronLeft, ChevronRight, MoreHorizontal, CalendarDays, ChevronDown, Edit
 } from 'lucide-react';
 import { io } from 'socket.io-client';
 import ViewPolicyDrawer from '../../components/modals/ViewPolicyDrawer';
@@ -639,12 +639,10 @@ const LeaveManagement = ({ isChild = false }) => {
               </thead>
               <tbody>
                 {[
-                  { name: 'Casual Leave (CL)', balance: formatDays(casualBalance), used: formatDays(usedCasual), total: formatDays(QUOTAS.casual || 12), icon: Calendar, color: 'text-purple-600 dark:text-purple-400', bg: 'bg-purple-50 dark:bg-purple-950/60 border border-purple-100 dark:border-purple-900/40' },
-                  { name: 'Sick Leave (SL)', balance: formatDays(sickBalance), used: formatDays(usedSick), total: formatDays(QUOTAS.sick || 10), icon: CheckCircle2, color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-100 dark:border-emerald-900/40' },
-                  { name: 'Earned Leave (EL)', balance: formatDays(annualBalance), used: formatDays(usedEarned), total: formatDays(QUOTAS.earned || 20), icon: FileText, color: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50 dark:bg-amber-950/60 border border-amber-100 dark:border-amber-900/40' },
-                  { name: 'Emergency Leave (EML)', balance: formatDays(emergencyBalance), used: formatDays(usedEmergency), total: formatDays(QUOTAS.emergency || 5), icon: AlertCircle, color: 'text-red-600 dark:text-red-400', bg: 'bg-red-50 dark:bg-red-950/60 border border-red-100 dark:border-red-900/40' },
-                  { name: 'Compensatory Off (CO)', balance: formatDays(compOffBalance), used: formatDays(usedCompOff), total: formatDays(QUOTAS.compOff || 3), icon: Clock, color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-950/60 border border-blue-100 dark:border-blue-900/40' },
-                  { name: 'Optional Holiday (OH)', balance: formatDays(optionalBalance), used: formatDays(usedOptional), total: formatDays(QUOTAS.optionalHoliday || 1), icon: FileText, color: 'text-rose-600 dark:text-rose-400', bg: 'bg-rose-50 dark:bg-rose-950/60 border border-rose-100 dark:border-rose-900/40' }
+                  { name: 'Casual Leave (CL)', balance: Math.round(casualBalance), used: Math.round(usedCasual), total: Math.round(QUOTAS.casual || 12), icon: Calendar, color: 'text-purple-600 dark:text-purple-400', bg: 'bg-purple-50 dark:bg-purple-950/60 border border-purple-100 dark:border-purple-900/40' },
+                  { name: 'Sick Leave (SL)', balance: Math.round(sickBalance), used: Math.round(usedSick), total: Math.round(QUOTAS.sick || 10), icon: CheckCircle2, color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-100 dark:border-emerald-900/40' },
+                  { name: 'Earned Leave (EL)', balance: Math.round(annualBalance), used: Math.round(usedEarned), total: Math.round(QUOTAS.earned || 20), icon: FileText, color: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50 dark:bg-amber-950/60 border border-amber-100 dark:border-amber-900/40' },
+                  { name: 'Emergency Leave (EML)', balance: Math.round(emergencyBalance), used: Math.round(usedEmergency), total: Math.round(QUOTAS.emergency || 5), icon: AlertCircle, color: 'text-red-600 dark:text-red-400', bg: 'bg-red-50 dark:bg-red-950/60 border border-red-100 dark:border-red-900/40' }
                 ].map((row, idx) => (
                   <tr key={idx} className="border-b border-gray-50 dark:border-gray-800 last:border-0 hover:bg-gray-50 dark:hover:bg-[#162722]/50 transition-all duration-150 cursor-pointer">
                     <td className="px-4 py-2 flex items-center gap-3">
@@ -753,26 +751,34 @@ const LeaveManagement = ({ isChild = false }) => {
               now.setHours(0, 0, 0, 0);
               const upcoming = leaves.filter(l => new Date(l.startDate) >= now && (l.status === 'approved' || l.status === 'pending'));
               if (upcoming.length > 0) {
-                return upcoming.slice(0, 3).map((l, idx) => (
-                  <div key={idx} onClick={() => setIsUpcomingLeavesDrawerOpen(true)} className="flex gap-2.5 p-2 border border-gray-100 dark:border-gray-800 rounded-xl hover:!border-blue-500 dark:hover:!border-blue-400 transition-colors cursor-pointer hover:bg-slate-50/50 dark:hover:bg-[#162722]/40 shrink-0">
-                    <div className="bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 rounded-lg p-1.5 flex flex-col items-center justify-center min-w-[54px] shrink-0">
-                      <span className="text-[8px] font-bold uppercase leading-none">{new Date(l.startDate).toLocaleString('default', { month: 'short' })}</span>
-                      <span className="text-sm font-black leading-none my-0.5">{new Date(l.startDate).getDate()}</span>
-                      <span className="text-[7px] font-semibold uppercase leading-none">{new Date(l.startDate).toLocaleString('default', { weekday: 'short' })}</span>
-                    </div>
-                    <div className="flex-1 flex justify-between min-w-0 items-center">
-                      <div className="min-w-0">
-                        <h4 className="font-bold text-gray-900 dark:text-gray-100 capitalize text-xs truncate">{l.leaveType} Leave</h4>
-                        <p className="text-[10px] text-gray-500 truncate"><span className="font-semibold">Reason:</span> {l.reason || 'N/A'}</p>
-                        <p className="text-[8px] text-gray-400">Applied: {new Date(l.createdAt).toLocaleDateString()}</p>
+                return upcoming.slice(0, 3).map((l, idx) => {
+                  const sDate = new Date(l.startDate);
+                  const eDate = new Date(l.endDate);
+                  const isMultiDay = sDate.toDateString() !== eDate.toDateString();
+                  return (
+                    <div key={idx} onClick={() => setIsUpcomingLeavesDrawerOpen(true)} className="flex gap-2.5 p-2.5 border border-gray-100 dark:border-gray-800 rounded-xl hover:!border-blue-500 dark:hover:!border-blue-400 transition-all cursor-pointer hover:bg-slate-50/50 dark:hover:bg-[#162722]/40 shrink-0 shadow-2xs">
+                      <div className="bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 rounded-xl p-1.5 flex flex-col items-center justify-center min-w-[56px] shrink-0 border border-blue-100 dark:border-blue-800/40">
+                        <span className="text-[9px] font-black uppercase tracking-wider leading-none">{sDate.toLocaleString('default', { month: 'short' })}</span>
+                        <span className="text-base font-extrabold leading-none my-1">{sDate.getDate()}</span>
+                        <span className="text-[8px] font-bold uppercase leading-none opacity-80">{sDate.toLocaleString('default', { weekday: 'short' })}</span>
                       </div>
-                      <div className="flex flex-col items-end justify-between shrink-0 ml-2">
-                        <span className="text-[10px] font-bold text-gray-700 dark:text-gray-300">{l.totalDays} Day(s)</span>
-                        <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded-full ${getStatusColor(l.status)} capitalize`}>{l.status}</span>
+                      <div className="flex-1 flex justify-between min-w-0 items-center">
+                        <div className="min-w-0 space-y-0.5">
+                          <h4 className="font-extrabold text-gray-900 dark:text-gray-100 capitalize text-xs truncate">{l.leaveType} Leave</h4>
+                          <p className="text-[10px] text-gray-500 truncate"><span className="font-semibold text-gray-600 dark:text-gray-400">Reason:</span> {l.reason || 'N/A'}</p>
+                          <p className="text-[9px] text-indigo-600 dark:text-indigo-400 font-bold truncate">
+                            📅 {sDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}
+                            {isMultiDay && ` - ${eDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}`}
+                          </p>
+                        </div>
+                        <div className="flex flex-col items-end justify-between shrink-0 ml-2 h-full">
+                          <span className="text-[10px] font-extrabold text-gray-700 dark:text-gray-300">{l.totalDays} Day(s)</span>
+                          <span className={`text-[8px] font-extrabold px-2 py-0.5 rounded-full ${getStatusColor(l.status)} capitalize`}>{l.status}</span>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ));
+                  );
+                });
               } else {
                 return (
                   <div className="text-center py-8 text-gray-500 font-medium text-xs">No upcoming leaves found.</div>
@@ -806,7 +812,11 @@ const LeaveManagement = ({ isChild = false }) => {
                 { _id: 'p3', name: 'Earned Leave (EL)', type: 'earned', annualAllowance: elAllowance || 20, carryForwardLimit: cfEarned || 5, description: '20 Days earned annual leave. Maximum 5 days carry forward allowed per calendar year.' },
                 { _id: 'p4', name: 'Compensatory Off (CO)', type: 'compoff', annualAllowance: 3, carryForwardLimit: 0, description: 'Earned by working on non-working days or holidays with prior manager approval.' }
               ]).filter(p => !(`${p.type || ''} ${p.name || ''}`).toLowerCase().includes('maternity')).slice(0, 4).map((p, idx) => (
-                <div key={p._id || idx} className="p-2.5 border border-gray-100 dark:border-gray-800/80 hover:!border-purple-500/80 dark:hover:!border-purple-400/80 transition-colors rounded-xl bg-gray-50/50 dark:bg-[#15231f]">
+                <div
+                  key={p._id || idx}
+                  onClick={() => setIsPolicyDrawerOpen(true)}
+                  className="p-2.5 border border-gray-100 dark:border-gray-800/80 hover:!border-purple-500/80 dark:hover:!border-purple-400/80 transition-all rounded-xl bg-gray-50/50 dark:bg-[#15231f] cursor-pointer hover:shadow-xs"
+                >
                   <div className="flex justify-between items-start mb-1">
                     <h4 className="text-xs font-bold text-gray-900 dark:text-white">{p.name}</h4>
                     <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400 border border-purple-100 dark:border-purple-900/40">
@@ -887,8 +897,12 @@ const LeaveManagement = ({ isChild = false }) => {
                       </span>
                     </td>
                     <td className="py-2 px-3 text-center whitespace-nowrap">
-                      <button onClick={(e) => { e.stopPropagation(); setSelectedLeave(lv); setIsModalOpen(true); }} className="p-1 hover:bg-gray-250 rounded text-gray-500">
-                        <MoreHorizontal size={16} />
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setSelectedLeave(lv); setIsModalOpen(true); }}
+                        title="Edit Leave Request"
+                        className="p-1.5 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 rounded-lg text-indigo-600 dark:text-indigo-400 transition-colors cursor-pointer border-none bg-transparent"
+                      >
+                        <Edit size={14} />
                       </button>
                     </td>
                   </tr>

@@ -282,17 +282,6 @@ const checkUserLeaveBalance = async (userId, leaveTypeInput, daysRequested, excl
   const now = new Date();
   const month = now.getMonth() + 1;
   const year = now.getFullYear();
-  try {
-    const balance = await LeaveBalance.findOne({ employeeId: userId, month, year });
-    if (balance) {
-      if (balance.casualLeave !== undefined) quotas.casual = balance.casualLeave;
-      if (balance.sickLeave !== undefined) quotas.sick = balance.sickLeave;
-      if (balance.earnedLeave !== undefined) quotas.earned = balance.earnedLeave;
-      if (balance.emergencyLeave !== undefined) quotas.emergency = balance.emergencyLeave;
-      if (balance.compOff !== undefined) quotas.compOff = balance.compOff;
-      if (balance.otherLeaves !== undefined) quotas.optionalHoliday = balance.otherLeaves;
-    }
-  } catch (_) {}
 
   let catKey = 'casual';
   let categoryName = 'Casual Leave';
@@ -304,18 +293,28 @@ const checkUserLeaveBalance = async (userId, leaveTypeInput, daysRequested, excl
   else if (lType.includes('optional') || lType === 'oh') { catKey = 'optionalHoliday'; categoryName = 'Optional Holiday'; }
   else if (lType.includes('casual') || lType === 'cl') { catKey = 'casual'; categoryName = 'Casual Leave'; }
 
-  const totalQuota = quotas[catKey] || 0;
+  let hasBalanceDoc = false;
+  let directBalanceVal = 0;
 
-  const query = {
-    user: userId,
-    status: { $in: ['approved', 'pending'] }
-  };
-  if (excludeLeaveId) {
-    query._id = { $ne: excludeLeaveId };
-  }
+  try {
+    const balance = await LeaveBalance.findOne({ employeeId: userId, month, year });
+    if (balance) {
+      hasBalanceDoc = true;
+      if (catKey === 'casual' && balance.casualLeave !== undefined) directBalanceVal = balance.casualLeave;
+      else if (catKey === 'sick' && balance.sickLeave !== undefined) directBalanceVal = balance.sickLeave;
+      else if (catKey === 'earned' && balance.earnedLeave !== undefined) directBalanceVal = balance.earnedLeave;
+      else if (catKey === 'emergency' && balance.emergencyLeave !== undefined) directBalanceVal = balance.emergencyLeave;
+      else if (catKey === 'compOff' && balance.compOff !== undefined) directBalanceVal = balance.compOff;
+      else if (catKey === 'optionalHoliday' && balance.otherLeaves !== undefined) directBalanceVal = balance.otherLeaves;
+    }
+  } catch (_) {}
 
+  const policyQuota = quotas[catKey] || 0;
+
+  // Calculate actual approved + pending used days for this category
+  const query = { user: userId, status: { $in: ['approved', 'pending'] } };
+  if (excludeLeaveId) query._id = { $ne: excludeLeaveId };
   const existingLeaves = await Leave.find(query);
-
   const usedDays = existingLeaves.filter(l => {
     const lt = (l.leaveType || '').toLowerCase();
     if (catKey === 'sick') return lt.includes('sick') || lt === 'sl';
@@ -326,13 +325,19 @@ const checkUserLeaveBalance = async (userId, leaveTypeInput, daysRequested, excl
     return lt.includes('casual') || lt === 'cl';
   }).reduce((sum, l) => sum + (l.totalDays || 1), 0);
 
-  const remainingBalance = Math.max(0, totalQuota - usedDays);
+  // Determine effective allowance quota (max of policy quota and explicit balance override if non-zero)
+  let effectiveQuota = policyQuota;
+  if (hasBalanceDoc && directBalanceVal > 0) {
+    effectiveQuota = Math.max(directBalanceVal, policyQuota);
+  }
+
+  const remainingBalance = Math.max(0, effectiveQuota - usedDays);
   const isSufficient = remainingBalance >= daysRequested;
 
   return {
     catKey,
     categoryName,
-    totalQuota,
+    totalQuota: effectiveQuota,
     usedDays,
     remainingBalance,
     isSufficient
@@ -999,15 +1004,29 @@ exports.getAllLeaves = async (req, res) => {
 const Holiday = require('../models/Holiday');
 
 const getSubordinateUserIds = async (user) => {
-  if (user.role === 'admin' || user.role === 'hr') {
-    const allUsers = await User.find({ _id: { $ne: user.id } }).select('_id');
+  const userRole = (user.role || '').toLowerCase();
+  const empDoc = await Employee.findOne({ $or: [{ _id: user.id }, { userId: user.id }] });
+  const empRole = (empDoc?.role || '').toLowerCase();
+
+  if (['admin', 'hr', 'manager', 'team manager', 'team_manager'].includes(userRole) ||
+      ['admin', 'hr', 'manager', 'team manager', 'team_manager'].includes(empRole)) {
+    const allUsers = await User.find({}).select('_id');
     return allUsers.map(u => u._id);
   }
-  const subordinates = await User.find({ reportingManager: user.id }).select('_id');
-  let subIds = subordinates.map(s => s._id).filter(id => String(id) !== String(user.id));
-  if (subIds.length === 0) {
-    const allUsers = await User.find({ role: { $ne: 'admin' }, _id: { $ne: user.id } }).select('_id');
-    subIds = allUsers.map(u => u._id);
+
+  const queryConditions = [{ reportingManager: user.id }, { managerId: user.id }];
+  if (empDoc) {
+    queryConditions.push({ reportingManager: empDoc._id });
+    queryConditions.push({ managerId: empDoc._id });
+  }
+
+  const subordinates = await User.find({ $or: queryConditions }).select('_id');
+  let subIds = subordinates.map(s => s._id);
+  subIds.push(user.id);
+
+  if (subIds.length <= 1) {
+    const allUsers = await User.find({}).select('_id');
+    return allUsers.map(u => u._id);
   }
   return subIds;
 };
@@ -1020,11 +1039,11 @@ exports.getManagerStats = async (req, res) => {
 
     const now = new Date();
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+    const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
 
     const onLeaveToday = await Leave.countDocuments({
       user: { $in: subIds },
-      status: 'approved',
+      status: { $in: ['approved', 'pending', 'cancellation_pending'] },
       startDate: { $lte: endOfToday },
       endDate: { $gte: startOfToday }
     });
@@ -1032,7 +1051,7 @@ exports.getManagerStats = async (req, res) => {
     const next7Days = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
     const upcoming = await Leave.countDocuments({
       user: { $in: subIds },
-      status: 'approved',
+      status: { $in: ['approved', 'pending', 'cancellation_pending'] },
       startDate: { $gt: endOfToday, $lte: next7Days }
     });
 
@@ -1088,7 +1107,7 @@ exports.getEmployeesOnLeaveToday = async (req, res) => {
 
     const leaves = await Leave.find({
       user: { $in: queryUserIds },
-      status: 'approved',
+      status: { $in: ['approved', 'pending', 'cancellation_pending'] },
       startDate: { $lte: endOfToday },
       endDate: { $gte: startOfToday }
     }).populate('user', 'name role department email designation');
@@ -1128,7 +1147,7 @@ exports.getUpcomingLeavesList = async (req, res) => {
 
     const leaves = await Leave.find({
       user: { $in: queryUserIds },
-      status: 'approved',
+      status: { $in: ['approved', 'pending', 'cancellation_pending'] },
       startDate: { $gt: endOfToday, $lte: next7Days }
     }).populate('user', 'name role department email designation').sort({ startDate: 1 });
 
@@ -1167,24 +1186,48 @@ exports.getTeamLeaves = async (req, res) => {
 
     if (status === 'pending') {
       query.status = { $in: ['pending', 'cancellation_pending'] };
-    } else if (status && status !== 'all') {
+    } else if (status === 'on_leave_today') {
+      const now = new Date();
+      const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+      query.status = { $in: ['approved', 'pending', 'cancellation_pending'] };
+      query.startDate = { $lte: endOfToday };
+      query.endDate = { $gte: startOfToday };
+    } else if (status === 'upcoming') {
+      const now = new Date();
+      const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+      const next7Days = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+      query.status = { $in: ['approved', 'pending', 'cancellation_pending'] };
+      query.startDate = { $gt: endOfToday, $lte: next7Days };
+    } else if (status === 'this_month') {
+      const now = new Date();
+      const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      const currentMonthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+      query.$or = [
+        { createdAt: { $gte: currentMonthStart, $lte: currentMonthEnd } },
+        { startDate: { $gte: currentMonthStart, $lte: currentMonthEnd } },
+        { endDate: { $gte: currentMonthStart, $lte: currentMonthEnd } }
+      ];
+    } else if (status === 'all') {
+      // No status filter -> show all requests
+    } else if (status) {
       query.status = status;
     } else if (!status) {
       query.status = { $in: ['pending', 'cancellation_pending'] };
     }
 
-    if (startDate) {
+    if (startDate && startDate !== 'undefined' && startDate !== 'null') {
       const start = new Date(startDate);
       if (!isNaN(start.getTime())) {
-        query.startDate = { ...query.startDate, $gte: start };
+        query.startDate = query.startDate && typeof query.startDate === 'object' ? { ...query.startDate, $gte: start } : { $gte: start };
       }
     }
 
-    if (endDate) {
+    if (endDate && endDate !== 'undefined' && endDate !== 'null') {
       const end = new Date(endDate);
       end.setHours(23, 59, 59, 999);
       if (!isNaN(end.getTime())) {
-        query.endDate = { ...query.endDate, $lte: end };
+        query.endDate = query.endDate && typeof query.endDate === 'object' ? { ...query.endDate, $lte: end } : { $lte: end };
       }
     }
 
@@ -1192,9 +1235,18 @@ exports.getTeamLeaves = async (req, res) => {
     const baseQuery = { user: { $in: subIds } };
     const allTeamLeaves = await Leave.find(baseQuery);
 
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+    const next7Days = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+    const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
     const counts = {
       all: allTeamLeaves.length,
       pending: allTeamLeaves.filter(l => l.status === 'pending' || l.status === 'cancellation_pending').length,
+      on_leave_today: allTeamLeaves.filter(l => (l.status === 'approved' || l.status === 'pending' || l.status === 'cancellation_pending') && new Date(l.startDate) <= endOfToday && new Date(l.endDate) >= startOfToday).length,
+      upcoming: allTeamLeaves.filter(l => (l.status === 'approved' || l.status === 'pending' || l.status === 'cancellation_pending') && new Date(l.startDate) > endOfToday && new Date(l.startDate) <= next7Days).length,
+      this_month: allTeamLeaves.filter(l => new Date(l.createdAt) >= currentMonthStart).length,
       approved: allTeamLeaves.filter(l => l.status === 'approved').length,
       cancellation_pending: allTeamLeaves.filter(l => l.status === 'cancellation_pending').length,
       rejected: allTeamLeaves.filter(l => l.status === 'rejected').length,

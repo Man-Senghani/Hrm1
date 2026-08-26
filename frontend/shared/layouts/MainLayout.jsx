@@ -124,12 +124,7 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
   // Helper to normalize navigation paths across standalone sub-apps and unified admin
   const handleNav = (targetPath, options) => {
     if (!targetPath) return;
-    let cleanPath = targetPath;
-    const prefix = `/${activeRole}`;
-    if (!cleanPath.startsWith(prefix)) {
-      cleanPath = cleanPath.startsWith('/') ? `${prefix}${cleanPath}` : `${prefix}/${cleanPath}`;
-    }
-    navigate(cleanPath, typeof options === 'object' && options !== null ? options : { state: options });
+    navigate(targetPath, typeof options === 'object' && options !== null ? options : { state: options });
   };
   const [unreadChats, setUnreadChats] = useState([]);
   const [isChatPopupOpen, setIsChatPopupOpen] = useState(false);
@@ -414,7 +409,7 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
   }, [role, location.pathname]);
 
   const getMenuItemsByRole = (currentRole) => {
-    const prefix = `/${currentRole}`;
+    const prefix = '';
     switch (currentRole) {
       case 'hr':
         return [
@@ -773,7 +768,7 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
 
                   {activeRole === 'manager' && (
                     <>
-                      <button onClick={() => { setIsQuickActionOpen(false); handleNav('/leave'); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-[#162722] text-xs font-bold text-gray-700 dark:text-slate-300 rounded-xl transition-colors border-none bg-transparent cursor-pointer">
+                      <button onClick={() => { setIsQuickActionOpen(false); window.dispatchEvent(new CustomEvent('trigger-open-leave-approval-drawer')); handleNav('/leave'); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-[#162722] text-xs font-bold text-gray-700 dark:text-slate-300 rounded-xl transition-colors border-none bg-transparent cursor-pointer">
                         Approve / Reject Leave
                       </button>
                       <button onClick={() => { setIsQuickActionOpen(false); handleNav('/employees'); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-[#162722] text-xs font-bold text-gray-700 dark:text-slate-300 rounded-xl transition-colors border-none bg-transparent cursor-pointer">
@@ -1175,10 +1170,28 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
                     {items.map((item) => {
                       let isActive = false;
                       const isDashboard = item.name === 'Dashboard';
+
+                      // Extract core route path by stripping role prefixes
+                      const currentSegments = location.pathname.split('/').filter(Boolean);
+                      const corePath = '/' + currentSegments.filter(s => !['admin', 'hr', 'employee', 'manager'].includes(s)).join('/');
+                      const lastSegment = currentSegments[currentSegments.length - 1] || '';
+
                       if (isDashboard) {
-                        isActive = location.pathname === '/' || location.pathname === '/dashboard' || location.pathname === `/${activeRole}` || location.pathname === `/${activeRole}/dashboard` || location.pathname === `/${activeRole}/`;
+                        isActive = location.pathname === '/' || 
+                                   location.pathname === '/dashboard' || 
+                                   corePath === '/' || 
+                                   corePath === '/dashboard' || 
+                                   lastSegment === 'dashboard' || 
+                                   lastSegment === activeRole;
                       } else {
-                        isActive = location.pathname === item.path || (item.path !== '/' && location.pathname.startsWith(item.path + '/'));
+                        const itemCore = '/' + item.path.split('/').filter(Boolean).filter(s => !['admin', 'hr', 'employee', 'manager'].includes(s)).join('/');
+                        const isLeaveAlias = (corePath === '/leave' || corePath === '/leaves') && (itemCore === '/leave' || itemCore === '/leaves');
+                        isActive = isLeaveAlias ||
+                                   (corePath !== '/' && itemCore !== '/' && corePath === itemCore) ||
+                                   (itemCore !== '/' && corePath.startsWith(itemCore + '/')) ||
+                                   location.pathname === item.path ||
+                                   (item.path !== '/' && location.pathname.startsWith(item.path + '/')) ||
+                                   (lastSegment && itemCore.endsWith('/' + lastSegment));
                       }
                       return (
                         <Link

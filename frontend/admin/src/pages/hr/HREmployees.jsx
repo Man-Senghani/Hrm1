@@ -225,12 +225,18 @@ const HREmployees = () => {
   const activeFiltersCount = filterRole.length + filterStatus.length;
 
   return (
-    <div className="animate-fade-in w-full pb-12">
-      {/* 1. Page Title & Action Buttons Section */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+    <div className="p-4 md:p-8 space-y-6 max-w-[1600px] mx-auto animate-fade-in pb-16 text-slate-800 dark:text-slate-100 font-sans">
+      {/* 1. Top Bar / Breadcrumb Header */}
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-gray-100 dark:border-[#162722] pb-6">
         <div>
-          <h1 className="text-[32px] font-bold tracking-tight text-gray-900 dark:text-white leading-none">Employees</h1>
-          <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mt-2">Directory of everyone in your company.</p>
+          <div className="flex items-center gap-2 text-xs font-semibold text-gray-500 dark:text-slate-400 mb-1">
+            <span>Workforce Management</span>
+            <span>/</span>
+            <span className="text-[#00a76b] dark:text-[#00a76b]">Employees</span>
+          </div>
+          <h1 className="text-2xl md:text-3xl font-extrabold text-gray-900 dark:text-white tracking-tight">
+            Employee Directory
+          </h1>
         </div>
         <div className="flex items-center gap-3">
           <button
@@ -241,7 +247,7 @@ const HREmployees = () => {
             <span>Export</span>
           </button>
           <button
-            onClick={() => navigate(`${targetPrefix}/create-user`)}
+            onClick={() => navigate('/create-user')}
             className="verdant-btn-outline h-10 px-5 flex items-center gap-2 text-sm font-semibold rounded-full border border-gray-200 dark:border-[#1a2d29] bg-white dark:bg-[#111c18] hover:bg-gray-50 dark:hover:bg-[#162722] text-[#374151] dark:text-[#cbd5e1] transition-all shadow-sm cursor-pointer"
           >
             <Plus size={15} />

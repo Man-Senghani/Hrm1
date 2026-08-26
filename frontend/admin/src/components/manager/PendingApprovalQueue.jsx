@@ -1,13 +1,16 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import axios from 'axios';
 import { toast } from 'react-hot-toast';
 import { Search, Filter, CheckCircle2, XCircle, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react';
 import CustomDatePicker from '../CustomDatePicker';
 import ActionConfirmModal from '../ActionConfirmModal';
 
-const PendingApprovalQueue = ({ onAction }) => {
+const PendingApprovalQueue = ({ onAction, onCountsUpdate }) => {
   const [leaves, setLeaves] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [showBulkConfirmModal, setShowBulkConfirmModal] = useState(false);
+  const [isBulkApproving, setIsBulkApproving] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
@@ -20,11 +23,37 @@ const PendingApprovalQueue = ({ onAction }) => {
   const [counts, setCounts] = useState({
     all: 0,
     pending: 0,
+    on_leave_today: 0,
+    upcoming: 0,
+    this_month: 0,
     approved: 0,
     cancellation_pending: 0,
     rejected: 0,
     cancelled: 0
   });
+
+  useEffect(() => {
+    const handleSetFilter = (e) => {
+      if (e.detail) {
+        setRequestFilter(e.detail);
+        setCurrentPage(1);
+      }
+    };
+    window.addEventListener('trigger-filter-leave-table', handleSetFilter);
+    return () => window.removeEventListener('trigger-filter-leave-table', handleSetFilter);
+  }, []);
+
+  const getFilterLabel = (val) => {
+    if (val === 'pending') return `Pending (${counts.pending || 0})`;
+    if (val === 'on_leave_today') return `On Leave Today (${counts.on_leave_today || 0})`;
+    if (val === 'upcoming') return `Upcoming Leaves (${counts.upcoming || 0})`;
+    if (val === 'this_month') return `This Month (${counts.this_month || 0})`;
+    if (val === 'approved') return `Approved (${counts.approved || 0})`;
+    if (val === 'cancellation_pending') return `Cancellation Requested (${counts.cancellation_pending || 0})`;
+    if (val === 'rejected') return `Rejected (${counts.rejected || 0})`;
+    if (val === 'cancelled') return `Cancelled (${counts.cancelled || 0})`;
+    return `All (${counts.all || 0})`;
+  };
 
   const fetchPending = async () => {
     try {
@@ -43,6 +72,9 @@ const PendingApprovalQueue = ({ onAction }) => {
       setLeaves(res.data.data || []);
       if (res.data.counts) {
         setCounts(res.data.counts);
+        if (onCountsUpdate) {
+          onCountsUpdate(res.data.counts);
+        }
       }
       if (res.data.pagination) {
         setTotalPages(res.data.pagination.pages);
@@ -60,30 +92,34 @@ const PendingApprovalQueue = ({ onAction }) => {
   }, [currentPage, requestFilter, filterStartDate, filterEndDate]);
 
   useEffect(() => {
-    const handleBulkApproval = async () => {
+    const handleBulkApproval = () => {
       if (!leaves || leaves.length === 0) {
         toast.error('No pending leave requests to approve.');
         return;
       }
-
-      const confirmApprove = window.confirm(`Are you sure you want to approve all ${leaves.length} pending leave requests?`);
-      if (!confirmApprove) return;
-
-      try {
-        const res = await axios.put('/api/leaves/manager/bulk-approve', { ids: leaves.map(l => l._id) }, {
-          headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` }
-        });
-        toast.success(res.data.message || 'Bulk approval successful');
-        fetchPending();
-        if (onAction) onAction();
-      } catch (err) {
-        toast.error(err.response?.data?.message || 'Failed to perform bulk approval');
-      }
+      setShowBulkConfirmModal(true);
     };
 
     window.addEventListener('trigger-bulk-approval', handleBulkApproval);
     return () => window.removeEventListener('trigger-bulk-approval', handleBulkApproval);
   }, [leaves]);
+
+  const confirmBulkApproveSubmit = async () => {
+    try {
+      setIsBulkApproving(true);
+      const res = await axios.put('/api/leaves/manager/bulk-approve', { ids: leaves.map(l => l._id) }, {
+        headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` }
+      });
+      toast.success(res.data.message || 'Bulk approval successful');
+      fetchPending();
+      if (onAction) onAction();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to perform bulk approval');
+    } finally {
+      setIsBulkApproving(false);
+      setShowBulkConfirmModal(false);
+    }
+  };
 
   const handleApprove = async (id) => {
     try {
@@ -187,33 +223,31 @@ const PendingApprovalQueue = ({ onAction }) => {
               onClick={() => setFilterDropdownOpen(!filterDropdownOpen)}
               className="flex items-center gap-1.5 text-xs font-bold bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700 px-3 py-1.5 rounded-lg h-9 text-gray-600 dark:text-gray-300 outline-none cursor-pointer transition-all"
             >
-              {requestFilter === 'all' && `All (${counts.all || 0})`}
-              {requestFilter === 'pending' && `Pending (${counts.pending || 0})`}
-              {requestFilter === 'approved' && `Approved (${counts.approved || 0})`}
-              {requestFilter === 'cancellation_pending' && `Cancellation Requested (${counts.cancellation_pending || 0})`}
-              {requestFilter === 'rejected' && `Rejected (${counts.rejected || 0})`}
-              {requestFilter === 'cancelled' && `Cancelled (${counts.cancelled || 0})`}
+              {getFilterLabel(requestFilter)}
               <ChevronDown size={14} className={`transition-transform duration-200 ${filterDropdownOpen ? 'rotate-180' : ''}`} />
             </button>
 
             {filterDropdownOpen && (
               <>
                 <div className="fixed inset-0 z-40" onClick={() => setFilterDropdownOpen(false)} />
-                <div className="absolute right-0 mt-1 w-48 bg-white dark:bg-[#1e293b] border border-gray-150 dark:border-gray-800 rounded-xl shadow-xl z-50 py-1 overflow-hidden animate-in fade-in slide-in-from-top-1 duration-150">
+                <div className="absolute right-0 mt-1 w-52 bg-white dark:bg-[#1e293b] border border-gray-150 dark:border-gray-800 rounded-xl shadow-xl z-50 py-1 overflow-hidden animate-in fade-in slide-in-from-top-1 duration-150">
                   {[
-                    { value: 'all', label: 'All', count: counts.all || 0 },
-                    { value: 'pending', label: 'Pending', count: counts.pending || 0 },
-                    { value: 'approved', label: 'Approved', count: counts.approved || 0 },
-                    { value: 'cancellation_pending', label: 'Cancellation Requested', count: counts.cancellation_pending || 0 },
-                    { value: 'rejected', label: 'Rejected', count: counts.rejected || 0 },
-                    { value: 'cancelled', label: 'Cancelled', count: counts.cancelled || 0 }
+                    { value: 'all', label: `All (${counts.all || 0})` },
+                    { value: 'pending', label: `Pending (${counts.pending || 0})` },
+                    { value: 'on_leave_today', label: 'On Leave Today' },
+                    { value: 'upcoming', label: 'Upcoming Leaves' },
+                    { value: 'this_month', label: 'This Month' },
+                    { value: 'approved', label: `Approved (${counts.approved || 0})` },
+                    { value: 'cancellation_pending', label: `Cancellation Requested (${counts.cancellation_pending || 0})` },
+                    { value: 'rejected', label: `Rejected (${counts.rejected || 0})` },
+                    { value: 'cancelled', label: `Cancelled (${counts.cancelled || 0})` }
                   ].map(opt => (
                     <button
                       key={opt.value}
                       onClick={() => { setRequestFilter(opt.value); setCurrentPage(1); setFilterDropdownOpen(false); }}
                       className={`w-full text-left px-4 py-2 text-xs font-bold transition-colors cursor-pointer ${requestFilter === opt.value ? 'bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800/50'}`}
                     >
-                      {opt.label} ({opt.count})
+                      {opt.label}
                     </button>
                   ))}
                 </div>
@@ -344,6 +378,53 @@ const PendingApprovalQueue = ({ onAction }) => {
         confirmVariant="danger"
         loading={rejectModal.loading}
       />
+
+      {/* ⚡ Custom Centered Modal for Bulk Approval */}
+      {showBulkConfirmModal && createPortal(
+        <div
+          className="fixed inset-0 z-[999999] flex items-center justify-center bg-black/60 backdrop-blur-md p-4 animate-in fade-in duration-200"
+          onClick={(e) => { if (e.target === e.currentTarget) setShowBulkConfirmModal(false); }}
+        >
+          <div className="bg-white dark:bg-[#161311] border border-gray-150 dark:border-[#28251e] rounded-3xl max-w-sm w-full p-6 shadow-2xl text-center space-y-4 relative">
+            <div className="mx-auto w-14 h-14 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-900/50 flex items-center justify-center shadow-inner">
+              <CheckCircle2 size={28} />
+            </div>
+
+            <div>
+              <h3 className="text-lg font-extrabold text-gray-900 dark:text-white">Bulk Approve Leaves</h3>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Batch Request Processing</p>
+            </div>
+
+            <div className="bg-gray-50 dark:bg-[#1f1b17] p-4 rounded-2xl border border-gray-100 dark:border-[#28251e] space-y-2 text-center">
+              <p className="text-xs text-gray-700 dark:text-gray-200 font-medium leading-relaxed">
+                Are you sure you want to approve all <strong className="text-emerald-600 dark:text-emerald-400 font-extrabold">{leaves?.length || 0} pending leave requests</strong>?
+              </p>
+              <p className="text-[11px] text-gray-500 dark:text-gray-400 font-semibold leading-normal">
+                ⚡ All selected employees will be notified of approval immediately.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-center gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowBulkConfirmModal(false)}
+                className="flex-1 py-2.5 rounded-xl text-xs font-bold text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-[#25201b] hover:bg-gray-200 dark:hover:bg-[#302a24] transition-colors cursor-pointer border-none"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmBulkApproveSubmit}
+                disabled={isBulkApproving}
+                className="flex-1 py-2.5 rounded-xl text-xs font-extrabold text-white bg-emerald-600 hover:bg-emerald-700 shadow-md shadow-emerald-600/20 transition-all cursor-pointer border-none flex items-center justify-center gap-1.5 disabled:opacity-50"
+              >
+                {isBulkApproving ? 'Approving...' : 'Approve All'}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 };

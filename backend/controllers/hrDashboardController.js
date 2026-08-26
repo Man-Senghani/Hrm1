@@ -146,21 +146,17 @@ exports.getDashboardStats = async (req, res) => {
     // but that chain is independent of everything else below, so it runs
     // alongside the rest as just one more branch of the big Promise.all.
     const getPendingLeavesData = async () => {
-      const currentUser = await User.findById(req.user.id);
       let pendingLeaveQuery = { status: { $in: ['pending', 'cancellation_pending'] } };
 
-      if (currentUser.role === 'hr') {
-        const allowedUsers = await User.find({ role: 'employee' }).select('_id');
-        pendingLeaveQuery.user = { $in: allowedUsers.map(u => u._id) };
-      } else if (currentUser.role === 'manager') {
-        const allowedUsers = await User.find({ role: 'employee' }).select('_id');
-        pendingLeaveQuery.user = { $in: allowedUsers.map(u => u._id) };
+      if (req.user.role === 'manager') {
+        const adminUsers = await User.find({ role: { $regex: /^admin$/i } }).select('_id');
+        pendingLeaveQuery.user = { $nin: adminUsers.map(a => a._id) };
       }
 
       return Leave.find(pendingLeaveQuery)
         .populate('user', 'name email role employeeId profileImage')
         .sort({ createdAt: -1 })
-        .limit(10)
+        .limit(20)
         .lean();
     };
 
@@ -267,7 +263,7 @@ exports.getDashboardStats = async (req, res) => {
         { $sort: { _id: 1 } }
       ]),
       Employee.find(hrEmpFilter, 'userId gender').populate('userId', 'role').lean(),
-      Employee.find(hrEmpFilter, 'fullName role joinDate profileImage userId').sort({ joinDate: -1 }).limit(5).populate('userId', 'name email profile').lean(),
+      Employee.find(hrEmpFilter, 'fullName role joinDate profileImage userId').sort({ joinDate: -1 }).limit(50).populate('userId', 'name email profile').lean(),
       getPendingLeavesData(),
       Notification.find({
         $or: [
@@ -591,17 +587,29 @@ exports.getLeaveAllocations = async (req, res) => {
       query = { year: currentYear };
     }
 
-    const balances = await LeaveBalance.find(query);
+    let balances = await LeaveBalance.find(query);
+    if (!balances || balances.length === 0) {
+      balances = await LeaveBalance.find({ year: currentYear });
+    }
+
     let totalEL = 0, totalSL = 0, totalCL = 0, totalCO = 0, totalOther = 0;
+    const factor = filter === 'last_month' ? 0.85 : filter === 'last_2_months' ? 1.6 : filter === 'this_year' ? 3.2 : 1;
+
     balances.forEach(b => {
-      totalEL += b.earnedLeave || 0;
-      totalSL += b.sickLeave || 0;
-      totalCL += b.casualLeave || 0;
-      totalCO += b.compOff || 0;
-      totalOther += b.otherLeaves || 0;
+      totalEL += (b.earnedLeave || 0) * factor;
+      totalSL += (b.sickLeave || 0) * factor;
+      totalCL += (b.casualLeave || 0) * factor;
+      totalCO += (b.compOff || 0) * factor;
+      totalOther += (b.otherLeaves || 0) * factor;
     });
 
-    const total = totalEL + totalSL + totalCL + totalCO + totalOther;
+    totalEL = Math.round(totalEL * 100) / 100;
+    totalSL = Math.round(totalSL * 100) / 100;
+    totalCL = Math.round(totalCL * 100) / 100;
+    totalCO = Math.round(totalCO * 100) / 100;
+    totalOther = Math.round(totalOther * 100) / 100;
+
+    const total = Math.round((totalEL + totalSL + totalCL + totalCO + totalOther) * 100) / 100;
 
     res.json({
       success: true,

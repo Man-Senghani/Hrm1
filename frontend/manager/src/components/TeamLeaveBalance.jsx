@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { toast } from 'react-hot-toast';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, X, Search } from 'lucide-react';
 
 const TeamLeaveBalance = () => {
   const [balances, setBalances] = useState([]);
@@ -9,6 +9,10 @@ const TeamLeaveBalance = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
+  const [isAllDrawerOpen, setIsAllDrawerOpen] = useState(false);
+  const [allBalances, setAllBalances] = useState([]);
+  const [drawerSearch, setDrawerSearch] = useState('');
+  const [drawerLoading, setDrawerLoading] = useState(false);
 
   const fetchBalances = async () => {
     try {
@@ -28,9 +32,28 @@ const TeamLeaveBalance = () => {
     }
   };
 
+  const fetchAllBalances = async () => {
+    try {
+      setDrawerLoading(true);
+      const res = await axios.get(`/api/leaves/manager/balances?limit=100`, {
+        headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` }
+      });
+      setAllBalances(res.data.data || []);
+    } catch (err) {
+      toast.error('Failed to load full leave balances');
+    } finally {
+      setDrawerLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchBalances();
   }, [currentPage]);
+
+  const handleOpenDrawer = () => {
+    setIsAllDrawerOpen(true);
+    fetchAllBalances();
+  };
 
   const displayBalances = balances || [];
   const displayTotalItems = totalItems || 0;
@@ -49,7 +72,7 @@ const TeamLeaveBalance = () => {
     <div className="bg-white dark:bg-[#1e293b] rounded-2xl p-6 shadow-sm border border-gray-100 dark:border-gray-800 flex flex-col h-full transition-colors duration-300 hover:!border-emerald-500 dark:hover:!border-emerald-400">
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-lg font-bold text-gray-900 dark:text-white">Team Leave Balance</h2>
-        <button className="text-indigo-600 text-sm font-bold hover:underline cursor-pointer">View all</button>
+        <button onClick={handleOpenDrawer} className="text-indigo-600 text-xs font-bold hover:underline cursor-pointer border-none bg-transparent">View all &rarr;</button>
       </div>
 
       <div className="overflow-x-auto flex-1">
@@ -102,21 +125,11 @@ const TeamLeaveBalance = () => {
                         </div>
                       </div>
                     </td>
-                    <td className="py-3.5 text-center text-xs font-semibold text-gray-700 dark:text-gray-300 whitespace-nowrap">
-                      {bal.usedLeave?.casual || 0}/{bal.casualLeave}
-                    </td>
-                    <td className="py-3.5 text-center text-xs font-semibold text-gray-700 dark:text-gray-300 whitespace-nowrap">
-                      {bal.usedLeave?.sick || 0}/{bal.sickLeave}
-                    </td>
-                    <td className="py-3.5 text-center text-xs font-semibold text-gray-700 dark:text-gray-300 whitespace-nowrap">
-                      {bal.usedLeave?.earned || 0}/{bal.earnedLeave}
-                    </td>
-                    <td className="py-3.5 text-center text-xs font-semibold text-gray-700 dark:text-gray-300 whitespace-nowrap">
-                      {bal.usedLeave?.compOff || 0}/{bal.compOff}
-                    </td>
-                    <td className="py-3.5 text-center whitespace-nowrap">
-                      <span className="text-xs font-black text-indigo-600 dark:text-indigo-400">{totalUsed}/{totalAlloc}</span>
-                    </td>
+                    <td className="py-3.5 text-center text-xs font-medium text-gray-600 dark:text-gray-400">{bal.cl || 0}/{bal.totalCL || 12}</td>
+                    <td className="py-3.5 text-center text-xs font-medium text-gray-600 dark:text-gray-400">{bal.sl || 0}/{bal.totalSL || 12}</td>
+                    <td className="py-3.5 text-center text-xs font-medium text-gray-600 dark:text-gray-400">{bal.el || 0}/{bal.totalEL || 12}</td>
+                    <td className="py-3.5 text-center text-xs font-medium text-gray-600 dark:text-gray-400">{bal.co || 0}/{bal.totalCO || 5}</td>
+                    <td className="py-3.5 text-center">{renderProgressBar(totalUsed, totalAlloc)}</td>
                   </tr>
                 );
               })
@@ -157,6 +170,108 @@ const TeamLeaveBalance = () => {
           </button>
         </div>
       </div>
+
+      {/* Slide-over Drawer for All Team Leave Balances */}
+      {isAllDrawerOpen && (
+        <div className="fixed inset-0 top-0 left-0 w-screen h-screen z-[999999] overflow-hidden flex justify-end">
+          <div
+            onClick={() => setIsAllDrawerOpen(false)}
+            className="fixed inset-0 top-0 left-0 w-screen h-screen bg-black/50 backdrop-blur-md transition-opacity z-[999999]"
+          />
+          <div className="fixed top-0 right-0 bottom-0 h-screen z-[1000000] w-full max-w-[400px] bg-white dark:bg-[#161311] shadow-2xl flex flex-col border-l border-gray-200 dark:border-[#28251e]">
+            {/* Drawer Header */}
+            <div className="p-6 border-b border-gray-100 dark:border-[#28251e] flex items-center justify-between">
+              <h2 className="text-xl font-extrabold text-gray-900 dark:text-white">
+                All Team Leave Balances ({allBalances.length})
+              </h2>
+              <button
+                onClick={() => setIsAllDrawerOpen(false)}
+                className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-[#1f1b17] transition-colors cursor-pointer"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Search Bar */}
+            <div className="px-6 pt-5 pb-3">
+              <div className="relative">
+                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                <input
+                  type="text"
+                  placeholder="Search employee by name..."
+                  value={drawerSearch}
+                  onChange={(e) => setDrawerSearch(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2.5 bg-gray-50 dark:bg-[#1f1b17] border border-gray-200 dark:border-[#28251e] rounded-xl text-xs text-gray-900 dark:text-white focus:outline-none focus:border-indigo-600"
+                />
+              </div>
+            </div>
+
+            {/* Content List */}
+            <div className="flex-1 overflow-y-auto overflow-x-hidden px-6 py-3 space-y-3 custom-scrollbar">
+              {drawerLoading ? (
+                <div className="py-12 text-center text-gray-500 text-xs">Loading leave balances...</div>
+              ) : (
+                allBalances
+                  .filter(b => (b.employeeId?.name || '').toLowerCase().includes(drawerSearch.toLowerCase()))
+                  .map(b => {
+                    const empName = b.employeeId?.name || 'Unknown';
+                    let avatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(empName)}&background=random`;
+                    if (b.employeeId?.profileImage) {
+                      avatar = b.employeeId.profileImage.startsWith('http') ? b.employeeId.profileImage : `${import.meta.env.VITE_API_URL || ''}${b.employeeId.profileImage}`;
+                    }
+                    const totalUsed = b.usedLeave?.total || 0;
+                    const totalAlloc = b.totalLeave || 1;
+
+                    return (
+                      <div key={b._id} className="p-4 rounded-2xl border border-gray-100 dark:border-[#28251e] bg-white dark:bg-[#161311] shadow-xs flex flex-col gap-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-3">
+                            <img src={avatar} alt="" className="w-10 h-10 rounded-full object-cover shrink-0 shadow-sm" />
+                            <div>
+                              <h4 className="text-sm font-bold text-gray-900 dark:text-white">{empName}</h4>
+                              <p className="text-xs text-gray-500">{b.employeeId?.designation || b.employeeId?.role || 'Employee'}</p>
+                            </div>
+                          </div>
+                          <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 px-3 py-1 rounded-full">
+                            {totalUsed} / {totalAlloc} Used
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-4 gap-2 pt-2 border-t border-gray-100 dark:border-[#28251e] text-center text-xs">
+                          <div className="bg-gray-50 dark:bg-[#1f1b17] p-2 rounded-xl">
+                            <span className="text-[10px] text-gray-400 font-bold block uppercase">CL</span>
+                            <span className="font-bold text-gray-900 dark:text-white">{b.cl || 0}/{b.totalCL || 12}</span>
+                          </div>
+                          <div className="bg-gray-50 dark:bg-[#1f1b17] p-2 rounded-xl">
+                            <span className="text-[10px] text-gray-400 font-bold block uppercase">SL</span>
+                            <span className="font-bold text-gray-900 dark:text-white">{b.sl || 0}/{b.totalSL || 12}</span>
+                          </div>
+                          <div className="bg-gray-50 dark:bg-[#1f1b17] p-2 rounded-xl">
+                            <span className="text-[10px] text-gray-400 font-bold block uppercase">EL</span>
+                            <span className="font-bold text-gray-900 dark:text-white">{b.el || 0}/{b.totalEL || 12}</span>
+                          </div>
+                          <div className="bg-gray-50 dark:bg-[#1f1b17] p-2 rounded-xl">
+                            <span className="text-[10px] text-gray-400 font-bold block uppercase">CO</span>
+                            <span className="font-bold text-gray-900 dark:text-white">{b.co || 0}/{b.totalCO || 5}</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="p-6 border-t border-gray-100 dark:border-[#28251e] flex justify-end">
+              <button
+                onClick={() => setIsAllDrawerOpen(false)}
+                className="px-6 py-2.5 bg-gray-100 dark:bg-[#25201b] hover:bg-gray-200 text-gray-700 dark:text-gray-200 text-xs font-bold rounded-xl transition-colors cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
