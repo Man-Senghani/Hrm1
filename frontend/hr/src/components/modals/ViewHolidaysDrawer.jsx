@@ -6,30 +6,32 @@ import { X, Calendar } from 'lucide-react';
 const ViewHolidaysDrawer = ({ isOpen, onClose, holidays: initialHolidays }) => {
   const [holidays, setHolidays] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const token = sessionStorage.getItem('token');
 
   useEffect(() => {
     if (!isOpen) return;
 
     const processHolidays = (data) => {
-      console.log('ViewHolidaysDrawer processHolidays input:', data);
       const now = new Date();
-      now.setHours(0, 0, 0, 0); // Start of today
+      const isCurrentYear = selectedYear === now.getFullYear();
 
-      const res = (data || [])
+      return (data || [])
         .filter(h => {
           if (!h || !h.date || h.isActive === false) return false;
           const hDate = new Date(h.date);
-          return !isNaN(hDate.getTime()) && hDate >= now;
+          if (isNaN(hDate.getTime())) return false;
+          if (hDate.getFullYear() !== selectedYear) return false;
+          if (isCurrentYear) {
+            const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            return hDate >= startOfToday;
+          }
+          return true;
         })
-        .sort((a, b) => new Date(a.date) - new Date(b.date))
-        .slice(0, 15); // Max 15 holidays
-      console.log('ViewHolidaysDrawer processHolidays output:', res);
-      return res;
+        .sort((a, b) => new Date(a.date) - new Date(b.date));
     };
 
     if (initialHolidays && initialHolidays.length > 0) {
-      console.log('ViewHolidaysDrawer using initialHolidays prop:', initialHolidays);
       setHolidays(processHolidays(initialHolidays));
       setLoading(false);
       return;
@@ -49,18 +51,32 @@ const ViewHolidaysDrawer = ({ isOpen, onClose, holidays: initialHolidays }) => {
       }
     };
     fetchHolidays();
-  }, [isOpen, token, initialHolidays]);
+  }, [isOpen, token, initialHolidays, selectedYear]);
 
   if (!isOpen) return null;
 
   return createPortal(
     <div className="fixed inset-0 z-[9999] flex justify-end bg-black/40 backdrop-blur-sm" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="bg-white dark:bg-[#1e293b] h-full w-full max-w-sm pl-8 pr-6 py-6 relative shadow-2xl flex flex-col justify-between border-l border-gray-250 dark:border-gray-800">
-        <div className="flex items-center justify-between pb-3 border-b border-gray-150 dark:border-gray-800 mb-6 shrink-0">
-          <h2 className="text-lg font-bold text-gray-900 dark:text-white">Upcoming Holidays</h2>
-          <button type="button" onClick={onClose} className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded-full transition-colors cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800">
-            <X size={20} />
-          </button>
+        <div className="flex items-center justify-between pb-3 border-b border-gray-150 dark:border-gray-800 mb-4 shrink-0">
+          <div>
+            <h2 className="text-lg font-bold text-gray-900 dark:text-white">Upcoming Holidays</h2>
+            <p className="text-[10px] text-gray-400 font-semibold">{selectedYear} Holiday List</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <select
+              value={selectedYear}
+              onChange={(e) => setSelectedYear(Number(e.target.value))}
+              className="text-xs font-bold bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1 text-gray-700 dark:text-gray-200 cursor-pointer outline-none"
+            >
+              <option value={2026}>2026</option>
+              <option value={2027}>2027</option>
+              <option value={2028}>2028</option>
+            </select>
+            <button type="button" onClick={onClose} className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded-full transition-colors cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800">
+              <X size={20} />
+            </button>
+          </div>
         </div>
 
         <div className="flex-1 flex flex-col h-full overflow-hidden">
@@ -69,7 +85,7 @@ const ViewHolidaysDrawer = ({ isOpen, onClose, holidays: initialHolidays }) => {
             {loading ? (
               <div className="text-center py-12 text-gray-400">Loading holidays...</div>
             ) : holidays.length === 0 ? (
-              <div className="text-center py-12 text-gray-400 font-medium text-xs">No upcoming holidays scheduled.</div>
+              <div className="text-center py-12 text-gray-400 font-medium text-xs">No upcoming holidays scheduled for {selectedYear}.</div>
             ) : (
               holidays.map((h, idx) => {
                 const hDate = new Date(h.date);

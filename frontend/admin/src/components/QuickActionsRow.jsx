@@ -160,22 +160,12 @@ const QuickActionsRow = ({ role = 'admin', title = 'Quick Actions' }) => {
 
   // Role based target URLs
   const getRoutes = () => {
-    if (role === 'admin') {
-      return {
-        leave: '/leave',
-        tasks: '/tasks',
-        timeTracker: '/attendance',
-        payroll: '/payroll',
-        profile: '/profile'
-      };
-    }
-    const prefix = `/${role}`;
     return {
-      leave: `${prefix}/leave`,
-      tasks: role === 'employee' ? '/employee/projects' : `${prefix}/tasks`,
-      timeTracker: `${prefix}/attendance`,
-      payroll: role === 'employee' ? '/employee/payslips' : `${prefix}/payroll`,
-      profile: `${prefix}/profile`
+      leave: '/leave',
+      tasks: role === 'employee' ? '/projects' : '/tasks',
+      timeTracker: '/attendance',
+      payroll: role === 'employee' ? '/payslips' : '/payroll',
+      profile: '/profile'
     };
   };
 

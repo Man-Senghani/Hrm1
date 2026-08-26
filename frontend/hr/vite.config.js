@@ -8,8 +8,8 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
 // https://vitejs.dev/config/
-export default defineConfig({
-  base: '/hr/',
+export default defineConfig(({ command }) => ({
+  base: command === 'build' ? '/hr/' : '/',
   plugins: [react()],
   server: {
     port: 5002,
@@ -20,4 +20,4 @@ export default defineConfig({
       '@shared': path.resolve(__dirname, '../shared'),
     },
   },
-})
+}))

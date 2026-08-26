@@ -10,8 +10,8 @@ const httpsCertificatePath = path.resolve(__dirname, '../../.cert/hrm-dev.pfx')
 const httpsEnabled = fs.existsSync(httpsCertificatePath)
 
 // https://vitejs.dev/config/
-export default defineConfig({
-  base: '/admin/',
+export default defineConfig(({ command }) => ({
+  base: command === 'build' ? '/admin/' : '/',
   plugins: [react()],
   server: {
     host: true,
@@ -66,4 +66,4 @@ export default defineConfig({
       'framer-motion'
     ]
   }
-})
+}))

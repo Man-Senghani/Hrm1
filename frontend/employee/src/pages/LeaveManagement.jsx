@@ -253,7 +253,7 @@ const LeaveManagement = ({ isChild = false }) => {
       fetchMyLeaves();
     } catch (err) {
       console.error('Submit failed:', err);
-      toast.error('Failed to submit leave request: ' + (err.response?.data?.message || err.message));
+      toast.error(err.response?.data?.message || 'Failed to submit leave request.');
     } finally {
       setIsSubmitting(false);
     }
@@ -398,12 +398,14 @@ const LeaveManagement = ({ isChild = false }) => {
   const usedCompOff = approvedLeaves.filter(l => getCatKey(l.leaveType) === 'compoff').reduce((acc, curr) => acc + getLeaveDays(curr), 0);
   const usedOptional = approvedLeaves.filter(l => getCatKey(l.leaveType) === 'optional').reduce((acc, curr) => acc + getLeaveDays(curr), 0);
 
-  const casualBalance = Math.round(Math.max(0, (QUOTAS.casual || 12) - usedCasual));
-  const sickBalance = Math.round(Math.max(0, (QUOTAS.sick || 10) - usedSick));
-  const annualBalance = Math.round(Math.max(0, (QUOTAS.earned || 20) - usedEarned));
-  const emergencyBalance = Math.round(Math.max(0, (QUOTAS.emergency || 5) - usedEmergency));
-  const compOffBalance = Math.round(Math.max(0, (QUOTAS.compOff || 3) - usedCompOff));
-  const optionalBalance = Math.round(Math.max(0, (QUOTAS.optionalHoliday || 1) - usedOptional));
+  const formatDays = (num) => Number(Number(num || 0).toFixed(1));
+
+  const casualBalance = formatDays(Math.max(0, (QUOTAS.casual || 12) - usedCasual));
+  const sickBalance = formatDays(Math.max(0, (QUOTAS.sick || 10) - usedSick));
+  const annualBalance = formatDays(Math.max(0, (QUOTAS.earned || 20) - usedEarned));
+  const emergencyBalance = formatDays(Math.max(0, (QUOTAS.emergency || 5) - usedEmergency));
+  const compOffBalance = formatDays(Math.max(0, (QUOTAS.compOff || 3) - usedCompOff));
+  const optionalBalance = formatDays(Math.max(0, (QUOTAS.optionalHoliday || 1) - usedOptional));
 
   const clAllowance = policies.find(p => getCatKey(p.type || p.name) === 'casual')?.annualAllowance ?? (QUOTAS.casual || 12);
   const slAllowance = policies.find(p => getCatKey(p.type || p.name) === 'sick')?.annualAllowance ?? (QUOTAS.sick || 10);
@@ -411,10 +413,10 @@ const LeaveManagement = ({ isChild = false }) => {
   const cfEarned = policies.find(p => getCatKey(p.type || p.name) === 'earned')?.carryForwardLimit ?? 5;
 
   const approvedLeavesArray = leaves.filter(l => l.status?.toLowerCase() === 'approved');
-  const approvedLeavesDays = Math.round(approvedLeavesArray.reduce((acc, curr) => acc + getLeaveDays(curr), 0));
-  const totalAllocated = Math.round((QUOTAS.earned || 20) + (QUOTAS.sick || 10) + (QUOTAS.casual || 12) + (QUOTAS.emergency || 5) + (QUOTAS.compOff || 3) + (QUOTAS.optionalHoliday || 1));
+  const approvedLeavesDays = formatDays(approvedLeavesArray.reduce((acc, curr) => acc + getLeaveDays(curr), 0));
+  const totalAllocated = formatDays((QUOTAS.earned || 20) + (QUOTAS.sick || 10) + (QUOTAS.casual || 12) + (QUOTAS.emergency || 5) + (QUOTAS.compOff || 3) + (QUOTAS.optionalHoliday || 1));
   const totalUsed = approvedLeavesDays;
-  const totalBalance = Math.round(Math.max(0, totalAllocated - totalUsed));
+  const totalBalance = formatDays(Math.max(0, totalAllocated - totalUsed));
   const activeLeaveTypesCount = 5;
   const pendingCount = leaves.filter(l => l.status?.toLowerCase() === 'pending' || l.status?.toLowerCase() === 'cancellation_pending').length;
 
@@ -637,12 +639,12 @@ const LeaveManagement = ({ isChild = false }) => {
               </thead>
               <tbody>
                 {[
-                  { name: 'Casual Leave (CL)', balance: Math.round(casualBalance), used: Math.round(usedCasual), total: Math.round(QUOTAS.casual || 12), icon: Calendar, color: 'text-purple-600 dark:text-purple-400', bg: 'bg-purple-50 dark:bg-purple-950/60 border border-purple-100 dark:border-purple-900/40' },
-                  { name: 'Sick Leave (SL)', balance: Math.round(sickBalance), used: Math.round(usedSick), total: Math.round(QUOTAS.sick || 10), icon: CheckCircle2, color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-100 dark:border-emerald-900/40' },
-                  { name: 'Earned Leave (EL)', balance: Math.round(annualBalance), used: Math.round(usedEarned), total: Math.round(QUOTAS.earned || 20), icon: FileText, color: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50 dark:bg-amber-950/60 border border-amber-100 dark:border-amber-900/40' },
-                  { name: 'Emergency Leave (EML)', balance: Math.round(emergencyBalance), used: Math.round(usedEmergency), total: Math.round(QUOTAS.emergency || 5), icon: AlertCircle, color: 'text-red-600 dark:text-red-400', bg: 'bg-red-50 dark:bg-red-950/60 border border-red-100 dark:border-red-900/40' },
-                  { name: 'Compensatory Off (CO)', balance: Math.round(compOffBalance), used: Math.round(usedCompOff), total: Math.round(QUOTAS.compOff || 3), icon: Clock, color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-950/60 border border-blue-100 dark:border-blue-900/40' },
-                  { name: 'Optional Holiday (OH)', balance: Math.round(optionalBalance), used: Math.round(usedOptional), total: Math.round(QUOTAS.optionalHoliday || 1), icon: FileText, color: 'text-rose-600 dark:text-rose-400', bg: 'bg-rose-50 dark:bg-rose-950/60 border border-rose-100 dark:border-rose-900/40' }
+                  { name: 'Casual Leave (CL)', balance: formatDays(casualBalance), used: formatDays(usedCasual), total: formatDays(QUOTAS.casual || 12), icon: Calendar, color: 'text-purple-600 dark:text-purple-400', bg: 'bg-purple-50 dark:bg-purple-950/60 border border-purple-100 dark:border-purple-900/40' },
+                  { name: 'Sick Leave (SL)', balance: formatDays(sickBalance), used: formatDays(usedSick), total: formatDays(QUOTAS.sick || 10), icon: CheckCircle2, color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-100 dark:border-emerald-900/40' },
+                  { name: 'Earned Leave (EL)', balance: formatDays(annualBalance), used: formatDays(usedEarned), total: formatDays(QUOTAS.earned || 20), icon: FileText, color: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50 dark:bg-amber-950/60 border border-amber-100 dark:border-amber-900/40' },
+                  { name: 'Emergency Leave (EML)', balance: formatDays(emergencyBalance), used: formatDays(usedEmergency), total: formatDays(QUOTAS.emergency || 5), icon: AlertCircle, color: 'text-red-600 dark:text-red-400', bg: 'bg-red-50 dark:bg-red-950/60 border border-red-100 dark:border-red-900/40' },
+                  { name: 'Compensatory Off (CO)', balance: formatDays(compOffBalance), used: formatDays(usedCompOff), total: formatDays(QUOTAS.compOff || 3), icon: Clock, color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-950/60 border border-blue-100 dark:border-blue-900/40' },
+                  { name: 'Optional Holiday (OH)', balance: formatDays(optionalBalance), used: formatDays(usedOptional), total: formatDays(QUOTAS.optionalHoliday || 1), icon: FileText, color: 'text-rose-600 dark:text-rose-400', bg: 'bg-rose-50 dark:bg-rose-950/60 border border-rose-100 dark:border-rose-900/40' }
                 ].map((row, idx) => (
                   <tr key={idx} className="border-b border-gray-50 dark:border-gray-800 last:border-0 hover:bg-gray-50 dark:hover:bg-[#162722]/50 transition-all duration-150 cursor-pointer">
                     <td className="px-4 py-2 flex items-center gap-3">
@@ -651,9 +653,9 @@ const LeaveManagement = ({ isChild = false }) => {
                       </div>
                       <span className="font-semibold text-gray-900 dark:text-gray-200">{row.name}</span>
                     </td>
-                    <td className="px-4 py-2 text-center font-bold text-gray-900 dark:text-gray-200">{Math.round(row.balance)}</td>
-                    <td className="px-4 py-2 text-center font-medium text-gray-500">{Math.round(row.used)}</td>
-                    <td className="px-4 py-2 text-center font-bold text-gray-900 dark:text-gray-200">{Math.round(row.total)}</td>
+                    <td className="px-4 py-2 text-center font-bold text-gray-900 dark:text-gray-200">{row.balance}</td>
+                    <td className="px-4 py-2 text-center font-medium text-gray-500">{row.used}</td>
+                    <td className="px-4 py-2 text-center font-bold text-gray-900 dark:text-gray-200">{row.total}</td>
                   </tr>
                 ))}
               </tbody>

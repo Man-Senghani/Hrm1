@@ -376,7 +376,8 @@ const AdminDashboard = () => {
             icon: Users,
             color: 'text-blue-600 dark:text-blue-400',
             bg: 'bg-blue-50 dark:bg-blue-950/50 border border-blue-100 dark:border-blue-900/40',
-            hoverBorder: 'hover:!border-[#3b82f6] dark:hover:!border-[#60a5fa]'
+            hoverBorder: 'hover:!border-[#3b82f6] dark:hover:!border-[#60a5fa]',
+            to: '/employees'
           },
           {
             label: 'Active Employees',
@@ -384,7 +385,8 @@ const AdminDashboard = () => {
             icon: CheckCircle,
             color: 'text-emerald-600 dark:text-emerald-400',
             bg: 'bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-100 dark:border-emerald-900/40',
-            hoverBorder: 'hover:!border-[#10b981] dark:hover:!border-[#34d399]'
+            hoverBorder: 'hover:!border-[#10b981] dark:hover:!border-[#34d399]',
+            to: '/employees'
           },
           {
             label: 'New Joiners',
@@ -392,7 +394,8 @@ const AdminDashboard = () => {
             icon: UserPlus,
             color: 'text-indigo-600 dark:text-indigo-400',
             bg: 'bg-indigo-50 dark:bg-indigo-950/50 border border-indigo-100 dark:border-indigo-900/40',
-            hoverBorder: 'hover:!border-[#6366f1] dark:hover:!border-[#818cf8]'
+            hoverBorder: 'hover:!border-[#6366f1] dark:hover:!border-[#818cf8]',
+            to: '/employees'
           },
           {
             label: 'Employees on Leave',
@@ -400,7 +403,8 @@ const AdminDashboard = () => {
             icon: Calendar,
             color: 'text-amber-600 dark:text-amber-400',
             bg: 'bg-amber-50 dark:bg-amber-950/50 border border-amber-100 dark:border-amber-900/40',
-            hoverBorder: 'hover:!border-[#f59e0b] dark:hover:!border-[#fbbf24]'
+            hoverBorder: 'hover:!border-[#f59e0b] dark:hover:!border-[#fbbf24]',
+            to: '/leave'
           },
           {
             label: 'Pending Leave',
@@ -408,12 +412,14 @@ const AdminDashboard = () => {
             icon: Clock,
             color: 'text-rose-600 dark:text-rose-400',
             bg: 'bg-rose-50 dark:bg-rose-950/50 border border-rose-100 dark:border-rose-900/40',
-            hoverBorder: 'hover:!border-[#ef4444] dark:hover:!border-[#f87171]'
+            hoverBorder: 'hover:!border-[#ef4444] dark:hover:!border-[#f87171]',
+            to: '/leave'
           },
         ].map((stat, i) => {
           return (
             <Card
               key={i}
+              onClick={() => stat.to && navigate(stat.to)}
               className={`py-2 px-3.5 flex items-center justify-between transition-colors duration-300 cursor-pointer shadow-xs min-h-[52px] ${stat.hoverBorder}`}
             >
               <div className="flex items-center gap-2 min-w-0 mr-2">

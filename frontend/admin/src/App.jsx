@@ -180,7 +180,49 @@ const App = () => {
   return (
     <>
       <ScrollToTop />
-      <Toaster position="bottom-right" toastOptions={{ duration: 3500 }} reverseOrder={false} />
+      <Toaster
+        position="top-right"
+        containerStyle={{ top: 24, right: 24, zIndex: 99999 }}
+        toastOptions={{
+          duration: 4500,
+          style: {
+            background: '#111827',
+            color: '#f9fafb',
+            padding: '14px 18px',
+            borderRadius: '16px',
+            fontSize: '13px',
+            fontWeight: '600',
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.35), 0 8px 10px -6px rgba(0, 0, 0, 0.25)',
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+            backdropFilter: 'blur(12px)',
+            maxWidth: '440px'
+          },
+          success: {
+            duration: 4000,
+            iconTheme: {
+              primary: '#10b981',
+              secondary: '#ffffff'
+            },
+            style: {
+              background: '#064e3b',
+              color: '#ecfdf5',
+              border: '1px solid #059669'
+            }
+          },
+          error: {
+            duration: 5000,
+            iconTheme: {
+              primary: '#ef4444',
+              secondary: '#ffffff'
+            },
+            style: {
+              background: '#450a0a',
+              color: '#fef2f2',
+              border: '1px solid #991b1b'
+            }
+          }
+        }}
+      />
       <Suspense fallback={<RouteLoadingFallback />}>
         <Routes>
           {/* PUBLIC ROUTES */}
@@ -193,7 +235,7 @@ const App = () => {
           <Route path="/login/:role" element={<Navigate to="/login" replace />} />
 
           {/* ADMIN MODULE */}
-          <Route path="/admin" element={
+          <Route path="/" element={
             <ProtectedRoute allowedRole="admin">
               <MainLayout />
             </ProtectedRoute>
@@ -231,6 +273,39 @@ const App = () => {
             <Route path="integrations" element={<Integrations />} />
             <Route path="departments" element={<Departments />} />
             <Route path="designations" element={<Designations />} />
+
+            {/* Sub-routes with /admin prefix */}
+            <Route path="admin" element={<AdminDashboard />} />
+            <Route path="admin/dashboard" element={<AdminDashboard />} />
+            <Route path="admin/employees" element={<HREmployees />} />
+            <Route path="admin/employees/add" element={<EmployeeForm />} />
+            <Route path="admin/employees/edit/:id" element={<EmployeeForm />} />
+            <Route path="admin/employees/view/:id" element={<EmployeeDetail />} />
+            <Route path="admin/tasks" element={<Tasks />} />
+            <Route path="admin/events" element={<EventsManagement />} />
+            <Route path="admin/task-management" element={<TaskManagement />} />
+            <Route path="admin/task-management/create" element={<TaskCreate />} />
+            <Route path="admin/task-management/update/:id" element={<TaskUpdate />} />
+            <Route path="admin/leave" element={<LeaveManagement />} />
+            <Route path="admin/attendance" element={<Attendance />} />
+            <Route path="admin/payroll" element={<Payroll />} />
+            <Route path="admin/performance" element={<Performance />} />
+            <Route path="admin/reports" element={<Reports />} />
+            <Route path="admin/recruitment" element={<Recruitment />} />
+            <Route path="admin/settings" element={<Settings />} />
+            <Route path="admin/create-user" element={<CreateUser />} />
+            <Route path="admin/chat" element={<Chat />} />
+            <Route path="admin/screenshots" element={<Screenshots />} />
+            <Route path="admin/profile" element={<Profile />} />
+            <Route path="admin/notifications" element={<Notifications />} />
+            <Route path="admin/notifications/all" element={<AllNotifications />} />
+            <Route path="admin/documents" element={<EmployeeDocuments />} />
+            <Route path="admin/training" element={<Training />} />
+            <Route path="admin/roles-permissions" element={<RolesPermissions />} />
+            <Route path="admin/audit-logs" element={<AuditLogs />} />
+            <Route path="admin/integrations" element={<Integrations />} />
+            <Route path="admin/departments" element={<Departments />} />
+            <Route path="admin/designations" element={<Designations />} />
           </Route>
 
           {/* Root Redirects */}

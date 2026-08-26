@@ -5,6 +5,22 @@ const AdmZip = require('adm-zip');
 const baseDir = 'E:/Hrm/hostinger_public_html';
 const zipPath = 'E:/Hrm/hostinger_public_html.zip';
 
+// Sync freshly compiled dist assets into hostinger_public_html
+const distModules = [
+  { src: 'E:/Hrm/frontend/login/dist', dest: 'E:/Hrm/hostinger_public_html' },
+  { src: 'E:/Hrm/frontend/admin/dist', dest: 'E:/Hrm/hostinger_public_html/admin' },
+  { src: 'E:/Hrm/frontend/hr/dist', dest: 'E:/Hrm/hostinger_public_html/hr' },
+  { src: 'E:/Hrm/frontend/employee/dist', dest: 'E:/Hrm/hostinger_public_html/employee' },
+  { src: 'E:/Hrm/frontend/manager/dist', dest: 'E:/Hrm/hostinger_public_html/manager' }
+];
+
+for (const mod of distModules) {
+  if (fs.existsSync(mod.src)) {
+    fs.mkdirSync(mod.dest, { recursive: true });
+    fs.cpSync(mod.src, mod.dest, { recursive: true, force: true });
+  }
+}
+
 if (fs.existsSync(zipPath)) {
   fs.unlinkSync(zipPath);
 }

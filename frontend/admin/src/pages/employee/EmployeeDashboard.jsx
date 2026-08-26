@@ -637,7 +637,7 @@ const EmployeeDashboard = () => {
             borderColor: '#10b981',
             glowColor: 'rgba(16, 185, 129, 0.45)',
             bgIcon: 'bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-100 dark:border-emerald-900/40',
-            onClick: () => navigate('/attendance')
+            onClick: () => navigate('/employee/attendance')
           },
           {
             title: 'Working Hours',
@@ -648,7 +648,7 @@ const EmployeeDashboard = () => {
             borderColor: '#0284c7',
             glowColor: 'rgba(2, 132, 199, 0.45)',
             bgIcon: 'bg-sky-50 dark:bg-sky-950/50 border border-sky-100 dark:border-sky-900/40',
-            onClick: () => navigate('/attendance')
+            onClick: () => navigate('/employee/attendance')
           },
           {
             title: 'Total Weekly Hours',
@@ -659,7 +659,7 @@ const EmployeeDashboard = () => {
             borderColor: '#6366f1',
             glowColor: 'rgba(99, 102, 241, 0.45)',
             bgIcon: 'bg-indigo-50 dark:bg-indigo-950/50 border border-indigo-100 dark:border-indigo-900/40',
-            onClick: () => navigate('/attendance')
+            onClick: () => navigate('/employee/attendance')
           },
           {
             title: 'Pending Tasks',
@@ -670,7 +670,7 @@ const EmployeeDashboard = () => {
             borderColor: '#9333ea',
             glowColor: 'rgba(147, 51, 234, 0.45)',
             bgIcon: 'bg-purple-50 dark:bg-purple-950/50 border border-purple-100 dark:border-purple-900/40',
-            onClick: () => navigate('/task-management')
+            onClick: () => navigate('/employee/task-management')
           },
           {
             title: 'Leave Balance',
@@ -681,7 +681,7 @@ const EmployeeDashboard = () => {
             borderColor: '#ea580c',
             glowColor: 'rgba(234, 88, 12, 0.45)',
             bgIcon: 'bg-amber-50 dark:bg-amber-950/50 border border-amber-100 dark:border-amber-900/40',
-            onClick: () => navigate('/leave')
+            onClick: () => navigate('/employee/leave')
           }
         ].map((card, i) => {
           return (
@@ -962,11 +962,11 @@ const EmployeeDashboard = () => {
         )}
 
         {[
-          { icon: <CalendarPlus size={16} strokeWidth={2.5} className="text-blue-600 dark:text-blue-400" />, label: 'Apply Leave', hoverClass: 'hover:!border-[#3b82f6] dark:hover:!border-[#60a5fa]', iconBg: 'bg-blue-50 dark:bg-blue-950/50 border border-blue-100 dark:border-blue-900/40', to: '/leave' },
-          { icon: <Briefcase size={16} strokeWidth={2.5} className="text-purple-600 dark:text-purple-400" />, label: 'My Tasks', hoverClass: 'hover:!border-[#8b5cf6] dark:hover:!border-[#a78bfa]', iconBg: 'bg-purple-50 dark:bg-purple-950/50 border border-purple-100 dark:border-purple-900/40', to: '/task-management' },
-          { icon: <Clock size={16} strokeWidth={2.5} className="text-amber-600 dark:text-amber-400" />, label: 'Attendance', hoverClass: 'hover:!border-[#f59e0b] dark:hover:!border-[#fbbf24]', iconBg: 'bg-amber-50 dark:bg-amber-950/50 border border-amber-100 dark:border-amber-900/40', to: '/attendance' },
-          { icon: <FileText size={16} strokeWidth={2.5} className="text-pink-600 dark:text-pink-400" />, label: 'Payslip', hoverClass: 'hover:!border-[#ec4899] dark:hover:!border-[#f472b6]', iconBg: 'bg-pink-50 dark:bg-pink-950/50 border border-pink-100 dark:border-pink-900/40', to: '/payslips' },
-          { icon: <User size={16} strokeWidth={2.5} className="text-emerald-600 dark:text-emerald-400" />, label: 'My Profile', hoverClass: 'hover:!border-[#10b981] dark:hover:!border-[#34d399]', iconBg: 'bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-100 dark:border-emerald-900/40', to: '/profile' }
+          { icon: <CalendarPlus size={16} strokeWidth={2.5} className="text-blue-600 dark:text-blue-400" />, label: 'Apply Leave', hoverClass: 'hover:!border-[#3b82f6] dark:hover:!border-[#60a5fa]', iconBg: 'bg-blue-50 dark:bg-blue-950/50 border border-blue-100 dark:border-blue-900/40', to: '/employee/leave' },
+          { icon: <Briefcase size={16} strokeWidth={2.5} className="text-purple-600 dark:text-purple-400" />, label: 'My Tasks', hoverClass: 'hover:!border-[#8b5cf6] dark:hover:!border-[#a78bfa]', iconBg: 'bg-purple-50 dark:bg-purple-950/50 border border-purple-100 dark:border-purple-900/40', to: '/employee/task-management' },
+          { icon: <Clock size={16} strokeWidth={2.5} className="text-amber-600 dark:text-amber-400" />, label: 'Attendance', hoverClass: 'hover:!border-[#f59e0b] dark:hover:!border-[#fbbf24]', iconBg: 'bg-amber-50 dark:bg-amber-950/50 border border-amber-100 dark:border-amber-900/40', to: '/employee/attendance' },
+          { icon: <FileText size={16} strokeWidth={2.5} className="text-pink-600 dark:text-pink-400" />, label: 'Payslip', hoverClass: 'hover:!border-[#ec4899] dark:hover:!border-[#f472b6]', iconBg: 'bg-pink-50 dark:bg-pink-950/50 border border-pink-100 dark:border-pink-900/40', to: '/employee/payslips' },
+          { icon: <User size={16} strokeWidth={2.5} className="text-emerald-600 dark:text-emerald-400" />, label: 'My Profile', hoverClass: 'hover:!border-[#10b981] dark:hover:!border-[#34d399]', iconBg: 'bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-100 dark:border-emerald-900/40', to: '/employee/profile' }
         ].map((act, i) => (
           <button
             key={i}
@@ -983,7 +983,7 @@ const EmployeeDashboard = () => {
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start">
         {/* 8. UPCOMING HOLIDAYS */}
-        <div className="cursor-pointer" onClick={() => navigate('/holidays')}>
+        <div className="cursor-pointer" onClick={() => navigate('/employee/holidays')}>
           <Card className="h-72 overflow-hidden transition-colors duration-300 hover:!border-[#6366f1] dark:hover:!border-[#818cf8]">
             <h3 className="font-bold text-[#201515] dark:text-white text-sm mb-2.5 pb-1.5 border-b border-[#eceae3] dark:border-[#38352e]" style={{ fontFamily: 'Manrope, sans-serif' }}>
               Upcoming Holidays
@@ -1009,7 +1009,7 @@ const EmployeeDashboard = () => {
         </div>
 
         {/* 9. UPCOMING EVENTS */}
-        <div className="cursor-pointer" onClick={() => navigate('/events')}>
+        <div className="cursor-pointer" onClick={() => navigate('/employee/dashboard')}>
           <Card className="h-72 overflow-y-auto transition-colors duration-300 hover:!border-[#f97316] dark:hover:!border-[#fb923c]">
             <h3 className="font-bold text-[#201515] dark:text-white text-sm mb-3.5 pb-2 border-b border-[#eceae3] dark:border-[#38352e]" style={{ fontFamily: 'Manrope, sans-serif' }}>
               Upcoming Events
@@ -1048,7 +1048,7 @@ const EmployeeDashboard = () => {
         </div>
 
         {/* 11. LATEST PAYSLIP */}
-        <div className="cursor-pointer" onClick={() => navigate('/payslips')}>
+        <div className="cursor-pointer" onClick={() => navigate('/employee/payslips')}>
           <Card className="h-72 overflow-y-auto transition-colors duration-300 hover:!border-[#10b981] dark:hover:!border-[#34d399]">
             <h3 className="font-bold text-[#201515] dark:text-white text-sm mb-3.5 pb-2 border-b border-[#eceae3] dark:border-[#38352e]" style={{ fontFamily: 'Manrope, sans-serif' }}>
               Latest Payslips

@@ -162,9 +162,9 @@ const QuickActionsRow = ({ role = 'admin', title = 'Quick Actions' }) => {
   const getRoutes = () => {
     return {
       leave: '/leave',
-      tasks: role === 'employee' ? '/task-management' : '/tasks',
+      tasks: '/projects',
       timeTracker: '/attendance',
-      payroll: role === 'employee' ? '/payslips' : '/payroll',
+      payroll: '/payslips',
       profile: '/profile'
     };
   };

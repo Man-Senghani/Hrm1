@@ -100,7 +100,49 @@ function App() {
 
   return (
     <ErrorBoundary>
-      <Toaster position="bottom-right" toastOptions={{ duration: 3500 }} />
+      <Toaster
+        position="top-right"
+        containerStyle={{ top: 24, right: 24, zIndex: 99999 }}
+        toastOptions={{
+          duration: 4500,
+          style: {
+            background: '#111827',
+            color: '#f9fafb',
+            padding: '14px 18px',
+            borderRadius: '16px',
+            fontSize: '13px',
+            fontWeight: '600',
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.35), 0 8px 10px -6px rgba(0, 0, 0, 0.25)',
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+            backdropFilter: 'blur(12px)',
+            maxWidth: '440px'
+          },
+          success: {
+            duration: 4000,
+            iconTheme: {
+              primary: '#10b981',
+              secondary: '#ffffff'
+            },
+            style: {
+              background: '#064e3b',
+              color: '#ecfdf5',
+              border: '1px solid #059669'
+            }
+          },
+          error: {
+            duration: 5000,
+            iconTheme: {
+              primary: '#ef4444',
+              secondary: '#ffffff'
+            },
+            style: {
+              background: '#450a0a',
+              color: '#fef2f2',
+              border: '1px solid #991b1b'
+            }
+          }
+        }}
+      />
       <MainLayout
         navItems={navItems}
         userRole="hr"
@@ -111,46 +153,78 @@ function App() {
           <Routes>
             <Route path="/" element={<HRDashboard />} />
             <Route path="/dashboard" element={<Navigate to="/" replace />} />
+            <Route path="/hr" element={<Navigate to="/" replace />} />
+            <Route path="/hr/dashboard" element={<Navigate to="/" replace />} />
 
             {/* Workforce Management */}
             <Route path="/employees" element={<HREmployees />} />
+            <Route path="/hr/employees" element={<HREmployees />} />
             <Route path="/employees/add" element={<EmployeeForm />} />
+            <Route path="/hr/employees/add" element={<EmployeeForm />} />
             <Route path="/employees/edit/:id" element={<EmployeeForm />} />
+            <Route path="/hr/employees/edit/:id" element={<EmployeeForm />} />
             <Route path="/employees/view/:id" element={<EmployeeDetail />} />
+            <Route path="/hr/employees/view/:id" element={<EmployeeDetail />} />
             <Route path="/create-user" element={<CreateUser />} />
+            <Route path="/hr/create-user" element={<CreateUser />} />
             <Route path="/team" element={<TeamManagement />} />
+            <Route path="/hr/team" element={<TeamManagement />} />
             <Route path="/teams" element={<TeamManagement />} />
+            <Route path="/hr/teams" element={<TeamManagement />} />
 
             {/* Tasks & Projects */}
             <Route path="/tasks" element={<Tasks />} />
+            <Route path="/hr/tasks" element={<Tasks />} />
             <Route path="/task-management" element={<TaskManagement />} />
+            <Route path="/hr/task-management" element={<TaskManagement />} />
             <Route path="/task-management/create" element={<TaskCreate />} />
+            <Route path="/hr/task-management/create" element={<TaskCreate />} />
             <Route path="/task-management/update/:id" element={<TaskUpdate />} />
+            <Route path="/hr/task-management/update/:id" element={<TaskUpdate />} />
             <Route path="/projects" element={<ProjectManagement />} />
+            <Route path="/hr/projects" element={<ProjectManagement />} />
 
             {/* Leave & Attendance */}
             <Route path="/leave" element={<LeaveManagement />} />
+            <Route path="/hr/leave" element={<LeaveManagement />} />
             <Route path="/leaves" element={<LeaveManagement />} />
+            <Route path="/hr/leaves" element={<LeaveManagement />} />
             <Route path="/leave-approvals" element={<LeaveManagement />} />
+            <Route path="/hr/leave-approvals" element={<LeaveManagement />} />
             <Route path="/attendance" element={<Attendance />} />
+            <Route path="/hr/attendance" element={<Attendance />} />
             <Route path="/attendance-monitoring" element={<Attendance />} />
+            <Route path="/hr/attendance-monitoring" element={<Attendance />} />
 
             {/* Operations */}
             <Route path="/payroll" element={<Payroll />} />
+            <Route path="/hr/payroll" element={<Payroll />} />
             <Route path="/recruitment" element={<Recruitment />} />
+            <Route path="/hr/recruitment" element={<Recruitment />} />
             <Route path="/performance" element={<Performance />} />
+            <Route path="/hr/performance" element={<Performance />} />
             <Route path="/training" element={<Training />} />
+            <Route path="/hr/training" element={<Training />} />
             <Route path="/events" element={<EventsManagement />} />
+            <Route path="/hr/events" element={<EventsManagement />} />
             <Route path="/reports" element={<Reports />} />
+            <Route path="/hr/reports" element={<Reports />} />
             <Route path="/screenshots" element={<Screenshots />} />
+            <Route path="/hr/screenshots" element={<Screenshots />} />
             <Route path="/documents" element={<EmployeeDocuments />} />
+            <Route path="/hr/documents" element={<EmployeeDocuments />} />
 
             {/* Notifications, Chat, Profile & Settings */}
             <Route path="/notifications" element={<Notifications />} />
+            <Route path="/hr/notifications" element={<Notifications />} />
             <Route path="/notifications/all" element={<AllNotifications />} />
+            <Route path="/hr/notifications/all" element={<AllNotifications />} />
             <Route path="/chat" element={<Chat />} />
+            <Route path="/hr/chat" element={<Chat />} />
             <Route path="/profile" element={<Profile />} />
+            <Route path="/hr/profile" element={<Profile />} />
             <Route path="/settings" element={<Settings />} />
+            <Route path="/hr/settings" element={<Settings />} />
 
             {/* Fallback */}
             <Route path="*" element={<Navigate to="/" replace />} />

@@ -86,7 +86,49 @@ function App() {
 
   return (
     <ErrorBoundary>
-      <Toaster position="bottom-right" toastOptions={{ duration: 3500 }} />
+      <Toaster
+        position="top-right"
+        containerStyle={{ top: 24, right: 24, zIndex: 99999 }}
+        toastOptions={{
+          duration: 4500,
+          style: {
+            background: '#111827',
+            color: '#f9fafb',
+            padding: '14px 18px',
+            borderRadius: '16px',
+            fontSize: '13px',
+            fontWeight: '600',
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.35), 0 8px 10px -6px rgba(0, 0, 0, 0.25)',
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+            backdropFilter: 'blur(12px)',
+            maxWidth: '440px'
+          },
+          success: {
+            duration: 4000,
+            iconTheme: {
+              primary: '#10b981',
+              secondary: '#ffffff'
+            },
+            style: {
+              background: '#064e3b',
+              color: '#ecfdf5',
+              border: '1px solid #059669'
+            }
+          },
+          error: {
+            duration: 5000,
+            iconTheme: {
+              primary: '#ef4444',
+              secondary: '#ffffff'
+            },
+            style: {
+              background: '#450a0a',
+              color: '#fef2f2',
+              border: '1px solid #991b1b'
+            }
+          }
+        }}
+      />
       <ScrollToTop />
       <MainLayout
         navItems={navItems}
@@ -112,8 +154,24 @@ function App() {
             <Route path="/documents" element={<EmployeeDocuments />} />
             <Route path="/performance" element={<EmployeePerformance />} />
 
+            {/* Prefixed routes matching /employee/* */}
+            <Route path="/employee" element={<Navigate to="/" replace />} />
+            <Route path="/employee/dashboard" element={<Navigate to="/" replace />} />
+            <Route path="/employee/leave" element={<LeaveManagement />} />
+            <Route path="/employee/leaves" element={<Navigate to="/leave" replace />} />
+            <Route path="/employee/projects" element={<EmployeeProjects />} />
+            <Route path="/employee/attendance" element={<Attendance />} />
+            <Route path="/employee/time-tracker" element={<TimeTracker />} />
+            <Route path="/employee/payslips" element={<EmployeePayslips />} />
+            <Route path="/employee/profile" element={<Profile />} />
+            <Route path="/employee/settings" element={<Settings />} />
+            <Route path="/employee/documents" element={<EmployeeDocuments />} />
+            <Route path="/employee/performance" element={<EmployeePerformance />} />
+            <Route path="/employee/chat" element={<Chat />} />
+            <Route path="/employee/events" element={<MyEvents />} />
+            <Route path="/employee/holidays" element={<Holidays />} />
+
             {/* Fallbacks */}
-            <Route path="/employee/*" element={<Navigate to="/" replace />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Suspense>

@@ -399,16 +399,23 @@ const getManagerSubordinateUserIds = async (managerUserId) => {
   }).select('userId').lean();
   const empIds = empDocs.filter(e => e.userId).map(e => e.userId.toString());
 
-  const combined = Array.from(new Set([...directIds, ...empIds]));
-  if (combined.length > 0) return combined;
+  let combined = Array.from(new Set([...directIds, ...empIds]));
+  if (combined.length === 0) {
+    // Fallback: If no explicit manager assignment exists in DB yet, query employees assigned to null/unassigned
+    const unassigned = await User.find({
+      role: { $in: ['employee', 'staff'] },
+      reportingManager: { $in: [managerUserId, null, undefined] }
+    }).select('_id').lean();
+    combined = unassigned.map(u => u._id.toString());
+  }
 
-  // Fallback: If no explicit manager assignment exists in DB yet, query employees assigned to null/unassigned
-  const unassigned = await User.find({
-    role: { $in: ['employee', 'staff'] },
-    reportingManager: { $in: [managerUserId, null, undefined] }
-  }).select('_id').lean();
+  // Include manager's own user ID so manager check-in/out data appears in Attendance History
+  const mgrStr = managerUserId ? managerUserId.toString() : '';
+  if (mgrStr && !combined.includes(mgrStr)) {
+    combined.push(mgrStr);
+  }
 
-  return unassigned.map(u => u._id.toString());
+  return combined;
 };
 
 // @desc    Get Attendance based on Role Hierarchy

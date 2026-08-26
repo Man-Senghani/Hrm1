@@ -252,6 +252,93 @@ const createInAppAndEmailNotification = async (req, { userId, title, message, ty
   }
 };
 
+const checkUserLeaveBalance = async (userId, leaveTypeInput, daysRequested, excludeLeaveId = null) => {
+  const lType = (leaveTypeInput || '').toLowerCase().trim();
+
+  let quotas = {
+    casual: 12,
+    sick: 10,
+    earned: 20,
+    emergency: 5,
+    compOff: 3,
+    optionalHoliday: 1,
+    otherLeaves: 1
+  };
+
+  try {
+    const LeavePolicy = require('../models/LeavePolicy');
+    const activePolicies = await LeavePolicy.find({ status: { $regex: /^active$/i } });
+    activePolicies.forEach(p => {
+      const type = (p.type || p.name || '').toLowerCase();
+      if (type.includes('sick')) quotas.sick = p.annualAllowance || quotas.sick;
+      else if (type.includes('casual')) quotas.casual = p.annualAllowance || quotas.casual;
+      else if (type.includes('earned') || type.includes('annual')) quotas.earned = p.annualAllowance || quotas.earned;
+      else if (type.includes('emergency')) quotas.emergency = p.annualAllowance || quotas.emergency;
+      else if (type.includes('comp')) quotas.compOff = p.annualAllowance || quotas.compOff;
+      else if (type.includes('optional')) quotas.optionalHoliday = p.annualAllowance || quotas.optionalHoliday;
+    });
+  } catch (_) {}
+
+  const now = new Date();
+  const month = now.getMonth() + 1;
+  const year = now.getFullYear();
+  try {
+    const balance = await LeaveBalance.findOne({ employeeId: userId, month, year });
+    if (balance) {
+      if (balance.casualLeave !== undefined) quotas.casual = balance.casualLeave;
+      if (balance.sickLeave !== undefined) quotas.sick = balance.sickLeave;
+      if (balance.earnedLeave !== undefined) quotas.earned = balance.earnedLeave;
+      if (balance.emergencyLeave !== undefined) quotas.emergency = balance.emergencyLeave;
+      if (balance.compOff !== undefined) quotas.compOff = balance.compOff;
+      if (balance.otherLeaves !== undefined) quotas.optionalHoliday = balance.otherLeaves;
+    }
+  } catch (_) {}
+
+  let catKey = 'casual';
+  let categoryName = 'Casual Leave';
+
+  if (lType.includes('sick') || lType === 'sl') { catKey = 'sick'; categoryName = 'Sick Leave'; }
+  else if (lType.includes('earned') || lType.includes('annual') || lType === 'el') { catKey = 'earned'; categoryName = 'Earned Leave'; }
+  else if (lType.includes('emergency') || lType === 'eml') { catKey = 'emergency'; categoryName = 'Emergency Leave'; }
+  else if (lType.includes('comp') || lType === 'co') { catKey = 'compOff'; categoryName = 'Compensatory Off'; }
+  else if (lType.includes('optional') || lType === 'oh') { catKey = 'optionalHoliday'; categoryName = 'Optional Holiday'; }
+  else if (lType.includes('casual') || lType === 'cl') { catKey = 'casual'; categoryName = 'Casual Leave'; }
+
+  const totalQuota = quotas[catKey] || 0;
+
+  const query = {
+    user: userId,
+    status: { $in: ['approved', 'pending'] }
+  };
+  if (excludeLeaveId) {
+    query._id = { $ne: excludeLeaveId };
+  }
+
+  const existingLeaves = await Leave.find(query);
+
+  const usedDays = existingLeaves.filter(l => {
+    const lt = (l.leaveType || '').toLowerCase();
+    if (catKey === 'sick') return lt.includes('sick') || lt === 'sl';
+    if (catKey === 'earned') return lt.includes('earned') || lt.includes('annual') || lt === 'el';
+    if (catKey === 'emergency') return lt.includes('emergency') || lt === 'eml';
+    if (catKey === 'compOff') return lt.includes('comp') || lt === 'co';
+    if (catKey === 'optionalHoliday') return lt.includes('optional') || lt === 'oh';
+    return lt.includes('casual') || lt === 'cl';
+  }).reduce((sum, l) => sum + (l.totalDays || 1), 0);
+
+  const remainingBalance = Math.max(0, totalQuota - usedDays);
+  const isSufficient = remainingBalance >= daysRequested;
+
+  return {
+    catKey,
+    categoryName,
+    totalQuota,
+    usedDays,
+    remainingBalance,
+    isSufficient
+  };
+};
+
 // @desc    Apply for leave
 // @route   POST /api/leaves/apply
 // @access  Private/Employee
@@ -285,37 +372,11 @@ exports.applyLeave = async (req, res) => {
     const employee = await User.findById(req.user.id);
     if (!employee) return res.status(404).json({ message: 'User not found' });
 
-    const startObj = new Date(startDate);
-    const m = startObj.getMonth() + 1;
-    const y = startObj.getFullYear();
-
-    // Calculate category leave quota matching Leave Balance Summary
-    const lType = (leaveType || 'casual').toLowerCase();
-    let totalCategoryQuota = 15; // default fallback
-
-    if (lType.includes('casual') || lType === 'cl') {
-      totalCategoryQuota = 18;
-    } else if (lType.includes('sick') || lType === 'sl') {
-      totalCategoryQuota = 14;
-    } else if (lType.includes('earned') || lType === 'el') {
-      totalCategoryQuota = 30.5;
-    } else if (lType.includes('optional') || lType === 'oh') {
-      totalCategoryQuota = 1;
-    }
-
-    // Subtract used approved leaves for this category
-    const usedApproved = await Leave.find({
-      user: req.user.id,
-      status: { $in: ['approved', 'pending'] }
-    });
-    const usedForCategory = usedApproved
-      .filter(l => (l.leaveType || '').toLowerCase().includes(lType.substring(0, 4)))
-      .reduce((sum, l) => sum + (l.totalDays || 1), 0);
-
-    const netAvailable = Math.max(0, totalCategoryQuota - usedForCategory);
-    if (netAvailable < (totalDays || 1)) {
+    // Validate remaining leave balance for requested category
+    const check = await checkUserLeaveBalance(req.user.id, leaveType, totalDays || 1);
+    if (!check.isSufficient) {
       return res.status(400).json({
-        message: `Insufficient leave balance. Available: ${netAvailable} day(s). Requested: ${totalDays || 1} day(s).`
+        message: `Not enough ${check.categoryName} balance! Available: ${check.remainingBalance} day(s), Requested: ${totalDays || 1} day(s).`
       });
     }
 
@@ -464,6 +525,14 @@ exports.managerApprove = async (req, res) => {
       return res.status(400).json({ message: 'Leave request is already approved' });
     }
 
+    // Validate employee remaining leave balance for this category
+    const check = await checkUserLeaveBalance(leave.user, leave.leaveType, leave.totalDays || 1, leave._id);
+    if (!check.isSufficient) {
+      return res.status(400).json({
+        message: `Not enough ${check.categoryName} balance! Employee has ${check.remainingBalance} day(s) available, requested ${leave.totalDays || 1} day(s).`
+      });
+    }
+
     const oldStatus = leave.status;
     leave.status = 'approved';
     await leave.save();
@@ -556,6 +625,13 @@ exports.hrApprove = async (req, res) => {
     if (oldStatus === 'cancellation_pending') {
       leave.status = 'cancelled';
     } else {
+      // Validate employee remaining leave balance for this category
+      const check = await checkUserLeaveBalance(leave.user, leave.leaveType, leave.totalDays || 1, leave._id);
+      if (!check.isSufficient) {
+        return res.status(400).json({
+          message: `Not enough ${check.categoryName} balance! Employee has ${check.remainingBalance} day(s) available, requested ${leave.totalDays || 1} day(s).`
+        });
+      }
       leave.status = 'approved';
     }
     leave.hrId = req.user.id;
@@ -868,10 +944,28 @@ exports.getMyLeaveQuotas = async (req, res) => {
         else if (type.includes('comp')) quotas.compOff = p.annualAllowance || quotas.compOff;
         else if (type.includes('optional')) quotas.optionalHoliday = p.annualAllowance || quotas.optionalHoliday;
       });
-    } catch (err) {}
+    } catch (err) { }
+
+    try {
+      const now = new Date();
+      const month = now.getMonth() + 1;
+      const year = now.getFullYear();
+      const balance = await LeaveBalance.findOne({ employeeId: req.user.id, month, year });
+
+      if (balance) {
+        if (balance.casualLeave !== undefined) quotas.casual = balance.casualLeave;
+        if (balance.sickLeave !== undefined) quotas.sick = balance.sickLeave;
+        if (balance.earnedLeave !== undefined) quotas.earned = balance.earnedLeave;
+        if (balance.emergencyLeave !== undefined) quotas.emergency = balance.emergencyLeave;
+        if (balance.compOff !== undefined) quotas.compOff = balance.compOff;
+        if (balance.otherLeaves !== undefined) quotas.optionalHoliday = balance.otherLeaves;
+      }
+    } catch (bErr) {
+      console.warn('Could not fetch user leave balance override:', bErr.message);
+    }
 
     Object.keys(quotas).forEach(k => {
-      quotas[k] = Math.round(quotas[k]);
+      quotas[k] = Number(Number(quotas[k] || 0).toFixed(1));
     });
 
     res.json(quotas);
@@ -904,10 +998,23 @@ exports.getAllLeaves = async (req, res) => {
 
 const Holiday = require('../models/Holiday');
 
+const getSubordinateUserIds = async (user) => {
+  if (user.role === 'admin' || user.role === 'hr') {
+    const allUsers = await User.find({ _id: { $ne: user.id } }).select('_id');
+    return allUsers.map(u => u._id);
+  }
+  const subordinates = await User.find({ reportingManager: user.id }).select('_id');
+  let subIds = subordinates.map(s => s._id).filter(id => String(id) !== String(user.id));
+  if (subIds.length === 0) {
+    const allUsers = await User.find({ role: { $ne: 'admin' }, _id: { $ne: user.id } }).select('_id');
+    subIds = allUsers.map(u => u._id);
+  }
+  return subIds;
+};
+
 exports.getManagerStats = async (req, res) => {
   try {
-    const subordinates = await User.find({ reportingManager: req.user.id }).select('_id');
-    const subIds = subordinates.map(s => s._id);
+    const subIds = await getSubordinateUserIds(req.user);
 
     const pending = await Leave.countDocuments({ user: { $in: subIds }, status: { $in: ['pending', 'cancellation_pending'] } });
 
@@ -977,14 +1084,7 @@ exports.getEmployeesOnLeaveToday = async (req, res) => {
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
 
-    let queryUserIds = [];
-    if (req.user.role === 'manager') {
-      const subordinates = await User.find({ reportingManager: req.user.id }).select('_id');
-      queryUserIds = subordinates.map(s => s._id);
-    } else {
-      const users = await User.find({ role: { $ne: 'admin' } }).select('_id');
-      queryUserIds = users.map(u => u._id);
-    }
+    const queryUserIds = await getSubordinateUserIds(req.user);
 
     const leaves = await Leave.find({
       user: { $in: queryUserIds },
@@ -1024,14 +1124,7 @@ exports.getUpcomingLeavesList = async (req, res) => {
     const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
     const next7Days = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
 
-    let queryUserIds = [];
-    if (req.user.role === 'manager') {
-      const subordinates = await User.find({ reportingManager: req.user.id }).select('_id');
-      queryUserIds = subordinates.map(s => s._id);
-    } else {
-      const users = await User.find({ role: { $ne: 'admin' } }).select('_id');
-      queryUserIds = users.map(u => u._id);
-    }
+    const queryUserIds = await getSubordinateUserIds(req.user);
 
     const leaves = await Leave.find({
       user: { $in: queryUserIds },
@@ -1068,10 +1161,9 @@ exports.getTeamLeaves = async (req, res) => {
     const skip = (page - 1) * limit;
     const { status, startDate, endDate } = req.query;
 
-    const subordinates = await User.find({ reportingManager: req.user.id }).select('_id');
-    const subIds = subordinates.map(s => s._id).filter(id => String(id) !== String(req.user.id));
+    const subIds = await getSubordinateUserIds(req.user);
 
-    const query = { user: { $in: subIds, $ne: req.user.id } };
+    const query = { user: { $in: subIds } };
 
     if (status === 'pending') {
       query.status = { $in: ['pending', 'cancellation_pending'] };
@@ -1097,7 +1189,7 @@ exports.getTeamLeaves = async (req, res) => {
     }
 
     // Calculate status counts
-    const baseQuery = { user: { $in: subIds, $ne: req.user.id } };
+    const baseQuery = { user: { $in: subIds } };
     const allTeamLeaves = await Leave.find(baseQuery);
 
     const counts = {
@@ -1132,8 +1224,7 @@ exports.getTeamLeaves = async (req, res) => {
 
 exports.getAvailabilityStats = async (req, res) => {
   try {
-    const subordinates = await User.find({ reportingManager: req.user.id }).select('_id');
-    const subIds = subordinates.map(s => s._id);
+    const subIds = await getSubordinateUserIds(req.user);
 
     const now = new Date();
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -1186,8 +1277,7 @@ exports.getManagerCalendar = async (req, res) => {
     const startDate = new Date(y, m, 1);
     const endDate = new Date(y, m + 1, 0, 23, 59, 59);
 
-    const subordinates = await User.find({ reportingManager: req.user.id }).select('_id');
-    const subIds = subordinates.map(s => s._id);
+    const subIds = await getSubordinateUserIds(req.user);
 
     const leaves = await Leave.find({
       user: { $in: subIds },
@@ -1215,12 +1305,8 @@ exports.getTeamLeaveBalances = async (req, res) => {
     const currentMonth = now.getMonth() + 1;
     const currentYear = now.getFullYear();
 
-    let query = { month: currentMonth, year: currentYear };
-    if (req.user.role !== 'admin') {
-      const subordinates = await User.find({ reportingManager: req.user.id }).select('_id');
-      const subIds = subordinates.map(s => s._id);
-      query.employeeId = { $in: subIds };
-    }
+    const subIds = await getSubordinateUserIds(req.user);
+    let query = { month: currentMonth, year: currentYear, employeeId: { $in: subIds } };
 
     const total = await LeaveBalance.countDocuments(query);
     const balances = await LeaveBalance.find(query)
@@ -1263,8 +1349,7 @@ exports.getLeaveMonthlyTrend = async (req, res) => {
     const startDate = new Date(year, 0, 1);
     const endDate = new Date(year, 11, 31, 23, 59, 59);
 
-    const subordinates = await User.find({ reportingManager: req.user.id }).select('_id');
-    const subIds = subordinates.map(s => s._id);
+    const subIds = await getSubordinateUserIds(req.user);
 
     const leaves = await Leave.aggregate([
       {
@@ -1305,8 +1390,7 @@ exports.getDepartmentAnalytics = async (req, res) => {
     const startDate = new Date(year, month, 1);
     const endDate = new Date(year, month + 1, 0, 23, 59, 59);
 
-    const subordinates = await User.find({ reportingManager: req.user.id });
-    const subIds = subordinates.map(s => s._id);
+    const subIds = await getSubordinateUserIds(req.user);
 
     const leaves = await Leave.find({
       user: { $in: subIds },
@@ -1369,8 +1453,7 @@ exports.exportTeamLeaves = async (req, res) => {
       }
     };
 
-    const subordinates = await User.find({ reportingManager: req.user.id }).select('_id');
-    const subIds = subordinates.map(s => s._id);
+    const subIds = await getSubordinateUserIds(req.user);
 
     const leaves = await Leave.find({ user: { $in: subIds } })
       .populate('user', 'name email department')
@@ -1463,12 +1546,22 @@ exports.allocateLeave = async (req, res) => {
     if (leaveType === 'casual') balanceField = 'casualLeave';
     else if (leaveType === 'sick') balanceField = 'sickLeave';
     else if (leaveType === 'earned') balanceField = 'earnedLeave';
+    else if (leaveType === 'emergency') balanceField = 'emergencyLeave';
     else if (leaveType === 'compOff') balanceField = 'compOff';
     else if (leaveType === 'other' || leaveType === 'optional') balanceField = 'otherLeaves';
 
     const now = new Date();
     const month = now.getMonth() + 1;
     const year = now.getFullYear();
+
+    const defaultBase = {
+      casualLeave: 12,
+      sickLeave: 10,
+      earnedLeave: 20,
+      emergencyLeave: 5,
+      compOff: 3,
+      otherLeaves: 1
+    };
 
     const promises = targetUserIds.map(async (targetId) => {
       let balance = await LeaveBalance.findOne({ employeeId: targetId, month, year });
@@ -1477,11 +1570,13 @@ exports.allocateLeave = async (req, res) => {
         balance = new LeaveBalance({
           employeeId: targetId,
           month,
-          year
+          year,
+          ...defaultBase
         });
       }
 
-      const oldDays = balance[balanceField] || 0;
+      const currentVal = balance[balanceField];
+      const oldDays = (currentVal !== undefined && currentVal > 0) ? currentVal : (defaultBase[balanceField] || 0);
       let newDays = oldDays;
 
       if (action === 'add') {
@@ -1495,10 +1590,12 @@ exports.allocateLeave = async (req, res) => {
             throw new Error('Cannot deduct more leaves than the current balance');
           }
         }
+      } else if (action === 'set') {
+        newDays = numDays;
       }
 
       balance[balanceField] = newDays;
-      balance.remainingLeave = (balance.earnedLeave || 0) + (balance.sickLeave || 0) + (balance.casualLeave || 0) + (balance.compOff || 0) + (balance.otherLeaves || 0) + (balance.carryForward || 0) - (balance.usedLeave || 0);
+      balance.remainingLeave = (balance.earnedLeave || 0) + (balance.sickLeave || 0) + (balance.casualLeave || 0) + (balance.emergencyLeave || 0) + (balance.compOff || 0) + (balance.otherLeaves || 0) + (balance.carryForward || 0) - (balance.usedLeave || 0);
 
       await balance.save();
 

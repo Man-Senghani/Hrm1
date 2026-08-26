@@ -33,11 +33,10 @@ const CustomSelect = ({ value, onChange, options }) => {
                   onChange(opt.value);
                   setIsOpen(false);
                 }}
-                className={`w-full text-left px-3 py-2 text-xs font-semibold hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors cursor-pointer ${
-                  value === opt.value 
-                    ? 'text-indigo-600 dark:text-indigo-400 bg-indigo-50/50 dark:bg-indigo-950/20' 
+                className={`w-full text-left px-3 py-2 text-xs font-semibold hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors cursor-pointer ${value === opt.value
+                    ? 'text-indigo-600 dark:text-indigo-400 bg-indigo-50/50 dark:bg-indigo-950/20'
                     : 'text-gray-700 dark:text-gray-300'
-                }`}
+                  }`}
               >
                 {opt.label}
               </button>
@@ -65,8 +64,8 @@ const AllocateLeaveModal = ({ isOpen, onClose, onSuccess }) => {
         headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` }
       }).then(res => {
         const data = res.data;
-        const list = (data && typeof data === 'object') 
-          ? (data.employees || data.data || (Array.isArray(data) ? data : [])) 
+        const list = (data && typeof data === 'object')
+          ? (data.employees || data.data || (Array.isArray(data) ? data : []))
           : [];
         setEmployees(list);
       }).catch(err => console.error(err));
@@ -107,27 +106,28 @@ const AllocateLeaveModal = ({ isOpen, onClose, onSuccess }) => {
             <X size={18} />
           </button>
         </div>
-        
+
         <div className="flex-1 flex flex-col justify-between h-full pt-4 overflow-hidden">
           <div className="overflow-y-auto pr-1 flex-1 space-y-4 pb-2">
             <div>
               <label className="block text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1">Select Employee</label>
-              <CustomSelect 
+              <CustomSelect
                 value={formData.userId}
-                onChange={val => setFormData({...formData, userId: val})}
+                onChange={val => setFormData({ ...formData, userId: val })}
                 options={employeeOptions}
               />
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1">Leave Type</label>
-                <CustomSelect 
+                <CustomSelect
                   value={formData.leaveType}
-                  onChange={val => setFormData({...formData, leaveType: val})}
+                  onChange={val => setFormData({ ...formData, leaveType: val })}
                   options={[
                     { value: 'casual', label: 'Casual Leave' },
                     { value: 'sick', label: 'Sick Leave' },
                     { value: 'earned', label: 'Earned Leave' },
+                    { value: 'emergency', label: 'Emergency Leave' },
                     { value: 'compOff', label: 'Comp Off' },
                     { value: 'optional', label: 'Optional Holiday' }
                   ]}
@@ -135,26 +135,27 @@ const AllocateLeaveModal = ({ isOpen, onClose, onSuccess }) => {
               </div>
               <div>
                 <label className="block text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1">Action</label>
-                <CustomSelect 
+                <CustomSelect
                   value={formData.action}
-                  onChange={val => setFormData({...formData, action: val})}
+                  onChange={val => setFormData({ ...formData, action: val })}
                   options={[
                     { value: 'add', label: 'Add' },
-                    { value: 'deduct', label: 'Deduct' }
+                    { value: 'deduct', label: 'Deduct' },
+                    { value: 'set', label: 'Set Total' }
                   ]}
                 />
               </div>
             </div>
             <div>
               <label className="block text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1">Number of Days</label>
-              <input 
+              <input
                 required type="number" min="0.5" step="0.5"
                 className="w-full border border-gray-200 dark:border-gray-700 rounded-xl py-2 px-3 bg-gray-50 dark:bg-[#0f172a] text-gray-900 dark:text-white text-xs font-semibold focus:outline-none focus:border-indigo-500"
-                value={formData.days} onChange={e => setFormData({...formData, days: e.target.value})} 
+                value={formData.days} onChange={e => setFormData({ ...formData, days: e.target.value })}
               />
             </div>
           </div>
-          
+
           <div className="pt-4 border-t border-gray-200 dark:border-gray-800 flex justify-end gap-3 mt-4">
             <button type="button" onClick={onClose} className="px-4 py-2 rounded-xl font-bold text-gray-500 hover:text-gray-700 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 text-xs transition-colors">Cancel</button>
             <button type="submit" disabled={loading} className="px-4 py-2 rounded-xl font-bold text-white bg-green-600 hover:bg-green-700 text-xs transition-colors">

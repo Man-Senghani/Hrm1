@@ -253,7 +253,7 @@ const LeaveManagement = ({ isChild = false }) => {
       fetchMyLeaves();
     } catch (err) {
       console.error('Submit failed:', err);
-      toast.error('Failed to submit leave request: ' + (err.response?.data?.message || err.message));
+      toast.error(err.response?.data?.message || 'Failed to submit leave request.');
     } finally {
       setIsSubmitting(false);
     }
