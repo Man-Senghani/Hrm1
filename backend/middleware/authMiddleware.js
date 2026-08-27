@@ -27,16 +27,24 @@ const protect = async (req, res, next) => {
   }
 };
 
-// 👮 Role Based Authorization
+// 👮 Role Based Authorization (Case-insensitive & handles aliases like "Team Manager" / "team_manager")
 const authorize = (...roles) => {
   return (req, res, next) => {
-    if (!roles.includes(req.user.role)) {
-      return res.status(403).json({ 
-        message: `Role (${req.user.role}) is not authorized to access this resource` 
-      });
+    const userRole = (req.user?.role || '').toLowerCase().trim();
+    const normalizedAllowed = roles.map(r => r.toLowerCase().trim());
+
+    const isManagerAlias = ['manager', 'team manager', 'team_manager', 'teammanager'].includes(userRole);
+    const allowManager = normalizedAllowed.some(r => ['manager', 'team manager', 'team_manager', 'teammanager'].includes(r));
+
+    if (normalizedAllowed.includes(userRole) || (isManagerAlias && allowManager)) {
+      return next();
     }
-    next();
+
+    return res.status(403).json({ 
+      message: `Role (${req.user.role}) is not authorized to access this resource` 
+    });
   };
 };
 
 module.exports = { protect, authorize };
+
