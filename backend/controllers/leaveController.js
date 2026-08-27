@@ -4,6 +4,8 @@ const AuditLog = require('../models/AuditLog');
 const { isLeaveDatePassed } = require('../utils/leaveUtils');
 const LeaveHistory = require('../models/LeaveHistory');
 const LeaveBalance = require('../models/LeaveBalance');
+const Employee = require('../models/Employee');
+
 
 const updateLeaveBalanceForUser = async (userId, date) => {
   const m = date.getMonth() + 1;
