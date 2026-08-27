@@ -944,32 +944,14 @@ exports.getMyLeaveQuotas = async (req, res) => {
       const activePolicies = await LeavePolicy.find({ status: { $regex: /^active$/i } });
       activePolicies.forEach(p => {
         const type = (p.type || p.name || '').toLowerCase();
-        if (type.includes('sick')) quotas.sick = p.annualAllowance || quotas.sick;
-        else if (type.includes('casual')) quotas.casual = p.annualAllowance || quotas.casual;
-        else if (type.includes('earned') || type.includes('annual')) quotas.earned = p.annualAllowance || quotas.earned;
-        else if (type.includes('emergency')) quotas.emergency = p.annualAllowance || quotas.emergency;
-        else if (type.includes('comp')) quotas.compOff = p.annualAllowance || quotas.compOff;
-        else if (type.includes('optional')) quotas.optionalHoliday = p.annualAllowance || quotas.optionalHoliday;
+        if (type.includes('sick') && p.annualAllowance > 0) quotas.sick = p.annualAllowance;
+        else if (type.includes('casual') && p.annualAllowance > 0) quotas.casual = p.annualAllowance;
+        else if ((type.includes('earned') || type.includes('annual')) && p.annualAllowance > 0) quotas.earned = p.annualAllowance;
+        else if (type.includes('emergency') && p.annualAllowance > 0) quotas.emergency = p.annualAllowance;
+        else if (type.includes('comp') && p.annualAllowance > 0) quotas.compOff = p.annualAllowance;
+        else if (type.includes('optional') && p.annualAllowance > 0) quotas.optionalHoliday = p.annualAllowance;
       });
     } catch (err) { }
-
-    try {
-      const now = new Date();
-      const month = now.getMonth() + 1;
-      const year = now.getFullYear();
-      const balance = await LeaveBalance.findOne({ employeeId: req.user.id, month, year });
-
-      if (balance) {
-        if (balance.casualLeave !== undefined) quotas.casual = balance.casualLeave;
-        if (balance.sickLeave !== undefined) quotas.sick = balance.sickLeave;
-        if (balance.earnedLeave !== undefined) quotas.earned = balance.earnedLeave;
-        if (balance.emergencyLeave !== undefined) quotas.emergency = balance.emergencyLeave;
-        if (balance.compOff !== undefined) quotas.compOff = balance.compOff;
-        if (balance.otherLeaves !== undefined) quotas.optionalHoliday = balance.otherLeaves;
-      }
-    } catch (bErr) {
-      console.warn('Could not fetch user leave balance override:', bErr.message);
-    }
 
     Object.keys(quotas).forEach(k => {
       quotas[k] = Number(Number(quotas[k] || 0).toFixed(1));
