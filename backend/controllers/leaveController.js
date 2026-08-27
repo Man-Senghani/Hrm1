@@ -1850,3 +1850,307 @@ exports.requestLeaveCancellation = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
+
+// ==========================================
+// 👨‍💼 MANAGER TEAM LEAVES CONTROLLER ENDPOINTS
+// ==========================================
+
+// @desc    Get team pending/filtered leave requests for Manager Dashboard
+// @route   GET /api/leaves/manager/pending
+// @access  Private/Manager/HR/Admin
+exports.getTeamLeaves = async (req, res) => {
+  try {
+    const subIds = await getSubordinateUserIds(req.user);
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+    const { status, startDate, endDate } = req.query;
+
+    let query = { user: { $in: subIds } };
+    if (status && status !== 'all' && status !== 'this_month') {
+      query.status = status;
+    } else if (status === 'this_month') {
+      const now = new Date();
+      const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+      const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+      query.createdAt = { $gte: firstDay, $lte: lastDay };
+    }
+
+    if (startDate && endDate) {
+      query.startDate = { $gte: new Date(startDate), $lte: new Date(endDate) };
+    }
+
+    const total = await Leave.countDocuments(query);
+    const leaves = await Leave.find(query)
+      .populate('user', 'name email role employeeId profileImage department')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean();
+
+    const allSubLeaves = await Leave.find({ user: { $in: subIds } }).lean();
+    const now = new Date();
+    const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+    const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+
+    const counts = {
+      all: allSubLeaves.length,
+      this_month: allSubLeaves.filter(l => new Date(l.createdAt) >= firstDay && new Date(l.createdAt) <= lastDay).length,
+      approved: allSubLeaves.filter(l => l.status === 'approved').length,
+      cancellation_pending: allSubLeaves.filter(l => l.status === 'cancellation_pending').length,
+      rejected: allSubLeaves.filter(l => l.status === 'rejected').length,
+      cancelled: allSubLeaves.filter(l => l.status === 'cancelled').length
+    };
+
+    res.json({
+      success: true,
+      data: leaves,
+      counts,
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit) || 1
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Get team availability statistics
+// @route   GET /api/leaves/manager/availability
+// @access  Private/Manager/HR/Admin
+exports.getAvailabilityStats = async (req, res) => {
+  try {
+    const subIds = await getSubordinateUserIds(req.user);
+    const totalEmployees = subIds.length;
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+
+    const activeLeavesToday = await Leave.find({
+      user: { $in: subIds },
+      status: 'approved',
+      startDate: { $lte: endOfToday },
+      endDate: { $gte: startOfToday }
+    }).lean();
+
+    const onLeaveCount = activeLeavesToday.length;
+    const available = Math.max(0, totalEmployees - onLeaveCount);
+
+    res.json({
+      totalEmployees,
+      available,
+      onLeave: onLeaveCount,
+      workFromHome: 0,
+      halfDay: 0,
+      absent: 0
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Get manager team calendar events
+// @route   GET /api/leaves/manager/calendar
+// @access  Private/Manager/HR/Admin
+exports.getManagerCalendar = async (req, res) => {
+  try {
+    const subIds = await getSubordinateUserIds(req.user);
+    const month = parseInt(req.query.month) || (new Date().getMonth() + 1);
+    const year = parseInt(req.query.year) || new Date().getFullYear();
+
+    const startDate = new Date(year, month - 1, 1);
+    const endDate = new Date(year, month, 0, 23, 59, 59);
+
+    const [leaves, holidays] = await Promise.all([
+      Leave.find({
+        user: { $in: subIds },
+        status: { $in: ['approved', 'pending'] },
+        startDate: { $lte: endDate },
+        endDate: { $gte: startDate }
+      }).populate('user', 'name email role').lean(),
+      Holiday.find({
+        date: { $gte: startDate, $lte: endDate }
+      }).lean()
+    ]);
+
+    res.json({ leaves, holidays });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Get team members' leave balances
+// @route   GET /api/leaves/manager/balances
+// @access  Private/Manager/HR/Admin
+exports.getTeamLeaveBalances = async (req, res) => {
+  try {
+    const subIds = await getSubordinateUserIds(req.user);
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+
+    const employees = await User.find({ _id: { $in: subIds } })
+      .select('name email role employeeId profileImage department')
+      .skip(skip)
+      .limit(limit)
+      .lean();
+
+    const total = subIds.length;
+    const now = new Date();
+    const month = now.getMonth() + 1;
+    const year = now.getFullYear();
+
+    const balances = await Promise.all(employees.map(async (emp) => {
+      let b = await LeaveBalance.findOne({ employeeId: emp._id, month, year }).lean();
+      return {
+        _id: emp._id,
+        user: emp,
+        earnedLeave: b?.earnedLeave ?? 1.5,
+        sickLeave: b?.sickLeave ?? 10,
+        casualLeave: b?.casualLeave ?? 12,
+        compOff: b?.compOff ?? 3,
+        otherLeaves: b?.otherLeaves ?? 1,
+        usedLeave: b?.usedLeave ?? 0
+      };
+    }));
+
+    res.json({
+      success: true,
+      data: balances,
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit) || 1
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Get monthly leave trends for manager dashboard
+// @route   GET /api/leaves/manager/monthly-trend
+// @access  Private/Manager/HR/Admin
+exports.getLeaveMonthlyTrend = async (req, res) => {
+  try {
+    const subIds = await getSubordinateUserIds(req.user);
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const now = new Date();
+    const trend = [];
+
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const mIdx = d.getMonth();
+      const y = d.getFullYear();
+      const mStart = new Date(y, mIdx, 1);
+      const mEnd = new Date(y, mIdx + 1, 0, 23, 59, 59);
+
+      const [approved, pending] = await Promise.all([
+        Leave.countDocuments({ user: { $in: subIds }, status: 'approved', createdAt: { $gte: mStart, $lte: mEnd } }),
+        Leave.countDocuments({ user: { $in: subIds }, status: 'pending', createdAt: { $gte: mStart, $lte: mEnd } })
+      ]);
+
+      trend.push({
+        month: months[mIdx],
+        approved,
+        pending
+      });
+    }
+
+    res.json(trend);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Get department leave analytics for manager dashboard
+// @route   GET /api/leaves/manager/department-analytics
+// @access  Private/Manager/HR/Admin
+exports.getDepartmentAnalytics = async (req, res) => {
+  try {
+    const subIds = await getSubordinateUserIds(req.user);
+    const leaves = await Leave.find({ user: { $in: subIds }, status: 'approved' })
+      .populate('user', 'department')
+      .lean();
+
+    const deptMap = {};
+    leaves.forEach(l => {
+      const dept = l.user?.department || 'General';
+      deptMap[dept] = (deptMap[dept] || 0) + (l.totalDays || 1);
+    });
+
+    const data = Object.keys(deptMap).map(d => ({
+      department: d,
+      count: deptMap[d],
+      leaves: deptMap[d]
+    }));
+
+    if (data.length === 0) {
+      data.push({ department: 'General', count: 0, leaves: 0 });
+    }
+
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Bulk approve pending leaves
+// @route   PUT /api/leaves/manager/bulk-approve
+// @access  Private/Manager/HR/Admin
+exports.bulkApproveLeaves = async (req, res) => {
+  try {
+    const { leaveIds } = req.body;
+    if (!Array.isArray(leaveIds) || leaveIds.length === 0) {
+      return res.status(400).json({ message: 'No leave IDs provided.' });
+    }
+
+    const updated = await Leave.updateMany(
+      { _id: { $in: leaveIds }, status: { $in: ['pending', 'cancellation_pending'] } },
+      { $set: { status: 'approved' } }
+    );
+
+    res.json({ success: true, message: `${updated.modifiedCount} leave(s) approved successfully.` });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Export team leaves data
+// @route   GET /api/leaves/manager/export
+// @access  Private/Manager/HR/Admin
+exports.exportTeamLeaves = async (req, res) => {
+  try {
+    const subIds = await getSubordinateUserIds(req.user);
+    const leaves = await Leave.find({ user: { $in: subIds } })
+      .populate('user', 'name email employeeId department')
+      .lean();
+
+    const format = req.query.format || 'csv';
+    if (format === 'csv') {
+      let csv = 'Employee Name,Email,Leave Type,Start Date,End Date,Total Days,Status,Reason\n';
+      leaves.forEach(l => {
+        const name = `"${l.user?.name || ''}"`;
+        const email = `"${l.user?.email || ''}"`;
+        const type = `"${l.leaveType || ''}"`;
+        const start = `"${l.startDate ? new Date(l.startDate).toISOString().split('T')[0] : ''}"`;
+        const end = `"${l.endDate ? new Date(l.endDate).toISOString().split('T')[0] : ''}"`;
+        const days = l.totalDays || 1;
+        const status = `"${l.status || ''}"`;
+        const reason = `"${(l.reason || '').replace(/"/g, '""')}"`;
+        csv += `${name},${email},${type},${start},${end},${days},${status},${reason}\n`;
+      });
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', 'attachment; filename="team_leaves_report.csv"');
+      return res.send(csv);
+    }
+
+    res.json(leaves);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
