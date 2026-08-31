@@ -27,12 +27,15 @@ const LeaveManagement = () => {
 
   const fetchStats = async () => {
     try {
+      const token = sessionStorage.getItem('token');
       const res = await axios.get('/api/leaves/manager/summary', {
-        headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` }
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
       });
       setStats(res.data);
     } catch (error) {
-      toast.error('Failed to load leave summary stats');
+      if (error.response?.status !== 401 && error.response?.status !== 403) {
+        toast.error('Failed to load leave summary stats');
+      }
     } finally {
       setLoading(false);
     }

@@ -17,8 +17,9 @@ const TeamLeaveBalance = () => {
   const fetchBalances = async () => {
     try {
       setLoading(true);
+      const token = sessionStorage.getItem('token');
       const res = await axios.get(`/api/leaves/manager/balances?page=${currentPage}&limit=5`, {
-        headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` }
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
       });
       setBalances(res.data.data || []);
       if (res.data.pagination) {
@@ -26,7 +27,9 @@ const TeamLeaveBalance = () => {
         setTotalItems(res.data.pagination.total);
       }
     } catch (err) {
-      toast.error('Failed to load leave balances');
+      if (err.response?.status !== 401 && err.response?.status !== 403) {
+        toast.error('Failed to load leave balances');
+      }
     } finally {
       setLoading(false);
     }
@@ -35,12 +38,15 @@ const TeamLeaveBalance = () => {
   const fetchAllBalances = async () => {
     try {
       setDrawerLoading(true);
+      const token = sessionStorage.getItem('token');
       const res = await axios.get(`/api/leaves/manager/balances?limit=100`, {
-        headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` }
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
       });
       setAllBalances(res.data.data || []);
     } catch (err) {
-      toast.error('Failed to load full leave balances');
+      if (err.response?.status !== 401 && err.response?.status !== 403) {
+        toast.error('Failed to load full leave balances');
+      }
     } finally {
       setDrawerLoading(false);
     }

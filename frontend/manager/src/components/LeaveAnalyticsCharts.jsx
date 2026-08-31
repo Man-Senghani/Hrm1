@@ -19,12 +19,15 @@ const LeaveAnalyticsCharts = () => {
   useEffect(() => {
     const fetchTrend = async () => {
       try {
+        const token = sessionStorage.getItem('token');
         const res = await axios.get('/api/leaves/manager/monthly-trend', {
-          headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` }
+          headers: token ? { Authorization: `Bearer ${token}` } : {}
         });
         setMonthlyTrend(res.data);
       } catch (err) {
-        toast.error('Failed to load monthly trend');
+        if (err.response?.status !== 401 && err.response?.status !== 403) {
+          toast.error('Failed to load monthly trend');
+        }
       } finally {
         setLoading1(false);
       }
@@ -32,12 +35,15 @@ const LeaveAnalyticsCharts = () => {
 
     const fetchDept = async () => {
       try {
+        const token = sessionStorage.getItem('token');
         const res = await axios.get('/api/leaves/manager/department-analytics', {
-          headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` }
+          headers: token ? { Authorization: `Bearer ${token}` } : {}
         });
         setDepartmentData(res.data);
       } catch (err) {
-        toast.error('Failed to load department analytics');
+        if (err.response?.status !== 401 && err.response?.status !== 403) {
+          toast.error('Failed to load department analytics');
+        }
       } finally {
         setLoading2(false);
       }

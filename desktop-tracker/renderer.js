@@ -352,7 +352,10 @@ async function triggerIdle(idleSeconds = 60) {
   isIdle = true;
   isSessionRunning = false;
 
-  // 🛡️ Preserve all genuine active work time — freeze activeSeconds and accumulate idle seconds
+  // 🛡️ Deduct 1 minute (idleSeconds) from active work time and credit to inactive time
+  activeSeconds = Math.max(0, activeSeconds - idleSeconds);
+  inactiveSeconds += idleSeconds;
+
   lastAppliedActive = activeSeconds;
   lastAppliedInactive = inactiveSeconds;
   lastAppliedTime = Date.now();

@@ -12,12 +12,15 @@ const TeamLeaveCalendar = () => {
   const fetchCalendar = async (month, year) => {
     try {
       setLoading(true);
+      const token = sessionStorage.getItem('token');
       const res = await axios.get(`/api/leaves/manager/calendar?month=${month + 1}&year=${year}`, {
-        headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` }
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
       });
       setData(res.data);
     } catch (err) {
-      toast.error('Failed to load calendar data');
+      if (err.response?.status !== 401 && err.response?.status !== 403) {
+        toast.error('Failed to load calendar data');
+      }
     } finally {
       setLoading(false);
     }

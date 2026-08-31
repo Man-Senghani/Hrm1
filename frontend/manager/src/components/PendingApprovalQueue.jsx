@@ -66,8 +66,9 @@ const PendingApprovalQueue = ({ onAction, onCountsUpdate }) => {
       if (filterStartDate) params.append('startDate', filterStartDate);
       if (filterEndDate) params.append('endDate', filterEndDate);
 
+      const token = sessionStorage.getItem('token');
       const res = await axios.get(`/api/leaves/manager/pending?${params.toString()}`, {
-        headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` }
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
       });
       setLeaves(res.data.data || []);
       if (res.data.counts) {
@@ -81,7 +82,9 @@ const PendingApprovalQueue = ({ onAction, onCountsUpdate }) => {
         setTotalItems(res.data.pagination.total);
       }
     } catch (err) {
-      toast.error('Failed to fetch leave requests');
+      if (err.response?.status !== 401 && err.response?.status !== 403) {
+        toast.error('Failed to fetch leave requests');
+      }
     } finally {
       setLoading(false);
     }

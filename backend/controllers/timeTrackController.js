@@ -366,8 +366,11 @@ exports.updateActivity = async (req, res) => {
       if (isIdleSignal) {
         // ── Idle transition ──
         if (!session.idleApplied) {
-          // Flush active duration up to idle transition into activeTime
-          session.activeTime += flushSegment(session, now);
+          // Flush active duration up to idle transition, deducting 1-minute idle threshold
+          const segmentDuration = flushSegment(session, now);
+          const activeSegment = Math.max(0, segmentDuration - IDLE_THRESHOLD_SECONDS);
+          session.activeTime += activeSegment;
+          session.idleTime += IDLE_THRESHOLD_SECONDS;
           session.segmentStart = null;
           session.idleStart = now; // 🕒 Ongoing idle time accumulates from now
           session.inactivityCount += 1;

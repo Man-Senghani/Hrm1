@@ -12,12 +12,15 @@ const EmployeeAvailabilityChart = ({ trigger }) => {
     const fetchAvailability = async () => {
       try {
         setLoading(true);
+        const token = sessionStorage.getItem('token');
         const res = await axios.get('/api/leaves/manager/availability', {
-          headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` }
+          headers: token ? { Authorization: `Bearer ${token}` } : {}
         });
         setData(res.data);
       } catch (err) {
-        toast.error('Failed to load availability');
+        if (err.response?.status !== 401 && err.response?.status !== 403) {
+          toast.error('Failed to load availability');
+        }
       } finally {
         setLoading(false);
       }
