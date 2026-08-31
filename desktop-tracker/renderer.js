@@ -352,9 +352,17 @@ async function triggerIdle(idleSeconds = 60) {
   isIdle = true;
   isSessionRunning = false;
 
-  // 🛡️ Deduct 1 minute (idleSeconds) from active work time and credit to inactive time
-  activeSeconds = Math.max(0, activeSeconds - idleSeconds);
-  inactiveSeconds += idleSeconds;
+  // 🛡️ Calculate exact total elapsed active time up to this moment
+  let totalElapsedActive = activeSeconds;
+  if (lastAppliedTime > 0) {
+    const elapsedSincePoll = Math.floor((Date.now() - lastAppliedTime) / 1000);
+    totalElapsedActive = lastAppliedActive + Math.max(0, elapsedSincePoll);
+  }
+
+  // 🎯 TRANSFER MATH: Subtract inactive duration from Active Time and add to Inactive Time
+  // Total Time (Active + Inactive) remains 100% constant!
+  activeSeconds = Math.max(0, totalElapsedActive - idleSeconds);
+  inactiveSeconds = lastAppliedInactive + idleSeconds;
 
   lastAppliedActive = activeSeconds;
   lastAppliedInactive = inactiveSeconds;
