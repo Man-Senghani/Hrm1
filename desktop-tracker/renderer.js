@@ -1014,3 +1014,13 @@ document.getElementById('update-close-btn')?.addEventListener('click', () => {
     updateSection.style.display = 'none';
   }
 });
+
+// ── Dynamic Version Display ─────────────────────────────
+if (window.electronAPI?.getAppVersion) {
+  window.electronAPI.getAppVersion().then(v => {
+    const versionEl = document.getElementById('version-display');
+    if (versionEl && v) {
+      versionEl.innerText = `V${v} PRO`;
+    }
+  }).catch(() => {});
+}
