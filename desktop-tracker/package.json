@@ -25,7 +25,8 @@
       "icon": "icon.ico",
       "forceCodeSigning": false,
       "signAndEditExecutable": false,
-      "verifyUpdateCodeSignature": false
+      "verifyUpdateCodeSignature": false,
+      "signExts": []
     },
     "nsis": {
       "oneClick": true,
