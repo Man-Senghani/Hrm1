@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { Search, UserPlus, Trash2, Edit3, User, Eye, CheckCircle, XCircle, RefreshCw, Download, SlidersHorizontal, MoreHorizontal, Plus } from 'lucide-react';
@@ -29,7 +30,8 @@ const HREmployees = () => {
   const pathRole = window.location.pathname.split('/')[1] || 'hr';
 
   const [currentPage, setCurrentPage] = useState(1);
-
+  const [statusModal, setStatusModal] = useState({ isOpen: false, employee: null, targetStatus: '' });
+  const [statusUpdating, setStatusUpdating] = useState(false);
 
   const fetchEmployees = async () => {
     try {
@@ -68,6 +70,9 @@ const HREmployees = () => {
 
   const uniqueEmployees = Array.from(new Map(dbEmployees.map(emp => [emp._id, emp])).values());
   const filteredEmployees = uniqueEmployees.filter(emp => {
+    const empRole = (emp.role || emp.userId?.role || '').toLowerCase();
+    if (empRole === 'admin') return false;
+
     const fullName = emp.fullName?.toLowerCase() || emp.userId?.name?.toLowerCase() || '';
     const email = emp.email?.toLowerCase() || emp.userId?.email?.toLowerCase() || '';
     const empId = emp.employeeId?.toLowerCase() || '';
@@ -153,15 +158,55 @@ const HREmployees = () => {
     }
   };
 
-  const renderStatusBadge = (status) => {
-    const isActive = status.toLowerCase() === 'active';
+  const handleToggleClick = (emp) => {
+    const currentStatus = (emp.status || emp.userId?.status || 'active').toLowerCase();
+    const newStatus = currentStatus === 'active' ? 'inactive' : 'active';
+    setStatusModal({ isOpen: true, employee: emp, targetStatus: newStatus });
+  };
+
+  const confirmStatusChange = async () => {
+    if (!statusModal.employee) return;
+    setStatusUpdating(true);
+    try {
+      const token = sessionStorage.getItem('token');
+      const empId = statusModal.employee._id;
+      const newStatus = statusModal.targetStatus;
+      await axios.patch(`/api/employees/${empId}/status`, { status: newStatus }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setDbEmployees(prev => prev.map(e => e._id === empId ? { ...e, status: newStatus } : e));
+    } catch (err) {
+      console.error('Failed to update status:', err);
+      alert(err.response?.data?.message || 'Failed to update employee status.');
+    } finally {
+      setStatusUpdating(false);
+      setStatusModal({ isOpen: false, employee: null, targetStatus: '' });
+    }
+  };
+
+  const renderStatusSwitch = (emp) => {
+    const status = (emp.status || emp.userId?.status || 'active').toLowerCase();
+    const isActive = status === 'active';
     return (
-      <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${isActive
-        ? 'bg-[#e2f7ed] text-[#00875a] dark:bg-[#112a20] dark:text-[#3cd070]'
-        : 'bg-[#f4f5f7] text-[#5e6c84] dark:bg-[#202528] dark:text-[#a0a5aa]'
-        }`}>
-        {isActive ? 'Active' : 'Inactive'}
-      </span>
+      <div className="flex items-center gap-2.5">
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); handleToggleClick(emp); }}
+          className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+            isActive ? 'bg-[#00a76b]' : 'bg-gray-300 dark:bg-gray-600'
+          }`}
+          title={`Click to change status to ${isActive ? 'Inactive' : 'Active'}`}
+        >
+          <span
+            className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
+              isActive ? 'translate-x-5' : 'translate-x-0'
+            }`}
+          />
+        </button>
+        <span className={`text-xs font-semibold ${isActive ? 'text-[#00a76b]' : 'text-gray-500 dark:text-gray-400'}`}>
+          {isActive ? 'Active' : 'Inactive'}
+        </span>
+      </div>
     );
   };
 
@@ -321,68 +366,80 @@ const HREmployees = () => {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-left">
+            <table className="w-full border-collapse text-left text-xs">
               <thead>
-                <tr className="border-b border-[#e2eae7] dark:border-[#1a2d29] bg-[#f9fafb]/50 dark:bg-[#162722]/30">
-                  <th className="py-4 px-6 text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">EMPLOYEE ID</th>
-                  <th className="py-4 px-6 text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">EMPLOYEE</th>
-                  <th className="py-4 px-6 text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">DESIGNATION</th>
-                  <th className="py-4 px-6 text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">JOIN DATE</th>
-                  <th className="py-4 px-6 text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">STATUS</th>
-                  <th className="py-4 px-6 text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider"></th>
+                <tr className="border-b border-[#e2eae7] dark:border-[#1a2d29] bg-slate-100 dark:bg-[#0d2a22]">
+                  <th className="py-2.5 px-4 text-[10px] font-bold text-slate-500 dark:text-[#829e92] uppercase tracking-wider border-r border-[#e2eae7] dark:border-[#1a2d29] w-[130px] max-w-[130px]">EMPLOYEE ID</th>
+                  <th className="py-2.5 px-4 text-[10px] font-bold text-slate-500 dark:text-[#829e92] uppercase tracking-wider border-r border-[#e2eae7] dark:border-[#1a2d29] w-[240px] max-w-[240px]">EMPLOYEE</th>
+                  <th className="py-2.5 px-4 text-[10px] font-bold text-slate-500 dark:text-[#829e92] uppercase tracking-wider border-r border-[#e2eae7] dark:border-[#1a2d29]">DESIGNATION</th>
+                  <th className="py-2.5 px-4 text-[10px] font-bold text-slate-500 dark:text-[#829e92] uppercase tracking-wider border-r border-[#e2eae7] dark:border-[#1a2d29]">JOIN DATE</th>
+                  <th className="py-2.5 px-4 text-[10px] font-bold text-slate-500 dark:text-[#829e92] uppercase tracking-wider border-r border-[#e2eae7] dark:border-[#1a2d29]">STATUS</th>
+                  <th className="py-2.5 px-4 text-[10px] font-bold text-slate-500 dark:text-[#829e92] uppercase tracking-wider text-right">ACTION</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="divide-y divide-[#e2eae7] dark:divide-[#1a2d29]">
                 {paginatedEmployees.length === 0 ? (
                 <tr>
-                  <td colSpan="6" className="text-center py-24 border border-[#c5c0b1] bg-[#fffdf9] rounded-[8px]">
-                    <p className="text-[16px] font-medium text-[#939084]">No active personnel nodes matching filter.</p>
+                  <td colSpan="6" className="text-center py-16 text-slate-400 dark:text-[#829e92] font-semibold text-xs">
+                    No active personnel nodes matching filter.
                   </td>
                 </tr>
                 ) : (
-                paginatedEmployees.map((emp) => (
-                <tr key={emp._id} className="border-b border-[#c5c0b1] hover:bg-slate-50/50 dark:hover:bg-[#0d2a22]/50 transition-colors group">
-                  <td className="py-3 px-4">
-                    <span className="font-bold text-[#201515]">{emp.employeeId || 'NODE-UNDEF'}</span>
-                  </td>
-                  <td className="py-3 px-4">
-                    <div className="flex items-center gap-4">
-                      <div className="w-10 h-10 bg-[#eceae3] border border-[#c5c0b1] rounded-[4px] flex items-center justify-center overflow-hidden">
-                        {emp.profileImage ? <img src={getImageUrl(emp.profileImage)} alt="User" className="w-full h-full object-cover" /> : <User size={18} className="text-[#939084]" />}
-                      </div>
-                      <div>
-                        <p className="text-[15px] font-bold text-[#201515] leading-none mb-2">{emp.fullName || emp.userId?.name || 'Anonymous Node'}</p>
-                        <p className="text-[13px] font-medium text-[#939084] leading-none">{emp.email || emp.userId?.email}</p>
-                      </div>
-                    </div>
-                  </td>
-                  {/* Designation */}
-                  <td className="py-3 px-6 text-sm text-gray-900 dark:text-gray-400">
-                    {emp.designation}
-                  </td>
-                  {/* Join Date */}
-                  <td className="py-3 px-6 text-sm text-gray-600 dark:text-gray-400 font-normal">
-                    {formatDate(emp.joinDate)}
-                  </td>
-                  {/* Status badge */}
-                  <td className="py-3 px-6">
-                    {renderStatusBadge(emp.status)}
-                  </td>
-                  {/* Row-level view action */}
-                  <td className="py-3 px-6 text-right relative">
-                    <div className="flex items-center justify-end gap-2">
-                      <button
-                        onClick={() => handleView(emp._id)}
-                        className="verdant-btn-outline h-8 px-3 flex items-center gap-1.5 text-xs font-semibold rounded-lg border border-gray-200 dark:border-[#1a2d29] bg-white dark:bg-[#111c18] hover:bg-gray-50 dark:hover:bg-[#162722] text-[#374151] dark:text-[#cbd5e1] transition-all shadow-sm cursor-pointer"
-                        title="View Employee Profile"
-                      >
-                        <Eye size={14} className="text-[#00a76b]" />
-                        <span>View</span>
-                      </button>
-                    </div>
-                  </td>
-              </tr>
-              ))
+                paginatedEmployees.map((emp) => {
+                  const empName = emp.fullName || emp.userId?.name || 'Anonymous Node';
+                  const initials = empName.split(/\s+/).map(n => n[0]).join('').substring(0, 2).toUpperCase() || 'EP';
+                  return (
+                    <tr
+                      key={emp._id}
+                      onClick={() => handleView(emp._id)}
+                      className="hover:bg-slate-50/60 dark:hover:bg-[#0d2a22]/50 transition-colors group cursor-pointer"
+                    >
+                      <td className="py-3 px-4 border-r border-[#e2eae7] dark:border-[#1a2d29] w-[130px] max-w-[130px]">
+                        <span className="font-bold text-slate-800 dark:text-gray-200 text-xs font-mono">{emp.employeeId || 'NODE-UNDEF'}</span>
+                      </td>
+                      <td className="py-3 px-4 border-r border-[#e2eae7] dark:border-[#1a2d29] w-[240px] max-w-[240px]">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/50 flex items-center justify-center text-[11px] font-bold text-emerald-600 dark:text-emerald-400 shrink-0 overflow-hidden">
+                            {emp.profileImage ? (
+                              <img src={getImageUrl(emp.profileImage)} alt="User" className="w-full h-full object-cover" />
+                            ) : (
+                              <span>{initials}</span>
+                            )}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs font-bold text-slate-900 dark:text-white group-hover:text-[#00a76b] transition-colors leading-tight truncate">{empName}</p>
+                            <p className="text-[10px] font-medium text-slate-400 dark:text-slate-400 leading-tight truncate mt-0.5">{emp.role || emp.designation || emp.email || emp.userId?.email}</p>
+                          </div>
+                        </div>
+                      </td>
+                      {/* Designation */}
+                      <td className="py-3 px-4 text-xs font-medium text-slate-700 dark:text-gray-300 border-r border-[#e2eae7] dark:border-[#1a2d29]">
+                        {emp.designation || 'N/A'}
+                      </td>
+                      {/* Join Date */}
+                      <td className="py-3 px-4 text-xs font-medium text-slate-600 dark:text-gray-400 border-r border-[#e2eae7] dark:border-[#1a2d29]">
+                        {formatDate(emp.joinDate)}
+                      </td>
+                      {/* Status badge */}
+                      <td className="py-3 px-4 border-r border-[#e2eae7] dark:border-[#1a2d29]" onClick={(e) => e.stopPropagation()}>
+                        {renderStatusSwitch(emp)}
+                      </td>
+                      {/* Row-level view action */}
+                      <td className="py-3 px-4 text-right relative" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleView(emp._id); }}
+                            className="verdant-btn-outline h-8 px-3 flex items-center gap-1.5 text-xs font-semibold rounded-lg border border-gray-200 dark:border-[#1a2d29] bg-white dark:bg-[#111c18] hover:bg-gray-50 dark:hover:bg-[#162722] text-[#374151] dark:text-[#cbd5e1] transition-all shadow-sm cursor-pointer"
+                            title="View Employee Profile"
+                          >
+                            <Eye size={14} className="text-[#00a76b]" />
+                            <span>View</span>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
@@ -391,15 +448,15 @@ const HREmployees = () => {
 
       {/* PAGINATION CONTROLS */}
       {totalPages > 1 && (
-        <div className="flex justify-between items-center px-8 py-5 bg-gray-50 border-t border-[#eceae3]">
-          <span className="text-[11px] font-black uppercase tracking-widest text-[#939084]">
-            Page {currentPage} of {totalPages} ({filteredEmployees.length} total nodes)
+        <div className="flex flex-col sm:flex-row justify-between items-center px-6 py-4 bg-white dark:bg-[#111c18] border-t border-[#e2eae7] dark:border-[#1a2d29] gap-4">
+          <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">
+            Showing {filteredEmployees.length === 0 ? 0 : (currentPage - 1) * 10 + 1}-{Math.min(currentPage * 10, filteredEmployees.length)} of {filteredEmployees.length}
           </span>
           <div className="flex items-center gap-2">
             <button
               disabled={currentPage === 1}
               onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-              className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all border border-[#eceae3] ${currentPage === 1 ? 'opacity-40 cursor-not-allowed bg-gray-100 text-gray-400' : 'bg-white text-[#201515] hover:border-[#ff4f00] hover:text-[#ff4f00] cursor-pointer'}`}
+              className="px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all border border-gray-200 dark:border-[#1a2d29] bg-white dark:bg-[#162722] text-gray-700 dark:text-gray-200 hover:border-[#00a76b] hover:text-[#00a76b] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
             >
               Prev
             </button>
@@ -407,7 +464,11 @@ const HREmployees = () => {
               <button
                 key={pageNo}
                 onClick={() => setCurrentPage(pageNo)}
-                className={`w-8 h-8 rounded-lg text-[10px] font-black transition-all border ${currentPage === pageNo ? 'bg-[#ff4f00] text-white border-[#ff4f00]' : 'bg-white text-[#201515] border-[#eceae3] hover:border-[#ff4f00] hover:text-[#ff4f00] cursor-pointer'}`}
+                className={`w-8 h-8 rounded-xl text-xs font-bold transition-all border ${
+                  currentPage === pageNo
+                    ? 'bg-[#00a76b] text-white border-[#00a76b] shadow-sm'
+                    : 'bg-white dark:bg-[#162722] text-gray-700 dark:text-gray-300 border-gray-200 dark:border-[#1a2d29] hover:border-[#00a76b] hover:text-[#00a76b] cursor-pointer'
+                }`}
               >
                 {pageNo}
               </button>
@@ -415,15 +476,64 @@ const HREmployees = () => {
             <button
               disabled={currentPage === totalPages}
               onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-              className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all border border-[#eceae3] ${currentPage === totalPages ? 'opacity-40 cursor-not-allowed bg-gray-100 text-gray-400' : 'bg-white text-[#201515] hover:border-[#ff4f00] hover:text-[#ff4f00] cursor-pointer'}`}
+              className="px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all border border-gray-200 dark:border-[#1a2d29] bg-white dark:bg-[#162722] text-gray-700 dark:text-gray-200 hover:border-[#00a76b] hover:text-[#00a76b] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
             >
               Next
             </button>
           </div>
         </div>
       )}
+
+      {/* Status Confirmation Modal rendered via Portal to blur entire viewport including header & sidebar */}
+      {statusModal.isOpen && statusModal.employee && createPortal(
+        <div 
+          className="fixed inset-0 w-screen h-screen z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-200 cursor-pointer"
+          onClick={() => setStatusModal({ isOpen: false, employee: null, targetStatus: '' })}
+        >
+          <div 
+            className="bg-white dark:bg-[#162722] border border-gray-200 dark:border-[#1a2d29] rounded-2xl p-6 max-w-md w-full shadow-2xl animate-in zoom-in-95 duration-200 relative z-[10000] cursor-default"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3 text-amber-500 mb-4">
+              <div className="w-10 h-10 rounded-full bg-amber-50 dark:bg-amber-950/40 flex items-center justify-center">
+                <SlidersHorizontal size={20} className="text-amber-600 dark:text-amber-400" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-gray-900 dark:text-white">Confirm Status Change</h3>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Employee Account Control</p>
+              </div>
+            </div>
+            <p className="text-sm text-gray-700 dark:text-gray-300 mb-6 leading-relaxed">
+              Are you sure you want to make <span className="font-bold text-gray-900 dark:text-white">{statusModal.employee.fullName || statusModal.employee.userId?.name || 'this employee'}</span> <span className={`font-bold uppercase ${statusModal.targetStatus === 'active' ? 'text-[#00a76b]' : 'text-red-500'}`}>{statusModal.targetStatus}</span>?
+            </p>
+            <div className="flex items-center justify-end gap-3">
+              <button
+                type="button"
+                disabled={statusUpdating}
+                onClick={() => setStatusModal({ isOpen: false, employee: null, targetStatus: '' })}
+                className="px-4 py-2 text-xs font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-[#111c18] rounded-xl transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={statusUpdating}
+                onClick={confirmStatusChange}
+                className={`px-5 py-2 text-xs font-bold text-white rounded-xl shadow-sm transition-all cursor-pointer ${
+                  statusModal.targetStatus === 'active' 
+                    ? 'bg-[#00a76b] hover:bg-[#008f5a]' 
+                    : 'bg-red-600 hover:bg-red-700'
+                }`}
+              >
+                {statusUpdating ? 'Updating...' : `Yes, Make ${statusModal.targetStatus === 'active' ? 'Active' : 'Inactive'}`}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
-    </div >
+    </div>
   );
 };
 

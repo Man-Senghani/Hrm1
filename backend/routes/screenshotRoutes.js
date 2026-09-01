@@ -75,16 +75,16 @@ router.post('/upload', async (req, res) => {
 // @desc    Get screenshots based on role
 router.get('/all', async (req, res) => {
   try {
-    const { role, userId } = req.query; // Normally these come from auth middleware
+    const rawRole = (req.query.role || req.user?.role || '').toLowerCase();
     
     let query = {};
-    if (role === 'employee') {
+    if (rawRole === 'employee') {
       return res.status(403).json({ message: 'Unauthorized' });
-    } else if (role === 'manager') {
-      // In a real app, filter by manager's team
-      // For now, simple role-based
-      query = {}; 
-    } else if (role === 'hr' || role === 'admin') {
+    } else if (rawRole === 'manager') {
+      query = { role: 'employee' }; 
+    } else if (rawRole === 'hr') {
+      query = { role: { $ne: 'admin' } };
+    } else if (rawRole === 'admin') {
       query = {};
     }
 

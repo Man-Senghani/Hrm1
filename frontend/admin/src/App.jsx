@@ -27,6 +27,7 @@ import Login from '@shared/pages/Login';
 import ForgotPassword from '@shared/pages/ForgotPassword';
 import ResetPassword from '@shared/pages/ResetPassword';
 import MainLayout from '@shared/layouts/MainLayout';
+import { Users, Calendar, Bell, Camera, User, FileText } from 'lucide-react';
 
 // Route-level pages are lazy-loaded so a role only downloads the code for
 // the pages it actually visits, instead of every page in the app upfront.
@@ -39,6 +40,7 @@ const EmployeeForm = lazy(() => import('./pages/admin/EmployeeForm'));
 const EmployeeDetail = lazy(() => import('./pages/admin/EmployeeDetail'));
 const Tasks = lazy(() => import('./pages/admin/Tasks'));
 const Attendance = lazy(() => import('./pages/Attendance'));
+const DailyReport = lazy(() => import('./pages/admin/DailyReport'));
 
 const HRTasks = lazy(() => import('./pages/hr/HRTasks'));
 const LeaveManagement = lazy(() => import('./pages/hr/LeaveManagement'));
@@ -177,6 +179,15 @@ const App = () => {
     };
   }, []);
 
+  const adminNavItems = [
+    { label: 'Notifications', icon: Bell, path: '/notifications' },
+    { label: 'Employees', icon: Users, path: '/employees' },
+    { label: 'Attendance', icon: Calendar, path: '/attendance' },
+    { label: 'Daily Report', icon: FileText, path: '/daily-report' },
+    { label: 'Screenshots', icon: Camera, path: '/screenshots' },
+    { label: 'My Profile', icon: User, path: '/profile' },
+  ];
+
   return (
     <>
       <ScrollToTop />
@@ -237,10 +248,10 @@ const App = () => {
           {/* ADMIN MODULE */}
           <Route path="/" element={
             <ProtectedRoute allowedRole="admin">
-              <MainLayout />
+              <MainLayout navItems={adminNavItems} />
             </ProtectedRoute>
           }>
-            <Route index element={<AdminDashboard />} />
+            <Route index element={<Navigate to="employees" replace />} />
             <Route path="dashboard" element={<AdminDashboard />} />
             <Route path="employees" element={<HREmployees />} />
             <Route path="employees/add" element={<EmployeeForm />} />
@@ -254,6 +265,7 @@ const App = () => {
 
             <Route path="leave" element={<LeaveManagement />} />
             <Route path="attendance" element={<Attendance />} />
+            <Route path="daily-report" element={<DailyReport />} />
             <Route path="payroll" element={<Payroll />} />
             <Route path="performance" element={<Performance />} />
             <Route path="reports" element={<Reports />} />
@@ -288,6 +300,7 @@ const App = () => {
             <Route path="admin/task-management/update/:id" element={<TaskUpdate />} />
             <Route path="admin/leave" element={<LeaveManagement />} />
             <Route path="admin/attendance" element={<Attendance />} />
+            <Route path="admin/daily-report" element={<DailyReport />} />
             <Route path="admin/payroll" element={<Payroll />} />
             <Route path="admin/performance" element={<Performance />} />
             <Route path="admin/reports" element={<Reports />} />
@@ -327,6 +340,7 @@ const App = () => {
             <Route path="task-management/update/:id" element={<TaskUpdate />} />
             <Route path="leave" element={<LeaveManagement />} />
             <Route path="attendance" element={<Attendance />} />
+            <Route path="daily-report" element={<DailyReport />} />
             <Route path="employees" element={<HREmployees />} />
             <Route path="employees/add" element={<EmployeeForm />} />
             <Route path="employees/view/:id" element={<EmployeeDetail />} />
@@ -369,6 +383,7 @@ const App = () => {
             <Route path="leave" element={<EmployeeLeave />} />
             <Route path="holidays" element={<EmployeeHolidays />} />
             <Route path="attendance" element={<Attendance />} />
+            <Route path="daily-report" element={<DailyReport />} />
             <Route path="time-tracker" element={<Navigate to="../attendance" replace />} />
             <Route path="payslips" element={<EmployeePayslips />} />
             <Route path="documents" element={<EmployeeDocuments />} />
@@ -408,6 +423,7 @@ const App = () => {
             <Route path="projects" element={<ManagerProjects />} />
             <Route path="leave" element={<ManagerLeaveManagement />} />
             <Route path="attendance" element={<Attendance />} />
+            <Route path="daily-report" element={<DailyReport />} />
             <Route path="chat" element={<Chat />} />
             <Route path="screenshots" element={<Screenshots />} />
             <Route path="recruitment" element={<Recruitment />} />

@@ -416,6 +416,7 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
           { name: 'Dashboard', path: `${prefix}/dashboard`, icon: LayoutDashboard },
           { name: 'Employees', path: `${prefix}/employees`, icon: Users },
           { name: 'Daily Tasks Board', path: `${prefix}/tasks`, icon: CheckSquare },
+          { name: 'Daily Report', path: `${prefix}/daily-report`, icon: FileText },
           { name: 'Events Management', path: `${prefix}/events`, icon: Calendar },
           { name: 'Apply Leave', path: `${prefix}/leave`, icon: ClipboardList },
           { name: 'Attendance', path: `${prefix}/attendance`, icon: Calendar },
@@ -424,30 +425,29 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
           { name: 'Recruitment', path: `${prefix}/recruitment`, icon: UserPlus },
           { name: 'Performance', path: `${prefix}/performance`, icon: TrendingUp },
           { name: 'Reports', path: `${prefix}/reports`, icon: BarChart3 },
-          { name: 'Monitoring Logs', path: `${prefix}/screenshots`, icon: Camera },
-          { name: 'Notifications', path: `${prefix}/notifications`, icon: Bell },
+          { name: 'Screenshots', path: `${prefix}/screenshots`, icon: Camera },
           { name: 'Settings', path: `${prefix}/settings`, icon: Settings },
         ];
       case 'employee':
         return [
           { name: 'Dashboard', path: `${prefix}/dashboard`, icon: LayoutDashboard },
           { name: 'Attendance', path: `${prefix}/attendance`, icon: Calendar },
+          { name: 'Daily Report', path: `${prefix}/daily-report`, icon: FileText },
           { name: 'Apply Leave', path: `${prefix}/leave`, icon: ClipboardList },
           { name: 'Team Chat', path: `${prefix}/chat`, icon: MessageSquare },
           { name: 'Create Task', path: `${prefix}/task-management/create`, icon: PlusCircle },
           { name: 'My Documents', path: `${prefix}/documents`, icon: FileText },
-          { name: 'Notifications', path: `${prefix}/notifications`, icon: Bell },
         ];
       case 'manager':
         return [
           { name: 'Dashboard', path: `${prefix}/dashboard`, icon: LayoutDashboard },
           { name: 'Team / Employees', path: `${prefix}/employees`, icon: Users },
           { name: 'Daily Tasks Board', path: `${prefix}/tasks`, icon: CheckSquare },
+          { name: 'Daily Report', path: `${prefix}/daily-report`, icon: FileText },
           { name: 'Events Management', path: `${prefix}/events`, icon: Calendar },
           { name: 'Team Chat', path: `${prefix}/chat`, icon: MessageSquare },
           { name: 'Team Attendance', path: `${prefix}/attendance`, icon: Calendar },
-          { name: 'Monitoring Logs', path: `${prefix}/screenshots`, icon: Camera },
-          { name: 'Notifications', path: `${prefix}/notifications`, icon: Bell },
+          { name: 'Screenshots', path: `${prefix}/screenshots`, icon: Camera },
           { name: 'Apply Leave', path: `${prefix}/leave`, icon: FileText },
         ];
       case 'admin':
@@ -456,6 +456,7 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
           { name: 'Dashboard', path: `${prefix}/dashboard`, icon: LayoutDashboard },
           { name: 'Employees', path: `${prefix}/employees`, icon: Users },
           { name: 'Daily Tasks Board', path: `${prefix}/tasks`, icon: CheckSquare },
+          { name: 'Daily Report', path: `${prefix}/daily-report`, icon: FileText },
           { name: 'Events Management', path: `${prefix}/events`, icon: Calendar },
           { name: 'Team Leave', path: `${prefix}/leave`, icon: ClipboardList },
           { name: 'Attendance', path: `${prefix}/attendance`, icon: Calendar },
@@ -464,18 +465,19 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
           { name: 'Recruitment', path: `${prefix}/recruitment`, icon: UserPlus },
           { name: 'Performance', path: `${prefix}/performance`, icon: TrendingUp },
           { name: 'Reports', path: `${prefix}/reports`, icon: BarChart3 },
-          { name: 'Monitoring Logs', path: `${prefix}/screenshots`, icon: Camera },
-          { name: 'Notifications', path: `${prefix}/notifications`, icon: Bell },
+          { name: 'Screenshots', path: `${prefix}/screenshots`, icon: Camera },
           { name: 'Settings', path: `${prefix}/settings`, icon: Settings },
         ];
     }
   };
 
-  const menuItems = navItems ? navItems.map(item => ({
+  const rawMenuItems = navItems ? navItems.map(item => ({
     name: item.label || item.name,
     path: item.path,
     icon: item.icon || LayoutDashboard
   })) : getMenuItemsByRole(activeRole);
+
+  const menuItems = rawMenuItems.filter(item => !(item.name || '').toLowerCase().includes('notification'));
 
   const getCategorizedMenuItems = (role) => {
     const categorized = {
@@ -488,7 +490,7 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
       const n = item.name.toLowerCase();
       if (n.includes('dashboard') || n.includes('chat') || n.includes('notifications') || n.includes('overview') || n.includes('time tracker')) {
         categorized['Overview'].push(item);
-      } else if (n.includes('settings') || n.includes('log') || n.includes('create user') || n.includes('profile')) {
+      } else if (n.includes('settings') || n.includes('log') || n.includes('screenshot') || n.includes('create user') || n.includes('profile')) {
         categorized['Administration'].push(item);
       } else {
         categorized['Workspace'].push(item);
@@ -695,7 +697,7 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
       >
         {/* Brand Block / Logo (Always visible in top bar) */}
         <Link
-          to={activeRole === 'admin' ? '/admin/dashboard' : `/${activeRole}/dashboard`}
+          to="/attendance"
           className="px-4 flex items-center no-underline hover:opacity-90 transition-all duration-300 gap-3 shrink-0 h-full overflow-hidden"
           style={{ width: showExpandedSidebar ? '250px' : '200px' }}
         >
@@ -788,17 +790,8 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
 
                   {activeRole === 'employee' && (
                     <>
-                      <button onClick={() => { setIsQuickActionOpen(false); handleNav('/leave'); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-[#162722] text-xs font-bold text-gray-700 dark:text-slate-300 rounded-xl transition-colors border-none bg-transparent cursor-pointer">
-                        Apply Leave
-                      </button>
                       <button onClick={() => { setIsQuickActionOpen(false); handleNav('/attendance'); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-[#162722] text-xs font-bold text-gray-700 dark:text-slate-300 rounded-xl transition-colors border-none bg-transparent cursor-pointer">
                         Time Tracker
-                      </button>
-                      <button onClick={() => { setIsQuickActionOpen(false); handleNav('/projects'); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-[#162722] text-xs font-bold text-gray-700 dark:text-slate-300 rounded-xl transition-colors border-none bg-transparent cursor-pointer">
-                        My Projects
-                      </button>
-                      <button onClick={() => { setIsQuickActionOpen(false); handleNav('/documents'); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-[#162722] text-xs font-bold text-gray-700 dark:text-slate-300 rounded-xl transition-colors border-none bg-transparent cursor-pointer">
-                        My Documents
                       </button>
                     </>
                   )}
@@ -828,88 +821,7 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
               {isDarkMode ? <Sun size={18} /> : <Moon size={18} />}
             </button>
 
-            <div className="relative" ref={chatRef}>
-              <button
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  setIsChatPopupOpen(prev => !prev);
-                }}
-                className={`w-9 h-9 flex items-center justify-center rounded-full transition-all relative border-none cursor-pointer outline-none ${isChatPopupOpen ? 'bg-[#00a76b] text-white shadow-lg' : 'bg-transparent text-gray-500 hover:bg-gray-100 dark:hover:bg-slate-800 dark:text-slate-400 dark:hover:text-white'}`}
-              >
-                <MessageSquare size={18} />
-                {unreadChats.length > 0 && (
-                  <span className="absolute -top-1 -right-1 min-w-[16px] h-[16px] px-1 bg-red-500 text-white text-[9px] font-bold flex items-center justify-center rounded-full shadow-sm border border-white dark:border-[#111c18]">
-                    {unreadChats.length > 10 ? '10+' : unreadChats.length}
-                  </span>
-                )}
-              </button>
-
-              {isChatPopupOpen && (
-                <div className="absolute top-[48px] right-0 w-80 bg-white dark:bg-[#111c18] border border-[#c5c0b1] dark:border-[#1a2d29] rounded-xl shadow-[0_20px_50px_rgba(0,0,0,0.1)] dark:shadow-[0_20px_50px_rgba(0,0,0,0.3)] overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200 z-[100]">
-                  <div className="p-4 border-b border-[#eceae3] dark:border-[#1a2d29] bg-[#fffdf9] dark:bg-[#162722] flex justify-between items-center">
-                    <span className="text-[11px] font-black uppercase tracking-widest text-[#201515] dark:text-white">Unread Messages</span>
-                    {unreadChats.length > 0 && (
-                      <span className="px-2 py-0.5 bg-[#00a76b]/10 text-[#00a76b] text-[8px] font-black rounded-full uppercase">
-                        {unreadChats.length} New
-                      </span>
-                    )}
-                  </div>
-                  <div className="max-h-[320px] overflow-y-auto">
-                    {unreadChats.length === 0 ? (
-                      <div className="p-8 text-center opacity-40">
-                        <p className="text-[10px] font-black uppercase tracking-widest text-[#939084] dark:text-[#a3b3af]">No Unread Messages</p>
-                      </div>
-                    ) : (
-                      unreadChats.map((c, i) => {
-                        const currentUserId = (() => { try { return JSON.parse(atob(token.split('.')[1]))?.id; } catch { return null; } })();
-                        const otherParticipant = c.isGroup ? null : c.participants.find(p => String(p._id) !== String(currentUserId));
-                        const displayName = c.isGroup ? c.groupName : (otherParticipant?.name || 'User');
-
-                        return (
-                          <div
-                            key={i}
-                            onClick={() => {
-                              setUnreadChats(prev => prev.filter(chat => chat._id !== c._id));
-                              handleNav(`/${activeRole}/chat`, { state: { openChatId: c._id } });
-                              setIsChatPopupOpen(false);
-                            }}
-                            className="p-4 border-b border-[#eceae3] dark:border-[#1a2d29] hover:bg-[#fffdf9] dark:hover:bg-[#162722]/50 transition-all cursor-pointer group"
-                          >
-                            <div className="flex gap-3">
-                              <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-indigo-100 to-violet-100 text-indigo-600 flex items-center justify-center font-bold text-xs shrink-0 border">
-                                {c.isGroup ? (
-                                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>
-                                ) : displayName.charAt(0).toUpperCase()}
-                              </div>
-                              <div className="min-w-0 flex-1">
-                                <p className="text-[12px] font-bold text-[#201515] dark:text-[#e2e8f0] leading-tight group-hover:text-[#00a76b] transition-colors truncate">
-                                  {displayName}
-                                </p>
-                                <p className="text-[11px] text-[#54656F] dark:text-[#a3a094] truncate mt-0.5">
-                                  {c.lastMessage?.message || (c.lastMessage?.attachment ? '📎 Attachment' : 'New Message')}
-                                </p>
-                              </div>
-                              {c.unreadCount > 0 && (
-                                <div className="min-w-[18px] h-[18px] px-1 bg-[#00a76b] text-white text-[9px] font-bold flex items-center justify-center rounded-full shadow-sm shrink-0 self-center">
-                                  {c.unreadCount}
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })
-                    )}
-                  </div>
-                  <button
-                    onClick={() => { handleNav(`/${activeRole}/chat`); setIsChatPopupOpen(false); }}
-                    className="w-full py-3 bg-[#eceae3] dark:bg-[#162722] text-[10px] font-black text-[#201515] dark:text-white uppercase tracking-[0.2em] hover:bg-[#c5c0b1] dark:hover:bg-[#111c18] transition-all border-none cursor-pointer"
-                  >
-                    View All Messages
-                  </button>
-                </div>
-              )}
-            </div>
+            {/* Header Chat Button Hidden Across All 4 Modules */}
 
             <div className="relative" ref={notificationRef}>
               <button
@@ -1071,17 +983,19 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
                       <User size={16} className="text-slate-400 dark:text-[#829e92]" />
                       <span>My Profile</span>
                     </button>
-                    <button
-                      role="menuitem"
-                      onClick={() => {
-                        setIsProfileDropdownOpen(false);
-                        handleNav('/settings');
-                      }}
-                      className="w-full px-6 py-2.5 flex items-center gap-3.5 text-left text-[13px] font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-[#162722]/50 hover:text-slate-900 dark:hover:text-white transition-colors border-none bg-transparent cursor-pointer outline-none"
-                    >
-                      <Settings size={16} className="text-slate-400 dark:text-[#829e92]" />
-                      <span>Settings</span>
-                    </button>
+                    {activeRole !== 'employee' && (
+                      <button
+                        role="menuitem"
+                        onClick={() => {
+                          setIsProfileDropdownOpen(false);
+                          handleNav('/settings');
+                        }}
+                        className="w-full px-6 py-2.5 flex items-center gap-3.5 text-left text-[13px] font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-[#162722]/50 hover:text-slate-900 dark:hover:text-white transition-colors border-none bg-transparent cursor-pointer outline-none"
+                      >
+                        <Settings size={16} className="text-slate-400 dark:text-[#829e92]" />
+                        <span>Settings</span>
+                      </button>
+                    )}
                     <button
                       role="menuitem"
                       onClick={() => {

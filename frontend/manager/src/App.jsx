@@ -15,13 +15,16 @@ import {
   Globe,
   Briefcase,
   User,
-  Bell
+  Bell,
+  Camera,
+  FileText
 } from 'lucide-react';
 
 const ManagerDashboard = lazy(() => import('./pages/ManagerDashboard'));
 const Employees = lazy(() => import('./pages/Employees'));
 const EmployeeDetail = lazy(() => import('./pages/EmployeeDetail'));
 const Attendance = lazy(() => import('./pages/Attendance'));
+const DailyReport = lazy(() => import('./pages/DailyReport'));
 const ManagerTasks = lazy(() => import('./pages/ManagerTasks'));
 const TaskCreate = lazy(() => import('./pages/TaskCreate'));
 const ManagerProjects = lazy(() => import('./pages/ManagerProjects'));
@@ -29,6 +32,7 @@ const LeaveManagement = lazy(() => import('./pages/LeaveManagement'));
 const Holidays = lazy(() => import('./pages/Holidays'));
 const MyEvents = lazy(() => import('./pages/MyEvents'));
 const Notifications = lazy(() => import('./pages/Notifications'));
+const Screenshots = lazy(() => import('./pages/Screenshots'));
 const Profile = lazy(() => import('@shared/pages/Profile'));
 const Settings = lazy(() => import('@shared/pages/Settings'));
 const Chat = lazy(() => import('@shared/pages/Chat'));
@@ -62,17 +66,11 @@ function App() {
   };
 
   const navItems = [
-    { label: 'Dashboard', icon: LayoutDashboard, path: '/' },
-    { label: 'My Team', icon: Users, path: '/employees' },
-    { label: 'Tasks', icon: CheckSquare, path: '/tasks' },
-    { label: 'Create Task', icon: PlusCircle, path: '/tasks/create' },
-    { label: 'Projects', icon: Layers, path: '/projects' },
-    { label: 'Team Attendance', icon: CalendarDays, path: '/attendance' },
-    { label: 'Leave Approvals', icon: Calendar, path: '/leaves' },
-    { label: 'Team Chat', icon: MessageSquare, path: '/chat' },
-    { label: 'Company Holidays', icon: Globe, path: '/holidays' },
-    { label: 'Events', icon: Briefcase, path: '/events' },
     { label: 'Notifications', icon: Bell, path: '/notifications' },
+    { label: 'My Team', icon: Users, path: '/manager' },
+    { label: 'Attendance', icon: CalendarDays, path: '/attendance' },
+    { label: 'Daily Report', icon: FileText, path: '/daily-report' },
+    { label: 'Screenshots', icon: Camera, path: '/screenshots' },
     { label: 'My Profile', icon: User, path: '/profile' },
   ];
 
@@ -129,10 +127,10 @@ function App() {
       >
         <Suspense fallback={<RouteLoadingFallback />}>
           <Routes>
-            <Route path="/" element={<ManagerDashboard />} />
-            <Route path="/dashboard" element={<Navigate to="/" replace />} />
-            <Route path="/manager" element={<Navigate to="/" replace />} />
-            <Route path="/manager/dashboard" element={<Navigate to="/" replace />} />
+            <Route path="/" element={<Employees />} />
+            <Route path="/dashboard" element={<Employees />} />
+            <Route path="/manager" element={<Employees />} />
+            <Route path="/manager/dashboard" element={<Employees />} />
 
             <Route path="/employees" element={<Employees />} />
             <Route path="/manager/employees" element={<Employees />} />
@@ -141,6 +139,8 @@ function App() {
             <Route path="/manager/manager/employees/view/:id" element={<EmployeeDetail />} />
             <Route path="/attendance" element={<Attendance />} />
             <Route path="/manager/attendance" element={<Attendance />} />
+            <Route path="/daily-report" element={<DailyReport />} />
+            <Route path="/manager/daily-report" element={<DailyReport />} />
             <Route path="/tasks" element={<ManagerTasks />} />
             <Route path="/manager/tasks" element={<ManagerTasks />} />
             <Route path="/tasks/create" element={<TaskCreate />} />
@@ -157,6 +157,8 @@ function App() {
             <Route path="/manager/events" element={<MyEvents />} />
             <Route path="/notifications" element={<Notifications />} />
             <Route path="/manager/notifications" element={<Notifications />} />
+            <Route path="/screenshots" element={<Screenshots />} />
+            <Route path="/manager/screenshots" element={<Screenshots />} />
             <Route path="/chat" element={<Chat />} />
             <Route path="/manager/chat" element={<Chat />} />
             <Route path="/profile" element={<Profile />} />

@@ -117,7 +117,7 @@ const isDateInLeaveRange = (targetDateStr, startDate, endDate) => {
 
 const SectionHeader = ({ title, action }) => (
   <div className="flex justify-between items-center mb-5">
-    <h2 className="font-bold text-[#1e293b] dark:text-white" style={{ fontFamily: 'Manrope, sans-serif', fontSize: '16px' }}>{title}</h2>
+    <h2 className="font-bold text-[#1e293b] dark:text-white" style={{ fontFamily: 'Poppins, sans-serif', fontSize: '16px' }}>{title}</h2>
     {action && (typeof action === 'string' ? <span className="text-sm font-semibold text-gray-500 dark:text-gray-400 cursor-pointer hover:text-gray-700 dark:hover:text-gray-200">{action}</span> : action)}
   </div>
 );
@@ -1053,7 +1053,7 @@ const ManagerDashboard = () => {
 
             {/* Header */}
             <div className="p-6 border-b border-gray-100 dark:border-[#28251e] flex items-center justify-between bg-white dark:bg-[#161311]">
-              <h2 className="text-xl font-extrabold text-[#0f172a] dark:text-white" style={{ fontFamily: 'Manrope, sans-serif' }}>
+              <h2 className="text-xl font-extrabold text-[#0f172a] dark:text-white" style={{ fontFamily: 'Poppins, sans-serif' }}>
                 Team Availability ({allMembersAvailability.length})
               </h2>
               <button

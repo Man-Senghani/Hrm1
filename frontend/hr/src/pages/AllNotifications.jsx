@@ -102,57 +102,67 @@ const AllNotifications = () => {
           <p className="text-[13px] font-medium text-[#939084]">You are all caught up!</p>
         </div>
       ) : (
-        <div className="space-y-8">
+        <div className="space-y-6">
           {Object.entries(groupedNotifications).map(([dateLabel, notifs]) => (
-            <div key={dateLabel} className="bg-white rounded-[5px] border border-[#eceae3] shadow-sm overflow-hidden">
-              <div className="px-6 py-4 border-b border-[#eceae3] bg-[#fffdf9] flex items-center gap-2">
+            <div key={dateLabel} className="bg-white rounded-xl border border-[#eceae3] shadow-sm overflow-hidden">
+              <div className="px-6 py-3.5 border-b border-[#eceae3] bg-[#fffdf9] flex items-center gap-2">
                 <Calendar size={16} className="text-[#939084]" />
                 <h2 className="text-[12px] font-black text-[#201515] uppercase tracking-widest">{dateLabel}</h2>
-                <span className="ml-auto px-2 py-0.5 bg-[#eceae3] text-[#939084] text-[10px] font-black rounded-full">
+                <span className="ml-auto px-2.5 py-0.5 bg-[#eceae3] text-[#939084] text-[10px] font-black rounded-full">
                   {notifs.length}
                 </span>
               </div>
-              <div className="divide-y divide-[#eceae3]">
-                {notifs.map((notif) => {
-                  const colorClass = TYPE_COLORS[notif.type] || TYPE_COLORS.default;
-                  return (
-                    <div
-                      key={notif._id}
-                      className="p-5 flex items-start gap-4 transition-colors hover:bg-[#fffdf9]"
-                    >
-                      {/* Icon */}
-                      <div className={`w-10 h-10 rounded-[5px] flex items-center justify-center shrink-0 ${colorClass}`}>
-                        <Bell size={18} />
-                      </div>
-
-                      {/* Content */}
-                      <div className="flex-1 min-w-0">
-                        <p className="text-[14px] leading-snug font-bold text-[#201515] break-words">
-                          {notif.message}
-                        </p>
-                        <div className="flex items-center gap-3 mt-2 flex-wrap">
-                          <span className={`px-2 py-0.5 rounded-[3px] text-[9px] font-black uppercase tracking-widest ${colorClass}`}>
-                            {notif.type || 'general'}
-                          </span>
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                            <span className="text-gray-400 font-semibold uppercase text-[9px]">By:</span>
-                            <span>{notif.senderName || notif.senderId?.name || 'HR / Management'}</span>
-                            {(notif.senderRole || notif.senderId?.role) && (
-                              <span className="text-[9px] font-black uppercase tracking-wider opacity-70">
-                                [{notif.senderRole || notif.senderId?.role}]
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse border border-[#eceae3]">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-[#eceae3] text-[10px] font-black uppercase tracking-wider text-[#939084]">
+                      <th className="py-3 px-6 border-r border-[#eceae3]">Notification / Message</th>
+                      <th className="py-3 px-4 border-r border-[#eceae3]">Type</th>
+                      <th className="py-3 px-4 border-r border-[#eceae3]">Sent By</th>
+                      <th className="py-3 px-6 text-right">Time</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#eceae3]">
+                    {notifs.map((notif) => {
+                      const colorClass = TYPE_COLORS[notif.type] || TYPE_COLORS.default;
+                      return (
+                        <tr key={notif._id} className="hover:bg-[#fffdf9] transition-colors">
+                          <td className="py-3.5 px-6 border-r border-[#eceae3]">
+                            <div className="flex items-center gap-3">
+                              <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${colorClass}`}>
+                                <Bell size={15} />
+                              </div>
+                              <span className="text-[13px] font-bold text-[#201515] leading-snug">
+                                {notif.message}
                               </span>
-                            )}
-                          </span>
-                          <span className="text-[11px] font-bold text-[#939084]">
+                            </div>
+                          </td>
+                          <td className="py-3.5 px-4 whitespace-nowrap border-r border-[#eceae3]">
+                            <span className={`px-2.5 py-0.5 rounded-[3px] text-[9px] font-black uppercase tracking-widest ${colorClass}`}>
+                              {notif.type || 'general'}
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-4 whitespace-nowrap border-r border-[#eceae3]">
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                              <span className="text-gray-400 font-semibold uppercase text-[9px]">By:</span>
+                              <span>{notif.senderName || notif.senderId?.name || 'HR / Management'}</span>
+                              {(notif.senderRole || notif.senderId?.role) && (
+                                <span className="text-[9px] font-black uppercase tracking-wider opacity-70">
+                                  [{notif.senderRole || notif.senderId?.role}]
+                                </span>
+                              )}
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-6 text-right whitespace-nowrap text-[11px] font-bold text-[#939084]">
                             {new Date(notif.createdAt).toLocaleTimeString('en-US', {
                               hour: '2-digit', minute: '2-digit'
                             })}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
             </div>
           ))}

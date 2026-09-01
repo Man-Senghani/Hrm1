@@ -1,4 +1,6 @@
 // Prevent unexpected process crashes
+require('dns').setServers(['8.8.8.8', '1.1.1.1']);
+
 process.on('uncaughtException', (err) => {
   console.error('⚠️ Uncaught Exception caught:', err);
 });
@@ -7,7 +9,7 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 
 // nodemon restart trigger
-// nodemon restart comment 9
+// nodemon restart comment 10
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
@@ -18,6 +20,13 @@ dotenv.config();
 const app = express();
 
 // 💓 Lightweight Health Endpoint for Keep-Alive pings
+app.use('/api', (req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  next();
+});
+
 app.get('/api/health', (req, res) => {
   res.status(200).json({ status: 'healthy', uptime: process.uptime(), timestamp: new Date() });
 });
@@ -237,6 +246,7 @@ app.use('/api/desktop-app', require('./routes/desktopAppRoutes'));
 app.use('/api/leave-policies', require('./routes/leavePolicyRoutes'));
 app.use('/api/holidays', require('./routes/holidayRoutes'));
 app.use('/api/on-duty', require('./routes/onDutyRoutes'));
+app.use('/api/daily-reports', require('./routes/dailyReportRoutes'));
 
 
 // Health and Version Check
@@ -278,9 +288,12 @@ frontends.forEach(({ prefix, dir }) => {
     app.use(prefix, express.static(dir, staticOptions));
 
     // Handle client-side routing fallback (SPA) for subpath
-    app.get([prefix, `${prefix}/*splat`], (req, res) => {
-      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-      res.sendFile(indexPath);
+    app.use(prefix, (req, res, next) => {
+      if (req.method === 'GET') {
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+        return res.sendFile(indexPath);
+      }
+      next();
     });
   }
 });
@@ -297,7 +310,23 @@ if (fs.existsSync(LOGIN_INDEX)) {
   });
 }
 
-// 404 JSON fallback for unhandled requests (non-API, non-upload, non-frontend)
+// 🔄 Fallback handler for unhandled browser navigation (non-API GET requests like /daily-report)
+app.use((req, res, next) => {
+  if (req.method === 'GET' && !req.path.startsWith('/api/') && !req.path.startsWith('/uploads/')) {
+    const employeeIndex = path.join(__dirname, '../frontend/employee/dist/index.html');
+    if (fs.existsSync(employeeIndex)) {
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      return res.sendFile(employeeIndex);
+    }
+    if (fs.existsSync(LOGIN_INDEX)) {
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      return res.sendFile(LOGIN_INDEX);
+    }
+  }
+  next();
+});
+
+// 404 JSON fallback for unhandled API/backend requests
 app.use((req, res) => {
   res.status(404).json({ message: 'Not found' });
 });

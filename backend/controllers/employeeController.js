@@ -6,17 +6,24 @@ const Manager = require('../models/Manager');
 // GET /api/employees
 exports.getEmployees = async (req, res) => {
   try {
-    const role = req.user.role;
+    const role = (req.user?.role || '').toLowerCase();
     let query = {};
 
     if (role === 'employee') {
       query.userId = req.user.id;
     }
 
-    const employees = await Employee.find(query)
+    let employees = await Employee.find(query)
       .populate('userId', 'name email status role')
       .populate('managerId', 'name email')
       .lean();
+
+    if (role === 'hr') {
+      employees = employees.filter(emp => 
+        (emp.role || '').toLowerCase() !== 'admin' && 
+        (emp.userId?.role || '').toLowerCase() !== 'admin'
+      );
+    }
 
     res.json(employees);
   } catch (error) {

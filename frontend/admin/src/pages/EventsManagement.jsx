@@ -304,7 +304,7 @@ const EventsManagement = () => {
             
             {/* Drawer Header */}
             <div className="p-6 border-b border-gray-100 dark:border-[#28251e] flex justify-between items-center bg-white dark:bg-[#161311] shrink-0">
-              <h2 className="text-xl font-extrabold text-[#0f172a] dark:text-white" style={{ fontFamily: 'Manrope, sans-serif' }}>
+              <h2 className="text-xl font-extrabold text-[#0f172a] dark:text-white" style={{ fontFamily: 'Poppins, sans-serif' }}>
                 {isEditing ? 'Update Event' : 'Create New Event'}
               </h2>
               <button

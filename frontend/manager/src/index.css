@@ -30,18 +30,19 @@
     overflow-x: hidden;
     width: 100%;
     max-width: 100vw;
+    font-family: 'Poppins', sans-serif !important;
   }
   
   body {
     background-color: var(--zap-cream);
     color: var(--zap-charcoal);
-    font-family: 'Inter', sans-serif;
+    font-family: 'Poppins', sans-serif !important;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
 
   h1, h2, h3, h4, h5, h6 {
-    font-family: 'Inter', sans-serif;
+    font-family: 'Poppins', sans-serif !important;
     color: var(--zap-black);
   }
 }

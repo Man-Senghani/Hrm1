@@ -55,7 +55,7 @@ const Card = ({ children, className = '', onClick, ...props }) => (
 
 const SectionHeader = ({ title, action }) => (
   <div className="flex justify-between items-center mb-5">
-    <h2 className="font-bold text-[#201515] dark:text-white" style={{ fontFamily: 'Manrope, sans-serif', fontSize: '18px' }}>{title}</h2>
+    <h2 className="font-bold text-[#201515] dark:text-white" style={{ fontFamily: 'Poppins, sans-serif', fontSize: '18px' }}>{title}</h2>
     {action && (typeof action === 'string' ? <span className="text-[#00a76b] font-semibold text-sm cursor-pointer hover:underline flex items-center gap-1">{action}</span> : action)}
   </div>
 );

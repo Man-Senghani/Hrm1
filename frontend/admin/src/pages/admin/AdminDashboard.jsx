@@ -636,7 +636,7 @@ const AdminDashboard = () => {
                   onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
-                    navigate(`/${pathRole}/leave`);
+                    navigate('/leave');
                   }}
                   className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-950/40 px-2 py-1 rounded-lg flex items-center gap-0.5 transition-all cursor-pointer whitespace-nowrap"
                   title="View All Leaves"
@@ -714,7 +714,7 @@ const AdminDashboard = () => {
               <div className="flex items-center gap-2 shrink-0">
                 <button
                   type="button"
-                  onClick={() => navigate(`/${pathRole}/payroll`)}
+                  onClick={() => navigate('/payroll')}
                   className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-950/40 px-2 py-1 rounded-lg flex items-center gap-0.5 transition-all cursor-pointer whitespace-nowrap"
                   title="View Payroll Details"
                 >
@@ -879,7 +879,7 @@ const AdminDashboard = () => {
         <Card className="p-6 flex flex-col lg:col-span-8 xl:col-span-8 hover:!border-[#3b82f6] dark:hover:!border-[#60a5fa] transition-colors duration-300">
           <div className="flex justify-between items-center mb-6">
             <h3 className="font-bold text-gray-900 dark:text-white">Pending Approvals</h3>
-            <button onClick={() => navigate(`/${pathRole}/leave`)} className="text-xs font-bold text-[#00a76b] hover:underline cursor-pointer">View All</button>
+            <button onClick={() => navigate('/leave')} className="text-xs font-bold text-[#00a76b] hover:underline cursor-pointer">View All</button>
           </div>
           <div className="flex-1 overflow-y-auto">
             {pendingApprovals.length > 0 ? (
@@ -1059,7 +1059,7 @@ const AdminDashboard = () => {
           <div className="flex justify-between items-center mb-4">
             <h3 className="font-bold text-gray-900 dark:text-white text-base">Announcements</h3>
             <button
-              onClick={() => navigate(`/${pathRole}/notifications`)}
+              onClick={() => navigate('/notifications')}
               className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer flex items-center gap-1"
             >
               View All
@@ -1069,7 +1069,7 @@ const AdminDashboard = () => {
             {announcements && announcements.length > 0 ? announcements.slice(0, 3).map((ann) => (
               <div
                 key={ann._id}
-                onClick={() => navigate(`/${pathRole}/notifications`)}
+                onClick={() => navigate('/notifications')}
                 className="p-3 bg-[#f0f6ff] dark:bg-blue-950/25 hover:bg-[#e6f0fd] dark:hover:bg-blue-950/40 rounded-2xl border border-[#dbeafe] dark:border-blue-900/40 flex flex-col gap-1.5 transition-all cursor-pointer shadow-xs"
               >
                 <div className="flex items-center gap-2">

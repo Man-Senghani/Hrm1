@@ -15,6 +15,8 @@ import {
 } from 'recharts';
 import TimeTrackerWidget from '@shared/components/TimeTrackerWidget';
 import ViewHolidaysDrawer from '../components/modals/ViewHolidaysDrawer';
+import CheckInButton from '../components/CheckInButton';
+import AttendanceSessionDetailModal from '@shared/components/AttendanceSessionDetailModal';
 
 // ─── ATTRACTIVE CUSTOM DATE PICKER ─────────────────────────
 export const AttendanceDatePicker = ({ value, onChange, placeholder = 'dd-mm-yyyy' }) => {
@@ -449,6 +451,81 @@ const getWorkingHours = (clockIn, clockOut, totalHours, record, activeLiveSecs) 
   return '--';
 };
 
+const getInactiveTime = (record, liveIdleSecs) => {
+  if (!record || record.status === 'Absent' || record.status === 'Leave' || (!record.clockIn && !record.checkInTime && !record.clock_in)) {
+    return '--';
+  }
+  let idleSecs = record.idleTime ?? record.inactiveTime ?? record.idle_time ?? 0;
+  const isTodayRec = record && record.date && (
+    (typeof record.date === 'string' && record.date.split('T')[0] === getLocalYYYYMMDD(new Date()))
+  );
+  if (isTodayRec && liveIdleSecs && typeof liveIdleSecs === 'number' && liveIdleSecs > 0) {
+    idleSecs = liveIdleSecs;
+  }
+  if (typeof idleSecs === 'number' && idleSecs > 0) {
+    const h = Math.floor(idleSecs / 3600);
+    const m = Math.floor((idleSecs % 3600) / 60);
+    return `${h}h ${m}m`;
+  }
+  return '0h 00m';
+};
+
+const getTotalHoursCombined = (clockIn, clockOut, totalHours, record, activeLiveSecs, liveIdleSecs) => {
+  if (!record || record.status === 'Absent' || record.status === 'Leave' || (!clockIn && !record.checkInTime && !record.clock_in)) {
+    return '--';
+  }
+
+  let activeSecs = 0;
+  if (activeLiveSecs && typeof activeLiveSecs === 'number' && activeLiveSecs > 0) {
+    const isTodayRec = record && record.date && (
+      (typeof record.date === 'string' && record.date.split('T')[0] === getLocalYYYYMMDD(new Date()))
+    );
+    if (isTodayRec && (!record.clockOut || record.clockOut === '--' || !record.checkOutTime)) {
+      activeSecs = activeLiveSecs;
+    }
+  }
+  if (!activeSecs) {
+    activeSecs = record?.totalActiveTime ?? record?.activeTime ?? record?.trackedTime ?? 0;
+  }
+  if (!activeSecs && (totalHours || record?.totalHours)) {
+    const hoursVal = totalHours ?? record?.totalHours;
+    if (hoursVal !== '--') {
+      const numericHours = typeof hoursVal === 'number' ? hoursVal : parseFloat(String(hoursVal));
+      if (!isNaN(numericHours) && numericHours > 0) {
+        activeSecs = Math.round(numericHours * 3600);
+      }
+    }
+  }
+  if (!activeSecs && record.checkInTime && record.checkOutTime) {
+    const start = new Date(record.checkInTime).getTime();
+    const end = new Date(record.checkOutTime).getTime();
+    if (!isNaN(start) && !isNaN(end) && end >= start) {
+      activeSecs = Math.floor((end - start) / 1000);
+    }
+  }
+
+  let idleSecs = record?.idleTime ?? record?.inactiveTime ?? record?.idle_time ?? 0;
+  const isTodayRec = record && record.date && (
+    (typeof record.date === 'string' && record.date.split('T')[0] === getLocalYYYYMMDD(new Date()))
+  );
+  if (isTodayRec && liveIdleSecs && typeof liveIdleSecs === 'number' && liveIdleSecs > 0) {
+    idleSecs = liveIdleSecs;
+  }
+
+  const combinedSecs = (record?.totalTime ?? (activeSecs + idleSecs));
+  if (combinedSecs > 0) {
+    const h = Math.floor(combinedSecs / 3600);
+    const m = Math.floor((combinedSecs % 3600) / 60);
+    return `${h}h ${m}m`;
+  }
+
+  if (clockIn || record.checkInTime) {
+    return getWorkingHours(clockIn, clockOut, totalHours, record, activeLiveSecs);
+  }
+
+  return '--';
+};
+
 const getInitials = (name) => {
   if (!name) return 'U';
   return name.split(' ').filter(Boolean).map(n => n[0]).join('').toUpperCase().substring(0, 2);
@@ -506,7 +583,9 @@ const Attendance = () => {
   const isEmployeeRoute = location.pathname.includes('/employee');
   const [viewContext, setViewContext] = useState(isEmployeeRoute || userRole === 'employee' ? 'employee' : 'team');
   const [hoveredWeeklySlice, setHoveredWeeklySlice] = useState(null);
+  const [selectedSessionRecord, setSelectedSessionRecord] = useState(null);
   const [hoveredStatusSlice, setHoveredStatusSlice] = useState(null);
+  const [hoveredLegendStatus, setHoveredLegendStatus] = useState(null);
 
   useEffect(() => {
     if (isEmployeeRoute) {
@@ -540,6 +619,7 @@ const Attendance = () => {
 
   const [todayLiveStatus, setTodayLiveStatus] = useState(null);
   const [liveActiveSeconds, setLiveActiveSeconds] = useState(0);
+  const [liveIdleSeconds, setLiveIdleSeconds] = useState(0);
   const [liveSessionStatus, setLiveSessionStatus] = useState(null);
   const timeFetchRef = useRef(Date.now());
   const [teamLiveSessions, setTeamLiveSessions] = useState([]);
@@ -556,6 +636,7 @@ const Attendance = () => {
       setTodayLiveStatus(data);
       timeFetchRef.current = Date.now();
       setLiveActiveSeconds(data?.activeTime || 0);
+      setLiveIdleSeconds(data?.idleTime || 0);
     } catch (err) { }
   }, []);
 
@@ -1061,22 +1142,56 @@ const Attendance = () => {
   const filteredRecords = useMemo(() => {
     let filtered = [...allCombinedRecords];
 
-    if (userRole === 'hr') {
+    if (viewContext === 'employee') {
+      const currentUser = JSON.parse(sessionStorage.getItem('user') || '{}');
+      const currentUserId = currentUser._id || currentUser.id;
+      const currentUserName = (currentUser.name || '').toLowerCase().trim();
+
       filtered = filtered.filter(r => {
-        const role = (r.user?.role || '').toLowerCase();
-        const name = (r.user?.name || '').toLowerCase();
-        if (role === 'admin' || role === 'superadmin') return false;
-        if (name.includes('admin')) return false;
+        const recUserId = r.user?._id || r.user?.id || r.user;
+        const recUserName = (r.user?.name || r.userName || '').toLowerCase().trim();
+        if (currentUserId && recUserId) {
+          return String(recUserId) === String(currentUserId);
+        }
+        if (currentUserName && recUserName) {
+          return recUserName === currentUserName;
+        }
         return true;
       });
-    } else if (userRole === 'manager') {
+    } else {
+      const currentUser = JSON.parse(sessionStorage.getItem('user') || '{}');
+      const currentUserId = currentUser._id || currentUser.id;
+      const currentUserName = (currentUser.name || '').toLowerCase().trim();
+
       filtered = filtered.filter(r => {
-        const role = (r.user?.role || '').toLowerCase();
-        const name = (r.user?.name || '').toLowerCase();
-        if (role === 'admin' || role === 'hr' || role === 'superadmin') return false;
-        if (name.includes('admin') || name.includes('hr manager')) return false;
+        const recUserId = r.user?._id || r.user?.id || r.user;
+        const recUserName = (r.user?.name || r.userName || '').toLowerCase().trim();
+        if (currentUserId && recUserId) {
+          return String(recUserId) !== String(currentUserId);
+        }
+        if (currentUserName && recUserName) {
+          return recUserName !== currentUserName;
+        }
         return true;
       });
+
+      if (userRole === 'hr') {
+        filtered = filtered.filter(r => {
+          const role = (r.user?.role || '').toLowerCase();
+          const name = (r.user?.name || '').toLowerCase();
+          if (role === 'admin' || role === 'superadmin') return false;
+          if (name.includes('admin')) return false;
+          return true;
+        });
+      } else if (userRole === 'manager') {
+        filtered = filtered.filter(r => {
+          const role = (r.user?.role || '').toLowerCase();
+          const name = (r.user?.name || '').toLowerCase();
+          if (role === 'admin' || role === 'hr' || role === 'superadmin') return false;
+          if (name.includes('admin') || name.includes('hr manager')) return false;
+          return true;
+        });
+      }
     }
 
     const today = new Date();
@@ -1129,7 +1244,7 @@ const Attendance = () => {
       return sortDir === 'asc' ? cmp : -cmp;
     });
     return filtered;
-  }, [allCombinedRecords, searchQuery, statusFilter, dateFilter, sortField, sortDir, viewMode]);
+  }, [allCombinedRecords, searchQuery, statusFilter, dateFilter, sortField, sortDir, viewMode, viewContext]);
 
   const totalPages = Math.ceil(filteredRecords.length / pageSize);
   const paginatedRecords = filteredRecords.slice((currentPage - 1) * pageSize, currentPage * pageSize);
@@ -1180,6 +1295,19 @@ const Attendance = () => {
     }
     return days;
   }, [calendarMonth, records]);
+
+  const calendarMonthTotals = useMemo(() => {
+    let present = 0, late = 0, halfDay = 0, leave = 0, absent = 0;
+    calendarData.forEach(day => {
+      if (!day) return;
+      if (day.present > 0) present += day.present;
+      if (day.late > 0) late += day.late;
+      if (day.halfDay > 0) halfDay += day.halfDay;
+      if (day.leave > 0) leave += day.leave;
+      if (day.absent > 0) absent += day.absent;
+    });
+    return { present, late, halfDay, leave, absent };
+  }, [calendarData]);
 
   // ── Pie Data ──
   const pieData = useMemo(() => {
@@ -1320,11 +1448,14 @@ const Attendance = () => {
   return (
     <div className="space-y-6 pb-10">
       {/* ── HEADER ── */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-[26px] font-extrabold text-slate-900 dark:text-white tracking-tight" style={{ fontFamily: 'Manrope, sans-serif' }}>
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex flex-wrap items-center gap-4">
+          <h1 className="text-[26px] font-extrabold text-slate-900 dark:text-white tracking-tight shrink-0" style={{ fontFamily: 'Poppins, sans-serif' }}>
             Attendance
           </h1>
+          <div className="w-64">
+            <CheckInButton variant="card" />
+          </div>
         </div>
         <div className="flex items-center gap-3">
           <button
@@ -1770,40 +1901,52 @@ const Attendance = () => {
                 const isToday = day.dateStr === todayStr;
                 const isWeekend = day.isWeekend ?? (new Date(day.dateStr).getDay() === 0 || new Date(day.dateStr).getDay() === 6);
 
-                // Color styling based on status
-                let dayBg = 'hover:bg-slate-50 dark:hover:bg-[#0d2a22] text-slate-700 dark:text-slate-300';
+                let statusType = null;
                 let dotColor = null;
 
                 if (day.present > 0) {
+                  statusType = 'present';
                   dotColor = '#10b981';
-                  dayBg = 'bg-emerald-50/70 dark:bg-emerald-950/25 text-emerald-700 dark:text-emerald-300 font-bold';
                 } else if (day.late > 0) {
+                  statusType = 'late';
                   dotColor = '#f59e0b';
-                  dayBg = 'bg-amber-50/70 dark:bg-amber-950/25 text-amber-700 dark:text-amber-300 font-bold';
                 } else if (day.halfDay > 0) {
+                  statusType = 'halfDay';
                   dotColor = '#3b82f6';
-                  dayBg = 'bg-blue-50/70 dark:bg-blue-950/25 text-blue-700 dark:text-blue-300 font-bold';
                 } else if (day.leave > 0 && !isWeekend) {
+                  statusType = 'leave';
                   dotColor = '#8b5cf6';
-                  dayBg = 'bg-purple-50/70 dark:bg-purple-950/25 text-purple-700 dark:text-purple-300 font-bold';
                 } else if (day.absent > 0 && !isWeekend) {
+                  statusType = 'absent';
                   dotColor = '#ef4444';
-                  dayBg = 'bg-red-50/60 dark:bg-red-950/20 text-red-600 dark:text-red-400';
-                } else if (isWeekend) {
-                  dayBg = 'text-slate-400 dark:text-[#557367] bg-slate-50/40 dark:bg-[#0a1814]/30';
+                }
+
+                const isMatchingHover = hoveredLegendStatus && statusType === hoveredLegendStatus;
+                const isDimmed = hoveredLegendStatus && statusType !== hoveredLegendStatus;
+
+                let textColor = isWeekend ? 'text-slate-400 dark:text-[#557367]' : 'text-slate-700 dark:text-slate-300';
+                if (isMatchingHover) {
+                  if (statusType === 'present') textColor = 'text-emerald-600 dark:text-emerald-400 font-black scale-110';
+                  else if (statusType === 'late') textColor = 'text-amber-600 dark:text-amber-400 font-black scale-110';
+                  else if (statusType === 'halfDay') textColor = 'text-blue-600 dark:text-blue-400 font-black scale-110';
+                  else if (statusType === 'leave') textColor = 'text-purple-600 dark:text-purple-400 font-black scale-110';
+                  else if (statusType === 'absent') textColor = 'text-red-600 dark:text-red-400 font-black scale-110';
                 }
 
                 return (
                   <div
                     key={day.dateStr}
                     onClick={() => setDateFilter(dateFilter === day.dateStr ? '' : day.dateStr)}
-                    className={`group relative h-6 md:h-7 rounded-lg p-0.5 flex flex-col items-center justify-center transition-all cursor-pointer text-[10px] ${dayBg} ${isToday ? 'ring-2 ring-emerald-500 shadow-xs' : ''
-                      } ${dateFilter === day.dateStr ? 'ring-2 ring-blue-500 bg-blue-50 dark:bg-blue-950/40' : ''}`}
+                    className={`group relative h-6 md:h-7 rounded-lg p-0.5 flex flex-col items-center justify-center transition-all cursor-pointer text-[10px] bg-transparent ${textColor} ${
+                      isDimmed ? 'opacity-25' : 'opacity-100'
+                    } ${isToday ? 'ring-2 ring-emerald-500 shadow-xs font-bold' : ''} ${
+                      dateFilter === day.dateStr ? 'ring-2 ring-blue-500 font-bold' : ''
+                    }`}
                   >
                     <span className="leading-none text-[11px] font-bold">{day.day}</span>
                     {dotColor && (
                       <span
-                        className="w-1.5 h-1.5 rounded-full mt-0.5"
+                        className={`w-1.5 h-1.5 rounded-full mt-0.5 transition-transform ${isMatchingHover ? 'scale-150 ring-2 ring-white dark:ring-slate-900' : ''}`}
                         style={{ backgroundColor: dotColor }}
                       />
                     )}
@@ -1851,27 +1994,76 @@ const Attendance = () => {
               })}
             </div>
 
-            {/* Bottom Legend */}
-            <div className="pt-3 mt-3 border-t border-slate-100 dark:border-[#133029] flex items-center justify-between text-[10px] font-semibold text-slate-500 dark:text-[#829e92] flex-wrap gap-2">
-              <div className="flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-emerald-500" />
+            {/* Bottom Legend with Month Counts & Status Hover Filter */}
+            <div className="pt-3 mt-3 border-t border-slate-100 dark:border-[#133029] flex items-center justify-between text-[10px] font-semibold text-slate-500 dark:text-[#829e92] flex-wrap gap-1 select-none">
+              <div
+                onMouseEnter={() => setHoveredLegendStatus('present')}
+                onMouseLeave={() => setHoveredLegendStatus(null)}
+                className={`flex items-center gap-1 cursor-pointer transition-all px-1 py-0.5 rounded-md ${
+                  hoveredLegendStatus === 'present' ? 'bg-emerald-50 dark:bg-emerald-950/50 font-bold scale-105' : 'hover:opacity-80'
+                }`}
+              >
+                <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
                 <span>Present</span>
+                <span className="text-[9px] font-black text-emerald-600 dark:text-emerald-400 ml-0.5">
+                  {calendarMonthTotals.present}
+                </span>
               </div>
-              <div className="flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-amber-500" />
+
+              <div
+                onMouseEnter={() => setHoveredLegendStatus('late')}
+                onMouseLeave={() => setHoveredLegendStatus(null)}
+                className={`flex items-center gap-1 cursor-pointer transition-all px-1 py-0.5 rounded-md ${
+                  hoveredLegendStatus === 'late' ? 'bg-amber-50 dark:bg-amber-950/50 font-bold scale-105' : 'hover:opacity-80'
+                }`}
+              >
+                <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
                 <span>Late</span>
+                <span className="text-[9px] font-black text-amber-600 dark:text-amber-400 ml-0.5">
+                  {calendarMonthTotals.late}
+                </span>
               </div>
-              <div className="flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-blue-500" />
+
+              <div
+                onMouseEnter={() => setHoveredLegendStatus('halfDay')}
+                onMouseLeave={() => setHoveredLegendStatus(null)}
+                className={`flex items-center gap-1 cursor-pointer transition-all px-1 py-0.5 rounded-md ${
+                  hoveredLegendStatus === 'halfDay' ? 'bg-blue-50 dark:bg-blue-950/50 font-bold scale-105' : 'hover:opacity-80'
+                }`}
+              >
+                <span className="w-2 h-2 rounded-full bg-blue-500 shrink-0" />
                 <span>Half Day</span>
+                <span className="text-[9px] font-black text-blue-600 dark:text-blue-400 ml-0.5">
+                  {calendarMonthTotals.halfDay}
+                </span>
               </div>
-              <div className="flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-purple-500" />
+
+              <div
+                onMouseEnter={() => setHoveredLegendStatus('leave')}
+                onMouseLeave={() => setHoveredLegendStatus(null)}
+                className={`flex items-center gap-1 cursor-pointer transition-all px-1 py-0.5 rounded-md ${
+                  hoveredLegendStatus === 'leave' ? 'bg-purple-50 dark:bg-purple-950/50 font-bold scale-105' : 'hover:opacity-80'
+                }`}
+              >
+                <span className="w-2 h-2 rounded-full bg-purple-500 shrink-0" />
                 <span>Leave</span>
+                <span className="text-[9px] font-black text-purple-600 dark:text-purple-400 ml-0.5">
+                  {calendarMonthTotals.leave}
+                </span>
               </div>
-              <div className="flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-red-500" />
+
+              <div
+                onMouseEnter={() => setHoveredLegendStatus('absent')}
+                onMouseLeave={() => setHoveredLegendStatus(null)}
+                className={`flex items-center gap-1 cursor-pointer transition-all px-1 py-0.5 rounded-md ${
+                  hoveredLegendStatus === 'absent' ? 'bg-red-50 dark:bg-red-950/50 font-bold scale-105' : 'hover:opacity-80'
+                }`}
+              >
+                <span className="w-2 h-2 rounded-full bg-red-500 shrink-0" />
                 <span>Absent</span>
+                <span className="text-[9px] font-black text-red-600 dark:text-red-400 ml-0.5">
+                  {calendarMonthTotals.absent}
+                </span>
               </div>
             </div>
           </Card>
@@ -2009,11 +2201,13 @@ const Attendance = () => {
                   { key: 'clockIn', label: 'Check In' },
                   { key: 'clockOut', label: 'Check Out' },
                   { key: 'hours', label: 'Working Hours' },
-                  ...(userRole !== 'employee' ? [{ key: 'actions', label: 'Action' }] : [])
+                  { key: 'inactive', label: 'Inactive Time' },
+                  { key: 'total', label: 'Total Hours' },
+                  ...(viewContext !== 'employee' && userRole !== 'employee' ? [{ key: 'actions', label: 'Action' }] : [])
                 ].map(col => (
                   <th key={col.key}
-                    onClick={() => col.key !== 'hours' && col.key !== 'clockOut' && col.key !== 'actions' && handleSort(col.key)}
-                    className={`px-3 py-1.5 text-left text-[9.5px] font-bold text-slate-500 dark:text-[#829e92] uppercase tracking-wider ${col.key !== 'hours' && col.key !== 'clockOut' && col.key !== 'actions' ? 'cursor-pointer hover:text-emerald-600 dark:hover:text-emerald-400 select-none' : ''
+                    onClick={() => col.key !== 'hours' && col.key !== 'inactive' && col.key !== 'total' && col.key !== 'clockOut' && col.key !== 'actions' && handleSort(col.key)}
+                    className={`px-3 py-1.5 text-left text-[9.5px] font-bold text-slate-500 dark:text-[#829e92] uppercase tracking-wider border-r border-[#e2eae7] dark:border-[#133029] last:border-r-0 ${col.key === 'name' ? 'w-[180px] max-w-[180px]' : ''} ${col.key !== 'hours' && col.key !== 'inactive' && col.key !== 'total' && col.key !== 'clockOut' && col.key !== 'actions' ? 'cursor-pointer hover:text-emerald-600 dark:hover:text-emerald-400 select-none' : ''
                       }`}>
                     <div className="flex items-center gap-1">
                       {col.label}
@@ -2028,7 +2222,7 @@ const Attendance = () => {
             <tbody className="divide-y divide-[#e2eae7] dark:divide-[#133029]">
               {paginatedRecords.length === 0 ? (
                 <tr>
-                  <td colSpan={userRole !== 'employee' ? 7 : 6} className="py-8 text-center">
+                  <td colSpan={viewContext !== 'employee' && userRole !== 'employee' ? 9 : 8} className="py-8 text-center">
                     <div className="flex flex-col items-center gap-2">
                       <Calendar size={28} className="text-slate-300 dark:text-slate-600" />
                       <p className="text-xs font-semibold text-slate-400 dark:text-slate-500">No attendance records found</p>
@@ -2042,44 +2236,48 @@ const Attendance = () => {
                 const hasCheckedOut = !!(record.clockOut || record.clock_out || record.checkOutTime);
 
                 return (
-                  <tr key={record._id || i} className="hover:bg-slate-50/50 dark:hover:bg-[#0d2a22]/50 transition-colors">
-                    <td className="px-3 py-1.5">
-                      <div className="flex items-center gap-2">
+                  <tr
+                    key={record._id || i}
+                    onClick={() => setSelectedSessionRecord(record)}
+                    className="hover:bg-emerald-50/60 dark:hover:bg-[#112d26] transition-colors cursor-pointer group"
+                  >
+                    <td className="px-3 py-1.5 border-r border-[#e2eae7] dark:border-[#133029] w-[180px] max-w-[180px]">
+                      <div className="flex items-center gap-2 overflow-hidden">
                         <div className="w-6.5 h-6.5 rounded-full bg-emerald-50 dark:bg-[#133029] text-emerald-600 dark:text-emerald-400 font-bold text-[9.5px] flex items-center justify-center shrink-0">
                           {getInitials(record.user?.name)}
                         </div>
-                        <div>
-                          <p className="font-bold text-slate-800 dark:text-white text-[11.5px] leading-tight">{record.user?.name || 'Unknown'}</p>
-                          <p className="text-[9.5px] text-slate-400 dark:text-[#829e92] leading-none mt-0.5">{record.department || record.user?.role || ''}</p>
+                        <div className="min-w-0 flex-1">
+                          <p className="font-bold text-slate-800 dark:text-white text-[11.5px] leading-tight truncate" title={record.user?.name || 'Unknown'}>{record.user?.name || 'Unknown'}</p>
+                          <p className="text-[9.5px] text-slate-400 dark:text-[#829e92] leading-none mt-0.5 truncate" title={record.department || record.user?.role || ''}>{record.department || record.user?.role || ''}</p>
                         </div>
                       </div>
                     </td>
-                    <td className="px-3 py-1.5">
+                    <td className="px-3 py-1.5 border-r border-[#e2eae7] dark:border-[#133029]">
                       <span className="text-[11.5px] font-semibold text-slate-700 dark:text-slate-300">
                         {record.date && record.date.includes('-') && record.date.split('-')[0].length === 4
                           ? `${record.date.split('T')[0].split('-')[2]}/${record.date.split('T')[0].split('-')[1]}/${record.date.split('T')[0].split('-')[0]}`
                           : record.date}
                       </span>
                     </td>
-                    <td className="px-3 py-1.5">
+                    <td className="px-3 py-1.5 border-r border-[#e2eae7] dark:border-[#133029]">
                       <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold rounded-full border ${sc.bg} ${sc.text} ${sc.border}`}>
                         <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: sc.dot }} />
                         {record.status}
                       </span>
                     </td>
-                    <td className="px-3 py-1.5">
+                    <td className="px-3 py-1.5 border-r border-[#e2eae7] dark:border-[#133029]">
                       <div className="flex items-center gap-1 text-[11.5px] font-semibold text-slate-700 dark:text-slate-300">
                         <LogIn size={11.5} className="text-emerald-500" />
                         {formatTime12h(record.clockIn || record.clock_in || record.checkInTime)}
                       </div>
                     </td>
-                    <td className="px-3 py-1.5">
+                    <td className="px-3 py-1.5 border-r border-[#e2eae7] dark:border-[#133029]">
                       <div className="flex items-center gap-1 text-[11.5px] font-semibold text-slate-700 dark:text-slate-300">
                         <LogOut size={11.5} className="text-red-400" />
                         {formatTime12h(record.clockOut || record.clock_out || record.checkOutTime)}
                       </div>
                     </td>
-                    <td className="px-3 py-1.5">
+                    <td className="px-3 py-1.5 border-r border-[#e2eae7] dark:border-[#133029]">
                       <span className="text-[11.5px] font-bold text-slate-800 dark:text-white">
                         {(() => {
                           const cIn = record.clockIn || record.clock_in || (record.checkInTime ? new Date(record.checkInTime).toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false }) : null);
@@ -2088,11 +2286,25 @@ const Attendance = () => {
                         })()}
                       </span>
                     </td>
-                    {userRole !== 'employee' && (
+                    <td className="px-3 py-1.5 border-r border-[#e2eae7] dark:border-[#133029]">
+                      <span className="text-[11.5px] font-medium text-amber-600 dark:text-amber-400">
+                        {getInactiveTime(record, liveIdleSeconds)}
+                      </span>
+                    </td>
+                    <td className="px-3 py-1.5 border-r border-[#e2eae7] dark:border-[#133029]">
+                      <span className="text-[11.5px] font-black text-emerald-700 dark:text-emerald-300">
+                        {(() => {
+                          const cIn = record.clockIn || record.clock_in || (record.checkInTime ? new Date(record.checkInTime).toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false }) : null);
+                          const cOut = record.clockOut || record.clock_out || (record.checkOutTime ? new Date(record.checkOutTime).toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false }) : null);
+                          return getTotalHoursCombined(cIn, cOut, record.totalHours, record, liveActiveSeconds, liveIdleSeconds);
+                        })()}
+                      </span>
+                    </td>
+                    {viewContext !== 'employee' && userRole !== 'employee' && (
                       <td className="px-3 py-1.5">
                         {isToday && hasCheckedOut ? (
                           <button
-                            onClick={() => handleOverrideCheckout(record)}
+                            onClick={(e) => { e.stopPropagation(); handleOverrideCheckout(record); }}
                             title="Reopen accidental checkout"
                             className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-500/10 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400 hover:bg-amber-500 hover:text-white dark:hover:bg-amber-500 dark:hover:text-white border border-amber-500/30 text-[10.5px] font-bold transition-all shadow-xs cursor-pointer"
                           >
@@ -2204,6 +2416,12 @@ const Attendance = () => {
         </div>,
         document.body
       )}
+      {/* ── ATTENDANCE SESSION BREAKDOWN MODAL ── */}
+      <AttendanceSessionDetailModal
+        isOpen={!!selectedSessionRecord}
+        onClose={() => setSelectedSessionRecord(null)}
+        record={selectedSessionRecord}
+      />
     </div>
   );
 };

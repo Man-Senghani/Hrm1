@@ -656,7 +656,7 @@ const HRDashboard = () => {
                   onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
-                    navigate(`/${pathRole}/leave`);
+                    navigate('/leave');
                   }}
                   className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-950/40 px-2 py-1 rounded-lg flex items-center gap-0.5 transition-all cursor-pointer whitespace-nowrap"
                   title="View All Leaves"
@@ -859,7 +859,7 @@ const HRDashboard = () => {
                 hoverText: 'group-hover:text-[#00a76b] dark:group-hover:text-[#00a76b]',
                 onClick: (e) => {
                   e?.preventDefault();
-                  navigate(`/${pathRole}/leave`, { state: { viewMode: 'hr', filter: 'pending' } });
+                  navigate('/leave', { state: { viewMode: 'hr', filter: 'pending' } });
                 }
               },
               {
@@ -885,7 +885,7 @@ const HRDashboard = () => {
                 hoverText: 'group-hover:text-red-600 dark:group-hover:text-red-400',
                 onClick: (e) => {
                   e?.preventDefault();
-                  navigate(`/${pathRole}/notifications`);
+                  navigate('/notifications');
                 }
               },
             ].map((action, i) => (

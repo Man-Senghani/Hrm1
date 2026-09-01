@@ -12,6 +12,6 @@
 body {
   margin: 0;
   padding: 0;
-  font-family: 'Inter', sans-serif;
+  font-family: 'Poppins', sans-serif !important;
   @apply bg-[#eceae3] text-[#201515] antialiased;
 }

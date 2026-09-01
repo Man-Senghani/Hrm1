@@ -333,7 +333,9 @@ const buildEmployeeAttendanceHistory = async (userId) => {
         clockOut: clockOutStr,
         totalHours: hoursVal,
         totalActiveTime: activeSecs,
-        activeTime: activeSecs
+        activeTime: activeSecs,
+        idleTime: tt?.idleTime || 0,
+        totalTime: tt?.totalTime || (activeSecs || 0) + (tt?.idleTime || 0)
       });
     } else {
       const dStart = new Date(d);
@@ -609,6 +611,8 @@ exports.getAttendance = async (req, res) => {
               rec.activeTime = tt.activeTime;
               rec.totalHours = parseFloat((tt.activeTime / 3600).toFixed(4));
             }
+            rec.idleTime = tt.idleTime || 0;
+            rec.totalTime = tt.totalTime || (rec.activeTime || 0) + (tt.idleTime || 0);
           }
         }
       }

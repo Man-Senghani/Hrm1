@@ -443,88 +443,103 @@ const Notifications = () => {
 
               return (
                 <div>
-                  <div className="divide-y divide-[#e2eae7] dark:divide-[#13221e]">
-                    {(() => {
-                      const totalPages = Math.ceil(displayNotifications.length / itemsPerPage);
-                      const indexOfLastItem = currentPage * itemsPerPage;
-                      const indexOfFirstItem = indexOfLastItem - itemsPerPage;
-                      const currentItems = displayNotifications.slice(indexOfFirstItem, indexOfLastItem);
-                      
-                      return currentItems.map((notif) => {
-                        const colorClass = TYPE_COLORS[notif.type] || TYPE_COLORS.default;
-                        const sId = notif.senderId?._id ? String(notif.senderId._id) : (notif.senderId ? String(notif.senderId) : '');
-                        const isCreator = sId && sId === currentUserId;
-                        const senderDisplayName = notif.senderName || notif.senderId?.name || (typeof notif.sender === 'string' ? notif.sender : (notif.sender?.name || 'HR / Management'));
-                        const senderRole = notif.senderRole || notif.senderId?.role || notif.sender?.role || '';
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse border border-[#e2eae7] dark:border-[#13221e]">
+                      <thead>
+                        <tr className="bg-slate-50 dark:bg-[#162722] border-b border-[#e2eae7] dark:border-[#13221e] text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                          <th className="py-3.5 px-5 border-r border-[#e2eae7] dark:border-[#13221e]">Message</th>
+                          <th className="py-3.5 px-4 border-r border-[#e2eae7] dark:border-[#13221e]">Type</th>
+                          <th className="py-3.5 px-4 border-r border-[#e2eae7] dark:border-[#13221e]">Sent By</th>
+                          <th className="py-3.5 px-4 border-r border-[#e2eae7] dark:border-[#13221e]">Target</th>
+                          <th className="py-3.5 px-4 text-right border-r border-[#e2eae7] dark:border-[#13221e]">Date & Time</th>
+                          <th className="py-3.5 px-5 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[#e2eae7] dark:divide-[#13221e]">
+                        {(() => {
+                          const totalPages = Math.ceil(displayNotifications.length / itemsPerPage);
+                          const indexOfLastItem = currentPage * itemsPerPage;
+                          const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+                          const currentItems = displayNotifications.slice(indexOfFirstItem, indexOfLastItem);
+                          
+                          return currentItems.map((notif) => {
+                            const colorClass = TYPE_COLORS[notif.type] || TYPE_COLORS.default;
+                            const sId = notif.senderId?._id ? String(notif.senderId._id) : (notif.senderId ? String(notif.senderId) : '');
+                            const isCreator = sId && sId === currentUserId;
+                            const senderDisplayName = notif.senderName || notif.senderId?.name || (typeof notif.sender === 'string' ? notif.sender : (notif.sender?.name || 'HR / Management'));
+                            const senderRole = notif.senderRole || notif.senderId?.role || notif.sender?.role || '';
 
-                        return (
-                          <div
-                            key={notif._id}
-                            className="py-3 px-5 flex items-center gap-4 transition-colors bg-white dark:bg-[#0c1512] hover:bg-slate-50 dark:hover:bg-[#111c18] group relative"
-                          >
-                            {/* Icon */}
-                            <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${colorClass}`}>
-                              <Bell size={16} />
-                            </div>
-
-                            {/* Content */}
-                            <div className="flex-1 min-w-0 pr-16 flex md:flex-row flex-col md:items-center justify-between gap-3">
-                              <p className="text-[13px] leading-snug font-medium text-slate-800 dark:text-white">
-                                {notif.message}
-                              </p>
-                              <div className="flex items-center gap-2 flex-wrap shrink-0">
-                                <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest ${colorClass}`}>
-                                  {notif.type || 'general'}
-                                </span>
-
-                                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/40 shadow-xs">
-                                  <span className="text-gray-400 dark:text-gray-500 font-semibold uppercase text-[9px]">By:</span>
-                                  <span>{isCreator ? `${senderDisplayName} (You)` : senderDisplayName}</span>
-                                  {senderRole && (
-                                    <span className="text-[9px] font-black uppercase tracking-wider opacity-70">
-                                      [{senderRole}]
+                            return (
+                              <tr key={notif._id} className="hover:bg-slate-50/80 dark:hover:bg-[#111c18] transition-colors group">
+                                <td className="py-3.5 px-5 border-r border-[#e2eae7] dark:border-[#13221e]">
+                                  <div className="flex items-center gap-3">
+                                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${colorClass}`}>
+                                      <Bell size={15} />
+                                    </div>
+                                    <span className="text-[13px] font-medium text-slate-800 dark:text-white leading-snug">
+                                      {notif.message}
                                     </span>
-                                  )}
-                                </span>
-
-                                {isCreator && notif.targetLabel && (
-                                  <span className="px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest bg-slate-100 dark:bg-[#1a2d29] text-slate-500 dark:text-[#829e92]">
-                                    Sent to: {notif.targetLabel}
+                                  </div>
+                                </td>
+                                <td className="py-3.5 px-4 whitespace-nowrap border-r border-[#e2eae7] dark:border-[#13221e]">
+                                  <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest ${colorClass}`}>
+                                    {notif.type || 'general'}
                                   </span>
-                                )}
-                                
-                                <span className="text-[10px] font-bold text-slate-400 dark:text-[#829e92] uppercase tracking-widest whitespace-nowrap">
+                                </td>
+                                <td className="py-3.5 px-4 whitespace-nowrap border-r border-[#e2eae7] dark:border-[#13221e]">
+                                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/40 shadow-xs">
+                                    <span className="text-gray-400 dark:text-gray-500 font-semibold uppercase text-[9px]">BY:</span>
+                                    <span>{isCreator ? `${senderDisplayName} (You)` : senderDisplayName}</span>
+                                    {senderRole && (
+                                      <span className="text-[9px] font-black uppercase tracking-wider opacity-70">
+                                        [{senderRole}]
+                                      </span>
+                                    )}
+                                  </span>
+                                </td>
+                                <td className="py-3.5 px-4 whitespace-nowrap text-xs font-semibold text-slate-600 dark:text-[#829e92] border-r border-[#e2eae7] dark:border-[#13221e]">
+                                  {notif.targetLabel ? (
+                                    <span className="px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest bg-slate-100 dark:bg-[#1a2d29] text-slate-500 dark:text-[#829e92]">
+                                      {notif.targetLabel}
+                                    </span>
+                                  ) : (
+                                    <span className="text-slate-400 dark:text-slate-600 text-[11px]">-</span>
+                                  )}
+                                </td>
+                                <td className="py-3.5 px-4 text-right whitespace-nowrap text-[10px] font-bold text-slate-400 dark:text-[#829e92] uppercase tracking-widest border-r border-[#e2eae7] dark:border-[#13221e]">
                                   {new Date(notif.createdAt).toLocaleString('en-US', {
                                     month: 'short', day: 'numeric',
                                     hour: '2-digit', minute: '2-digit'
                                   })}
-                                </span>
-                              </div>
-                            </div>
-
-                            {/* Edit / Delete Actions */}
-                            {isCreator && (
-                              <div className="absolute right-5 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-2">
-                                <button 
-                                  onClick={() => handleEdit(notif)}
-                                  className="p-1.5 text-slate-450 hover:text-[#00a76b] hover:bg-emerald-50 rounded"
-                                  title="Edit"
-                                >
-                                  <Edit2 size={14} />
-                                </button>
-                                <button 
-                                  onClick={() => handleDelete(notif._id)}
-                                  className="p-1.5 text-slate-450 hover:text-red-500 hover:bg-red-50 rounded"
-                                  title="Delete"
-                                >
-                                  <Trash2 size={14} />
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        );
-                      });
-                    })()}
+                                </td>
+                                <td className="py-3.5 px-5 text-right whitespace-nowrap">
+                                  {isCreator ? (
+                                    <div className="flex items-center justify-end gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                      <button 
+                                        onClick={() => handleEdit(notif)}
+                                        className="p-1.5 text-slate-400 hover:text-[#00a76b] hover:bg-emerald-50 dark:hover:bg-emerald-950/30 rounded-lg transition-colors cursor-pointer"
+                                        title="Edit"
+                                      >
+                                        <Edit2 size={14} />
+                                      </button>
+                                      <button 
+                                        onClick={() => handleDelete(notif._id)}
+                                        className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-lg transition-colors cursor-pointer"
+                                        title="Delete"
+                                      >
+                                        <Trash2 size={14} />
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <span className="text-slate-400 dark:text-slate-600 text-[11px]">-</span>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          });
+                        })()}
+                      </tbody>
+                    </table>
                   </div>
 
                   {/* Pagination Controls */}

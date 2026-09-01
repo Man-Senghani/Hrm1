@@ -31,6 +31,9 @@ const MyEvents = lazy(() => import('./pages/MyEvents'));
 const Chat = lazy(() => import('@shared/pages/Chat'));
 const Profile = lazy(() => import('@shared/pages/Profile'));
 const Settings = lazy(() => import('@shared/pages/Settings'));
+const Notifications = lazy(() => import('../../admin/src/pages/Notifications'));
+
+const DailyReport = lazy(() => import('./pages/DailyReport'));
 
 const ScrollToTop = () => {
   const { pathname } = useLocation();
@@ -71,16 +74,8 @@ function App() {
   };
 
   const navItems = [
-    { label: 'Dashboard', icon: LayoutDashboard, path: '/' },
-    { label: 'Team Chat', icon: MessageSquare, path: '/chat' },
-    { label: 'My Attendance', icon: CalendarDays, path: '/attendance' },
-    { label: 'My Leave', icon: Calendar, path: '/leave' },
-    { label: 'My Projects', icon: FolderOpen, path: '/projects' },
-    { label: 'My Payslips', icon: Wallet, path: '/payslips' },
-    { label: 'My Documents', icon: FileText, path: '/documents' },
-    { label: 'My Performance', icon: Target, path: '/performance' },
-    { label: 'Company Holidays', icon: Globe, path: '/holidays' },
-    { label: 'Events', icon: Briefcase, path: '/events' },
+    { label: 'Attendance', icon: CalendarDays, path: '/attendance' },
+    { label: 'Daily Report', icon: FileText, path: '/daily-report' },
     { label: 'My Profile', icon: User, path: '/profile' },
   ];
 
@@ -138,14 +133,15 @@ function App() {
       >
         <Suspense fallback={<RouteLoadingFallback />}>
           <Routes>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/dashboard" element={<Navigate to="/" replace />} />
+            <Route path="/" element={<Navigate to="/attendance" replace />} />
+            <Route path="/dashboard" element={<Navigate to="/attendance" replace />} />
             <Route path="/time-tracker" element={<TimeTracker />} />
             <Route path="/chat" element={<Chat />} />
             <Route path="/projects" element={<EmployeeProjects />} />
             <Route path="/profile" element={<Profile />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/attendance" element={<Attendance />} />
+            <Route path="/daily-report" element={<DailyReport />} />
             <Route path="/events" element={<MyEvents />} />
             <Route path="/holidays" element={<Holidays />} />
             <Route path="/leave" element={<LeaveManagement />} />
@@ -153,6 +149,7 @@ function App() {
             <Route path="/payslips" element={<EmployeePayslips />} />
             <Route path="/documents" element={<EmployeeDocuments />} />
             <Route path="/performance" element={<EmployeePerformance />} />
+            <Route path="/notifications" element={<Notifications />} />
 
             {/* Prefixed routes matching /employee/* */}
             <Route path="/employee" element={<Navigate to="/" replace />} />
@@ -161,6 +158,7 @@ function App() {
             <Route path="/employee/leaves" element={<Navigate to="/leave" replace />} />
             <Route path="/employee/projects" element={<EmployeeProjects />} />
             <Route path="/employee/attendance" element={<Attendance />} />
+            <Route path="/employee/daily-report" element={<DailyReport />} />
             <Route path="/employee/time-tracker" element={<TimeTracker />} />
             <Route path="/employee/payslips" element={<EmployeePayslips />} />
             <Route path="/employee/profile" element={<Profile />} />
@@ -170,6 +168,7 @@ function App() {
             <Route path="/employee/chat" element={<Chat />} />
             <Route path="/employee/events" element={<MyEvents />} />
             <Route path="/employee/holidays" element={<Holidays />} />
+            <Route path="/employee/notifications" element={<Notifications />} />
 
             {/* Fallbacks */}
             <Route path="*" element={<Navigate to="/" replace />} />

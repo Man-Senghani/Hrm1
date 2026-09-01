@@ -219,7 +219,7 @@ const QuickActionsRow = ({ role = 'admin', title = 'Quick Actions' }) => {
   return (
     <div className="space-y-3 select-none">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-bold text-gray-900 dark:text-white" style={{ fontFamily: 'Manrope, sans-serif' }}>
+        <h2 className="text-lg font-bold text-gray-900 dark:text-white" style={{ fontFamily: 'Poppins, sans-serif' }}>
           {title}
         </h2>
       </div>

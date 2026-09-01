@@ -75,7 +75,7 @@ const DesktopAppRequiredModal = ({
     >
       <div
         className="relative w-full max-w-lg bg-[#fffefb] dark:bg-[#161311] border border-[#d5cfbe] dark:border-[#38352e] rounded-[28px] shadow-[0_25px_70px_rgba(0,0,0,0.35)] overflow-hidden animate-in zoom-in-95 duration-200 p-6 sm:p-8"
-        style={{ fontFamily: 'Inter, system-ui, -apple-system, sans-serif' }}
+        style={{ fontFamily: "'Poppins', system-ui, -apple-system, sans-serif" }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Top decorative gradient line */}

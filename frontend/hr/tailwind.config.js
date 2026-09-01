@@ -21,8 +21,9 @@ export default {
         "surface-container-highest": "#e0e3e5",
       },
       fontFamily: {
-        headline: ["Manrope", "sans-serif"],
-        body: ["Inter", "sans-serif"],
+        sans: ["Poppins", "sans-serif"],
+        headline: ["Poppins", "sans-serif"],
+        body: ["Poppins", "sans-serif"],
       },
       boxShadow: {
         'soft': '0 12px 32px rgba(25, 28, 30, 0.06)',

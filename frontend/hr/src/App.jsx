@@ -20,6 +20,7 @@ import {
   FileText,
   MessageSquare,
   Bell,
+  User,
   Settings as SettingsIcon
 } from 'lucide-react';
 
@@ -35,6 +36,7 @@ const TaskCreate = lazy(() => import('./pages/TaskCreate'));
 const TaskUpdate = lazy(() => import('./pages/TaskUpdate'));
 const LeaveManagement = lazy(() => import('./pages/LeaveManagement'));
 const Attendance = lazy(() => import('./pages/Attendance'));
+const DailyReport = lazy(() => import('./pages/DailyReport'));
 const Payroll = lazy(() => import('./pages/Payroll'));
 const Performance = lazy(() => import('./pages/Performance'));
 const Recruitment = lazy(() => import('./pages/Recruitment'));
@@ -80,22 +82,12 @@ function App() {
   };
 
   const navItems = [
-    { label: 'Dashboard', icon: LayoutDashboard, path: '/' },
     { label: 'Employees', icon: Users, path: '/employees' },
-    { label: 'Daily Tasks', icon: CheckSquare, path: '/tasks' },
-    { label: 'Projects', icon: Layers, path: '/projects' },
-    { label: 'Leave Approvals', icon: ClipboardList, path: '/leave' },
     { label: 'Attendance', icon: Calendar, path: '/attendance' },
-    { label: 'Payroll', icon: Wallet, path: '/payroll' },
-    { label: 'Recruitment', icon: UserPlus, path: '/recruitment' },
-    { label: 'Performance', icon: TrendingUp, path: '/performance' },
-    { label: 'Training', icon: GraduationCap, path: '/training' },
-    { label: 'Events & Notices', icon: PartyPopper, path: '/events' },
-    { label: 'HR Reports', icon: BarChart3, path: '/reports' },
-    { label: 'Activity Logs', icon: Camera, path: '/screenshots' },
-    { label: 'Documents', icon: FileText, path: '/documents' },
-    { label: 'Team Chat', icon: MessageSquare, path: '/chat' },
+    { label: 'Daily Report', icon: FileText, path: '/daily-report' },
     { label: 'Notifications', icon: Bell, path: '/notifications' },
+    { label: 'Screenshots', icon: Camera, path: '/screenshots' },
+    { label: 'My Profile', icon: User, path: '/profile' },
   ];
 
   return (
@@ -151,10 +143,10 @@ function App() {
       >
         <Suspense fallback={<RouteLoadingFallback />}>
           <Routes>
-            <Route path="/" element={<HRDashboard />} />
-            <Route path="/dashboard" element={<Navigate to="/" replace />} />
-            <Route path="/hr" element={<Navigate to="/" replace />} />
-            <Route path="/hr/dashboard" element={<Navigate to="/" replace />} />
+            <Route path="/" element={<Navigate to="/employees" replace />} />
+            <Route path="/dashboard" element={<Navigate to="/employees" replace />} />
+            <Route path="/hr" element={<Navigate to="/employees" replace />} />
+            <Route path="/hr/dashboard" element={<Navigate to="/employees" replace />} />
 
             {/* Workforce Management */}
             <Route path="/employees" element={<HREmployees />} />
@@ -193,6 +185,8 @@ function App() {
             <Route path="/hr/leave-approvals" element={<LeaveManagement />} />
             <Route path="/attendance" element={<Attendance />} />
             <Route path="/hr/attendance" element={<Attendance />} />
+            <Route path="/daily-report" element={<DailyReport />} />
+            <Route path="/hr/daily-report" element={<DailyReport />} />
             <Route path="/attendance-monitoring" element={<Attendance />} />
             <Route path="/hr/attendance-monitoring" element={<Attendance />} />
 

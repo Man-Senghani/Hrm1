@@ -109,11 +109,11 @@ const Screenshots = () => {
     };
   }, [role]);
 
-  // 📁 HIERARCHICAL GROUPING LOGIC
   const getRoles = () => {
-    if (role === 'admin') return ['admin', 'hr', 'manager', 'employee'];
-    if (role === 'hr') return ['manager', 'employee'];
-    return []; // Managers jump straight to names
+    const activeRole = (sessionStorage.getItem('role') || 'admin').toLowerCase();
+    if (activeRole === 'manager') return ['employee'];
+    if (activeRole === 'hr') return ['hr', 'manager', 'employee'];
+    return ['admin', 'hr', 'manager', 'employee'];
   };
 
   const getFilteredData = () => {
@@ -247,6 +247,40 @@ const Screenshots = () => {
     setSelectedImage(getImageUrl(item.imageUrl));
     setSelectedImageData(item);
   };
+
+  const currentModalIndex = filtered.findIndex(s => 
+    (selectedImageData?._id && s._id === selectedImageData._id) || 
+    (selectedImageData?.imageUrl && s.imageUrl === selectedImageData.imageUrl)
+  );
+  const prevModalItem = filtered.length > 0 
+    ? (currentModalIndex > 0 ? filtered[currentModalIndex - 1] : filtered[filtered.length - 1]) 
+    : null;
+  const nextModalItem = filtered.length > 0 
+    ? (currentModalIndex >= 0 && currentModalIndex < filtered.length - 1 ? filtered[currentModalIndex + 1] : filtered[0]) 
+    : null;
+
+  useEffect(() => {
+    if (!selectedImage) return;
+
+    const handleKeyDown = (e) => {
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        if (prevModalItem) {
+          openImageModal(prevModalItem);
+        }
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        if (nextModalItem) {
+          openImageModal(nextModalItem);
+        }
+      } else if (e.key === 'Escape') {
+        setSelectedImage(null);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedImage, prevModalItem, nextModalItem]);
 
   return (
     <div className="space-y-6 pb-20 font-['Inter',sans-serif]">
@@ -477,8 +511,8 @@ const Screenshots = () => {
         </div>
       ) : (
         <>
-          {/* LEVEL 0: ROLE FOLDERS (Admin/HR Only) */}
-          {navigationPath.length === 0 && role !== 'manager' && (
+          {/* LEVEL 0: ROLE FOLDERS */}
+          {navigationPath.length === 0 && (
             <div className="flex flex-wrap gap-4">
               {getRoles().map(r => (
                 <div 
@@ -501,7 +535,7 @@ const Screenshots = () => {
           )}
 
           {/* LEVEL 1: EMPLOYEE NAME FOLDERS */}
-          {((navigationPath.length === 1 && role !== 'manager') || (navigationPath.length === 0 && role === 'manager')) && (
+          {navigationPath.length === 1 && (
             <div className="space-y-4">
               {/* Employee search bar */}
               <div className="relative max-w-sm">
@@ -517,13 +551,13 @@ const Screenshots = () => {
 
               <div className="flex flex-wrap gap-4">
                 {[...new Set(screenshots
-                  .filter(s => role === 'manager' ? true : s.role === navigationPath[0])
+                  .filter(s => s.role === navigationPath[0])
                   .map(s => s.employeeName))]
                   .filter(name => name?.toLowerCase().includes(searchEmployeeName.toLowerCase()))
                   .map(name => (
                     <div 
                       key={name} 
-                      onClick={() => setNavigationPath(role === 'manager' ? ['employee', name] : [navigationPath[0], name])}
+                      onClick={() => setNavigationPath([navigationPath[0], name])}
                       className="w-full sm:w-60 bg-white dark:bg-[#111c18] border border-slate-200/80 dark:border-[#38352e] rounded-xl p-3.5 shadow-xs hover:shadow-md hover:border-[#00a76b] hover:-translate-y-0.5 transition-all cursor-pointer flex items-center gap-3 group"
                     >
                       <div className="w-9 h-9 rounded-lg bg-slate-900 dark:bg-emerald-950/60 text-white dark:text-[#00a76b] flex items-center justify-center font-bold text-xs shadow-xs shrink-0 group-hover:scale-105 transition-transform">
@@ -573,13 +607,11 @@ const Screenshots = () => {
                         {group.map((s) => (
                           <div 
                             key={s._id} 
-                            className="bg-white dark:bg-[#111c18] border border-slate-200/80 dark:border-[#38352e] rounded-xl p-3 shadow-xs hover:shadow-md hover:border-[#00a76b]/50 transition-all flex flex-col gap-3 group"
+                            className="bg-white dark:bg-[#111c18] border border-slate-200/80 dark:border-[#38352e] rounded-xl p-1.5 shadow-xs hover:shadow-md hover:border-[#00a76b]/50 transition-all flex flex-col gap-1.5 group cursor-pointer"
+                            onClick={() => openImageModal(s)}
                           >
                             {/* Image Container with Crisp Border Radius */}
-                            <div 
-                              className="relative aspect-video rounded-lg bg-slate-950 overflow-hidden border border-slate-200/80 dark:border-slate-800/80 cursor-pointer"
-                              onClick={() => openImageModal(s)}
-                            >
+                            <div className="relative aspect-video rounded-lg bg-slate-950 overflow-hidden border border-slate-200/80 dark:border-slate-800/80">
                               <img 
                                 src={getImageUrl(s.imageUrl)} 
                                 alt={`Capture ${s.employeeName}`} 
@@ -593,29 +625,12 @@ const Screenshots = () => {
                             </div>
 
                             {/* Card Footer Details */}
-                            <div className="flex justify-between items-center pt-1 px-1">
-                              <div>
-                                <p className="text-xs font-bold text-slate-900 dark:text-white truncate max-w-[140px]">{s.employeeName}</p>
-                                <p className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
+                            <div className="px-1 pb-0.5">
+                              <div className="flex items-center justify-between gap-2">
+                                <p className="text-xs font-bold text-slate-900 dark:text-white truncate">{s.employeeName}</p>
+                                <p className="text-[10.5px] font-medium text-slate-500 dark:text-slate-400 shrink-0">
                                   {new Date(s.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                 </p>
-                              </div>
-                              
-                              <div className="flex items-center gap-1.5">
-                                <button 
-                                  onClick={() => openImageModal(s)}
-                                  className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-[#00a76b] hover:text-white transition-all cursor-pointer"
-                                  title="View Photo"
-                                >
-                                  <Eye size={14} />
-                                </button>
-                                <button 
-                                  onClick={(e) => handleSingleDownload(e, getImageUrl(s.imageUrl), `Screenshot-${s.employeeName}-${new Date(s.timestamp).toLocaleDateString()}.png`)}
-                                  className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-[#00a76b] hover:text-white transition-all cursor-pointer"
-                                  title="Download Photo"
-                                >
-                                  <Download size={14} />
-                                </button>
                               </div>
                             </div>
                           </div>
@@ -696,14 +711,45 @@ const Screenshots = () => {
 
       {/* ── 5. FULLSCREEN PHOTO PREVIEW PORTAL MODAL ── */}
       {selectedImage && createPortal(
-        <div className="fixed inset-0 z-[999999] bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4 md:p-8 animate-fade-in">
+        <div className="fixed inset-0 z-[999999] bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4 md:p-14 animate-fade-in select-none">
           {/* Glass Overlay Click to Close */}
           <div 
             className="absolute inset-0 cursor-pointer"
             onClick={() => setSelectedImage(null)}
           ></div>
           
-          {/* Modal Container with Reduced Border Radius */}
+          {/* Outer Close Button (Top Right of Screen) */}
+          <button 
+            onClick={() => setSelectedImage(null)}
+            className="fixed top-4 right-4 sm:top-6 sm:right-8 z-[1000000] w-10 h-10 rounded-full bg-slate-800/80 hover:bg-red-500 text-white flex items-center justify-center shadow-xl border border-white/20 backdrop-blur-md transition-all cursor-pointer hover:scale-110"
+            title="Close Preview (Esc)"
+          >
+            <X size={20} />
+          </button>
+
+          {/* Outer Previous Image Button (Far Left of Screen) */}
+          <button
+            type="button"
+            onClick={() => prevModalItem && openImageModal(prevModalItem)}
+            disabled={!prevModalItem}
+            className="fixed left-3 sm:left-6 top-1/2 -translate-y-1/2 z-[1000000] w-12 h-12 rounded-full bg-slate-800/80 hover:bg-[#00a76b] text-white flex items-center justify-center shadow-2xl border border-white/20 backdrop-blur-md transition-all cursor-pointer disabled:opacity-20 disabled:cursor-not-allowed hover:scale-110"
+            title="Previous Screenshot (Left Arrow Key)"
+          >
+            <ChevronLeft size={26} />
+          </button>
+
+          {/* Outer Next Image Button (Far Right of Screen) */}
+          <button
+            type="button"
+            onClick={() => nextModalItem && openImageModal(nextModalItem)}
+            disabled={!nextModalItem}
+            className="fixed right-3 sm:right-6 top-1/2 -translate-y-1/2 z-[1000000] w-12 h-12 rounded-full bg-slate-800/80 hover:bg-[#00a76b] text-white flex items-center justify-center shadow-2xl border border-white/20 backdrop-blur-md transition-all cursor-pointer disabled:opacity-20 disabled:cursor-not-allowed hover:scale-110"
+            title="Next Screenshot (Right Arrow Key)"
+          >
+            <ChevronRight size={26} />
+          </button>
+
+          {/* Modal Container */}
           <div className="relative max-w-5xl w-full bg-white dark:bg-[#0c1815] border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-2xl flex flex-col gap-4 z-10">
             {/* Modal Header */}
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
@@ -717,26 +763,19 @@ const Screenshots = () => {
                   </h3>
                   {selectedImageData?.timestamp && (
                     <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
-                      Captured on {new Date(selectedImageData.timestamp).toLocaleString('en-GB')}
+                      Captured on {new Date(selectedImageData.timestamp).toLocaleString('en-GB')} {filtered.length > 1 && currentModalIndex >= 0 ? `(${currentModalIndex + 1} of ${filtered.length})` : ''}
                     </p>
                   )}
                 </div>
               </div>
-
-              <button 
-                onClick={() => setSelectedImage(null)}
-                className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-white rounded-lg transition-colors cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800"
-              >
-                <X size={18} />
-              </button>
             </div>
             
-            {/* Image Preview Box with Reduced Border Radius */}
+            {/* Image Preview Box */}
             <div className="relative max-h-[70vh] w-full flex items-center justify-center overflow-hidden rounded-md border border-slate-200 dark:border-slate-800 bg-slate-950 p-1">
               <img 
                 src={selectedImage} 
                 alt="Full Preview" 
-                className="max-h-[68vh] max-w-full rounded-sm object-contain border border-slate-800/80 shadow-md"
+                className="max-h-[68vh] max-w-full rounded-sm object-contain border border-slate-800/80 shadow-md transition-all"
               />
             </div>
 
