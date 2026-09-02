@@ -24,12 +24,12 @@ const Login = () => {
     }
 
     const roleSubpaths = {
-      admin: '/admin',
-      hr: '/hr',
-      employee: '/employee',
-      manager: '/manager'
+      admin: '/admin/',
+      hr: '/hr/',
+      employee: '/employee/',
+      manager: '/manager/'
     };
-    const targetPath = roleSubpaths[userRole] || `/${userRole}`;
+    const targetPath = roleSubpaths[userRole] || `/${userRole}/`;
     window.location.href = targetPath;
   };
 

@@ -104,12 +104,12 @@ const ProtectedRoute = ({ children, allowedRole }) => {
 
   if (allowedRole && role !== allowedRole) {
     const roleSubpaths = {
-      admin: '/admin',
-      hr: '/hr',
-      employee: '/employee',
-      manager: '/manager'
+      admin: '/admin/',
+      hr: '/hr/',
+      employee: '/employee/',
+      manager: '/manager/'
     };
-    window.location.href = roleSubpaths[role] || `/${role}`;
+    window.location.href = roleSubpaths[role] || `/${role}/`;
     return null;
   }
 

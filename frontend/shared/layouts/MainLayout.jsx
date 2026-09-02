@@ -528,7 +528,7 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
       }
     }
     setIsProfileDropdownOpen(false);
-    window.location.href = `/${targetRole}`;
+    window.location.href = `/${targetRole}/`;
     window.location.reload();
   };
 
