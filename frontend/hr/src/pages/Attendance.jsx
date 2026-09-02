@@ -361,15 +361,47 @@ const MONTHLY_TREND = [
 
 const STATUS_COLORS = {
   Present: { bg: 'bg-emerald-50 dark:bg-emerald-950/30', text: 'text-emerald-600 dark:text-emerald-400', border: 'border-emerald-200 dark:border-emerald-800', dot: '#10b981' },
-  Late: { bg: 'bg-amber-50 dark:bg-amber-950/30', text: 'text-amber-600 dark:text-amber-400', border: 'border-amber-200 dark:border-amber-800', dot: '#f59e0b' },
   Absent: { bg: 'bg-red-50 dark:bg-red-950/30', text: 'text-red-600 dark:text-red-400', border: 'border-red-200 dark:border-red-800', dot: '#ef4444' },
   'Half Day': { bg: 'bg-blue-50 dark:bg-blue-950/30', text: 'text-blue-600 dark:text-blue-400', border: 'border-blue-200 dark:border-blue-800', dot: '#3b82f6' },
   Leave: { bg: 'bg-purple-50 dark:bg-purple-950/30', text: 'text-purple-600 dark:text-purple-400', border: 'border-purple-200 dark:border-purple-800', dot: '#8b5cf6' },
 };
 
-const PIE_COLORS = ['#10b981', '#f59e0b', '#ef4444', '#3b82f6', '#8b5cf6'];
+const PIE_COLORS = ['#10b981', '#3b82f6', '#8b5cf6', '#ef4444'];
 
 // ────────────────────────────── HELPERS ──────────────────────────────
+const parseTimeToMins = (tStr) => {
+  if (!tStr || tStr === '--') return null;
+  const str = String(tStr).trim();
+  if (str === '--') return null;
+  if (str.includes('T') || str.includes('Z') || (str.includes('-') && str.length > 10)) {
+    const d = new Date(str);
+    if (!isNaN(d.getTime())) {
+      const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'Asia/Kolkata',
+        hour: 'numeric',
+        minute: 'numeric',
+        hour12: false
+      }).formatToParts(d);
+      let hrs = parseInt(parts.find(p => p.type === 'hour')?.value || '0', 10);
+      const mins = parseInt(parts.find(p => p.type === 'minute')?.value || '0', 10);
+      if (hrs === 24) hrs = 0;
+      return hrs * 60 + mins;
+    }
+  }
+  const match = str.match(/(\d+)[:.](\d+)(?:[:.]\d+)?\s*(AM|PM)?/i);
+  if (match) {
+    let hrs = parseInt(match[1], 10);
+    const mins = parseInt(match[2], 10);
+    const ampm = match[3];
+    if (ampm) {
+      if (ampm.toUpperCase() === 'PM' && hrs < 12) hrs += 12;
+      if (ampm.toUpperCase() === 'AM' && hrs === 12) hrs = 0;
+    }
+    return hrs * 60 + mins;
+  }
+  return null;
+};
+
 const getWorkingHours = (clockIn, clockOut, totalHours, record, activeLiveSecs) => {
   // 0. Priority 0: Live active seconds for today's active ongoing session
   if (activeLiveSecs && typeof activeLiveSecs === 'number' && activeLiveSecs > 0) {
@@ -391,7 +423,21 @@ const getWorkingHours = (clockIn, clockOut, totalHours, record, activeLiveSecs) 
     return `${h}h ${m}m`;
   }
 
-  // 2. Priority 2: Backend decimal totalHours (handles both number and numeric strings e.g. "4.57")
+  // 2. Priority 2: Parse Check-In and Check-Out times/timestamps (bypassing '--' strings)
+  const cInRaw = (clockIn && clockIn !== '--') ? clockIn : ((record?.clockIn && record.clockIn !== '--') ? record.clockIn : record?.checkInTime);
+  const cOutRaw = (clockOut && clockOut !== '--') ? clockOut : ((record?.clockOut && record.clockOut !== '--') ? record.clockOut : record?.checkOutTime);
+
+  const inMins = parseTimeToMins(cInRaw);
+  const outMins = parseTimeToMins(cOutRaw);
+
+  if (inMins !== null && outMins !== null && outMins >= inMins) {
+    const diff = outMins - inMins;
+    const h = Math.floor(diff / 60);
+    const m = diff % 60;
+    return `${h}h ${m}m`;
+  }
+
+  // 3. Priority 3: Backend decimal totalHours (handles both number and numeric strings e.g. "4.57")
   const hoursVal = totalHours ?? record?.totalHours;
   if (hoursVal !== undefined && hoursVal !== null && hoursVal !== '--') {
     const numericHours = typeof hoursVal === 'number' ? hoursVal : parseFloat(String(hoursVal));
@@ -403,49 +449,8 @@ const getWorkingHours = (clockIn, clockOut, totalHours, record, activeLiveSecs) 
     }
   }
 
-  // 3. Priority 3: Direct timestamp calculation if checkInTime & checkOutTime exist
-  if (record && record.checkInTime && record.checkOutTime) {
-    const start = new Date(record.checkInTime).getTime();
-    const end = new Date(record.checkOutTime).getTime();
-    if (!isNaN(start) && !isNaN(end) && end >= start) {
-      const diffSecs = Math.floor((end - start) / 1000);
-      const h = Math.floor(diffSecs / 3600);
-      const m = Math.floor((diffSecs % 3600) / 60);
-      return `${h}h ${m}m`;
-    }
-  }
-
-  // 4. Fallback: Parse time strings (e.g., "10:30", "15:04")
-  if (clockIn && clockOut && clockIn !== '--' && clockOut !== '--') {
-    const parseTimeToMins = (tStr) => {
-      const str = String(tStr).trim();
-      if (str.includes('T')) {
-        const d = new Date(str);
-        if (!isNaN(d.getTime())) return d.getHours() * 60 + d.getMinutes();
-      }
-      const match = str.match(/(\d+):(\d+)\s*(AM|PM)?/i);
-      if (match) {
-        let hrs = parseInt(match[1], 10);
-        const mins = parseInt(match[2], 10);
-        const ampm = match[3];
-        if (ampm) {
-          if (ampm.toUpperCase() === 'PM' && hrs < 12) hrs += 12;
-          if (ampm.toUpperCase() === 'AM' && hrs === 12) hrs = 0;
-        }
-        return hrs * 60 + mins;
-      }
-      return null;
-    };
-
-    const inMins = parseTimeToMins(clockIn);
-    const outMins = parseTimeToMins(clockOut);
-
-    if (inMins !== null && outMins !== null && outMins >= inMins) {
-      const diff = outMins - inMins;
-      const h = Math.floor(diff / 60);
-      const m = diff % 60;
-      return `${h}h ${m}m`;
-    }
+  if (cInRaw) {
+    return '0h 0m';
   }
 
   return '--';
@@ -471,7 +476,7 @@ const getInactiveTime = (record, liveIdleSecs) => {
 };
 
 const getTotalHoursCombined = (clockIn, clockOut, totalHours, record, activeLiveSecs, liveIdleSecs) => {
-  if (!record || record.status === 'Absent' || record.status === 'Leave' || (!clockIn && !record.checkInTime && !record.clock_in)) {
+  if (!record || record.status === 'Absent' || record.status === 'Leave') {
     return '--';
   }
 
@@ -487,6 +492,18 @@ const getTotalHoursCombined = (clockIn, clockOut, totalHours, record, activeLive
   if (!activeSecs) {
     activeSecs = record?.totalActiveTime ?? record?.activeTime ?? record?.trackedTime ?? 0;
   }
+
+  const cInRaw = (clockIn && clockIn !== '--') ? clockIn : ((record?.clockIn && record.clockIn !== '--') ? record.clockIn : record?.checkInTime);
+  const cOutRaw = (clockOut && clockOut !== '--') ? clockOut : ((record?.clockOut && record.clockOut !== '--') ? record.clockOut : record?.checkOutTime);
+
+  if (!activeSecs) {
+    const inMins = parseTimeToMins(cInRaw);
+    const outMins = parseTimeToMins(cOutRaw);
+    if (inMins !== null && outMins !== null && outMins >= inMins) {
+      activeSecs = (outMins - inMins) * 60;
+    }
+  }
+
   if (!activeSecs && (totalHours || record?.totalHours)) {
     const hoursVal = totalHours ?? record?.totalHours;
     if (hoursVal !== '--') {
@@ -494,13 +511,6 @@ const getTotalHoursCombined = (clockIn, clockOut, totalHours, record, activeLive
       if (!isNaN(numericHours) && numericHours > 0) {
         activeSecs = Math.round(numericHours * 3600);
       }
-    }
-  }
-  if (!activeSecs && record.checkInTime && record.checkOutTime) {
-    const start = new Date(record.checkInTime).getTime();
-    const end = new Date(record.checkOutTime).getTime();
-    if (!isNaN(start) && !isNaN(end) && end >= start) {
-      activeSecs = Math.floor((end - start) / 1000);
     }
   }
 
@@ -519,7 +529,7 @@ const getTotalHoursCombined = (clockIn, clockOut, totalHours, record, activeLive
     return `${h}h ${m}m`;
   }
 
-  if (clockIn || record.checkInTime) {
+  if (cInRaw) {
     return getWorkingHours(clockIn, clockOut, totalHours, record, activeLiveSecs);
   }
 
@@ -605,7 +615,7 @@ const Attendance = () => {
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
-  const pageSize = 7;
+  const pageSize = viewMode === 'weekly' ? 7 : 10;
 
   // Calendar
   const [calendarMonth, setCalendarMonth] = useState(new Date());
@@ -1205,8 +1215,40 @@ const Attendance = () => {
     const today = new Date();
 
     if (viewMode === 'daily') {
-      const tStr = getLocalYYYYMMDD(today);
-      filtered = filtered.filter(r => r.date === tStr);
+      const tenDaysAgo = new Date(today);
+      tenDaysAgo.setDate(today.getDate() - 9);
+      const startStr = getLocalYYYYMMDD(tenDaysAgo);
+      const endStr = getLocalYYYYMMDD(today);
+      filtered = filtered.filter(r => (r.date || '') >= startStr && (r.date || '') <= endStr);
+
+      if (viewContext === 'employee') {
+        const last10Dates = [];
+        for (let i = 0; i < 10; i++) {
+          const d = new Date(today);
+          d.setDate(today.getDate() - i);
+          last10Dates.push(getLocalYYYYMMDD(d));
+        }
+        const existingMap = new Map(filtered.map(r => [r.date, r]));
+        const currentUser = JSON.parse(sessionStorage.getItem('user') || '{}');
+        filtered = last10Dates.map(dStr => {
+          if (existingMap.has(dStr)) return existingMap.get(dStr);
+          return {
+            _id: `daily_pad_${dStr}`,
+            user: {
+              _id: currentUser._id || currentUser.id,
+              name: currentUser.name || userRole.toUpperCase(),
+              role: userRole
+            },
+            date: dStr,
+            status: 'Absent',
+            clockIn: '--:--',
+            clockOut: '--:--',
+            workingHours: '--',
+            inactiveTime: '--',
+            totalHours: '--'
+          };
+        });
+      }
     } else if (viewMode === 'weekly') {
       const day = today.getDay() || 7;
       const startOfWeek = new Date(today);
@@ -1217,6 +1259,35 @@ const Attendance = () => {
       const startStr = getLocalYYYYMMDD(startOfWeek);
       const endStr = getLocalYYYYMMDD(endOfWeek);
       filtered = filtered.filter(r => r.date >= startStr && r.date <= endStr);
+
+      if (viewContext === 'employee') {
+        const weekDates = [];
+        for (let i = 0; i < 7; i++) {
+          const d = new Date(startOfWeek);
+          d.setDate(startOfWeek.getDate() + i);
+          weekDates.push(getLocalYYYYMMDD(d));
+        }
+        const existingMap = new Map(filtered.map(r => [r.date, r]));
+        const currentUser = JSON.parse(sessionStorage.getItem('user') || '{}');
+        filtered = weekDates.map(dStr => {
+          if (existingMap.has(dStr)) return existingMap.get(dStr);
+          return {
+            _id: `weekly_pad_${dStr}`,
+            user: {
+              _id: currentUser._id || currentUser.id,
+              name: currentUser.name || userRole.toUpperCase(),
+              role: userRole
+            },
+            date: dStr,
+            status: 'Absent',
+            clockIn: '--:--',
+            clockOut: '--:--',
+            workingHours: '--',
+            inactiveTime: '--',
+            totalHours: '--'
+          };
+        });
+      }
     } else if (viewMode === 'monthly') {
       const monthPrefix = getLocalYYYYMMDD(today).slice(0, 7); // YYYY-MM
       filtered = filtered.filter(r => (r.date || '').startsWith(monthPrefix));
@@ -1285,7 +1356,6 @@ const Attendance = () => {
         return dStr === dateStr;
       });
       const presentCount = dayRecords.filter(r => r.status === 'Present').length;
-      const lateCount = dayRecords.filter(r => r.status === 'Late').length;
       const halfDayCount = dayRecords.filter(r => r.status === 'Half Day').length;
       const absentCount = isWeekend ? 0 : dayRecords.filter(r => r.status === 'Absent').length;
       const leaveCount = isWeekend ? 0 : dayRecords.filter(r => r.status === 'Leave').length;
@@ -1294,7 +1364,6 @@ const Attendance = () => {
         dateStr,
         isWeekend,
         present: presentCount,
-        late: lateCount,
         halfDay: halfDayCount,
         absent: absentCount,
         leave: leaveCount,
@@ -1305,16 +1374,15 @@ const Attendance = () => {
   }, [calendarMonth, records]);
 
   const calendarMonthTotals = useMemo(() => {
-    let present = 0, late = 0, halfDay = 0, leave = 0, absent = 0;
+    let present = 0, halfDay = 0, leave = 0, absent = 0;
     calendarData.forEach(day => {
       if (!day) return;
       if (day.present > 0) present += day.present;
-      if (day.late > 0) late += day.late;
       if (day.halfDay > 0) halfDay += day.halfDay;
       if (day.leave > 0) leave += day.leave;
       if (day.absent > 0) absent += day.absent;
     });
-    return { present, late, halfDay, leave, absent };
+    return { present, halfDay, leave, absent };
   }, [calendarData]);
 
   // ── Pie Data ──
@@ -1323,18 +1391,16 @@ const Attendance = () => {
     if (viewContext === 'employee' && activeStats) {
       return [
         { name: 'Present', value: activeStats.present || 0, fill: '#10b981' },
-        { name: 'Late', value: activeStats.late || 0, fill: '#f59e0b' },
-        { name: 'Absent', value: activeStats.absent || 0, fill: '#ef4444' },
         { name: 'Half Day', value: activeStats.halfDay || 0, fill: '#3b82f6' },
         { name: 'Leave', value: activeStats.leave || 0, fill: '#8b5cf6' },
+        { name: 'Absent', value: activeStats.absent || 0, fill: '#ef4444' },
       ].filter(d => d.value > 0);
     }
     return [
       { name: 'Present', value: summaryStats.present, fill: '#10b981' },
-      { name: 'Late', value: summaryStats.late, fill: '#f59e0b' },
-      { name: 'Absent', value: summaryStats.absent, fill: '#ef4444' },
       { name: 'Half Day', value: summaryStats.halfDay, fill: '#3b82f6' },
       { name: 'Leave', value: summaryStats.leave, fill: '#8b5cf6' },
+      { name: 'Absent', value: summaryStats.absent, fill: '#ef4444' },
     ].filter(d => d.value > 0);
   }, [summaryStats, periodStats, yearlyStats, viewContext]);
 
@@ -1513,28 +1579,25 @@ const Attendance = () => {
       )}
 
       {/* ── SUMMARY CARDS ── */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
+      <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
         {(() => {
           const empPresent = activeStats?.present || 0;
-          const empLate = activeStats?.late || 0;
           const empHalfDay = activeStats?.halfDay || 0;
           const empAbsent = activeStats?.absent || 0;
           const empLeave = activeStats?.leave || 0;
-          const empTotal = empPresent + empLate + empHalfDay + empAbsent + empLeave;
-          const empRate = empTotal > 0 ? Math.round(((empPresent + empLate + empHalfDay) / empTotal) * 100) : 0;
+          const empTotal = empPresent + empHalfDay + empAbsent + empLeave;
+          const empRate = empTotal > 0 ? Math.round(((empPresent + empHalfDay) / empTotal) * 100) : 0;
 
           const cards = viewContext === 'employee' ? [
             { label: 'Present', value: empPresent, icon: CheckCircle, color: 'text-emerald-600 dark:text-emerald-400', bgIcon: 'bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-100 dark:border-emerald-900/40', trend: `${empRate}%`, borderColor: '#10b981', glowColor: 'rgba(16, 185, 129, 0.45)' },
-            { label: 'Late', value: empLate, icon: Clock, color: 'text-amber-600 dark:text-amber-400', bgIcon: 'bg-amber-50 dark:bg-amber-950/50 border border-amber-100 dark:border-amber-900/40', borderColor: '#f59e0b', glowColor: 'rgba(245, 158, 11, 0.45)' },
-            { label: 'Absent', value: empAbsent, icon: XCircle, color: 'text-red-600 dark:text-red-400', bgIcon: 'bg-rose-50 dark:bg-rose-950/50 border border-rose-100 dark:border-rose-900/40', borderColor: '#ef4444', glowColor: 'rgba(239, 68, 68, 0.45)' },
             { label: 'Half Day', value: empHalfDay, icon: Sun, color: 'text-blue-600 dark:text-blue-400', bgIcon: 'bg-blue-50 dark:bg-blue-950/50 border border-blue-100 dark:border-blue-900/40', borderColor: '#3b82f6', glowColor: 'rgba(59, 130, 246, 0.45)' },
             { label: 'On Leave', value: empLeave, icon: Calendar, color: 'text-purple-600 dark:text-purple-400', bgIcon: 'bg-purple-50 dark:bg-purple-950/50 border border-purple-100 dark:border-purple-900/40', borderColor: '#8b5cf6', glowColor: 'rgba(139, 92, 246, 0.45)' },
+            { label: 'Absent', value: empAbsent, icon: XCircle, color: 'text-red-600 dark:text-red-400', bgIcon: 'bg-rose-50 dark:bg-rose-950/50 border border-rose-100 dark:border-rose-900/40', borderColor: '#ef4444', glowColor: 'rgba(239, 68, 68, 0.45)' },
           ] : [
             { label: 'Present', value: teamStats?.present || 0, icon: CheckCircle, color: 'text-emerald-600 dark:text-emerald-400', bgIcon: 'bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-100 dark:border-emerald-900/40', trend: teamStats?.pct ? `${teamStats.pct}%` : '0%', borderColor: '#10b981', glowColor: 'rgba(16, 185, 129, 0.45)' },
-            { label: 'Late', value: teamStats?.late || 0, icon: Clock, color: 'text-amber-600 dark:text-amber-400', bgIcon: 'bg-amber-50 dark:bg-amber-950/50 border border-amber-100 dark:border-amber-900/40', borderColor: '#f59e0b', glowColor: 'rgba(245, 158, 11, 0.45)' },
-            { label: 'Absent', value: teamStats?.absent || 0, icon: XCircle, color: 'text-red-600 dark:text-red-400', bgIcon: 'bg-rose-50 dark:bg-rose-950/50 border border-rose-100 dark:border-rose-900/40', borderColor: '#ef4444', glowColor: 'rgba(239, 68, 68, 0.45)' },
             { label: 'Half Day', value: teamStats?.halfDay || 0, icon: Sun, color: 'text-blue-600 dark:text-blue-400', bgIcon: 'bg-blue-50 dark:bg-blue-950/50 border border-blue-100 dark:border-blue-900/40', borderColor: '#3b82f6', glowColor: 'rgba(59, 130, 246, 0.45)' },
             { label: 'On Leave', value: teamStats?.leave || 0, icon: Calendar, color: 'text-purple-600 dark:text-purple-400', bgIcon: 'bg-purple-50 dark:bg-purple-950/50 border border-purple-100 dark:border-purple-900/40', borderColor: '#8b5cf6', glowColor: 'rgba(139, 92, 246, 0.45)' },
+            { label: 'Absent', value: teamStats?.absent || 0, icon: XCircle, color: 'text-red-600 dark:text-red-400', bgIcon: 'bg-rose-50 dark:bg-rose-950/50 border border-rose-100 dark:border-rose-900/40', borderColor: '#ef4444', glowColor: 'rgba(239, 68, 68, 0.45)' },
           ];
 
           return cards.map((card, i) => {
@@ -1937,12 +2000,6 @@ const Attendance = () => {
                           </span>
                           <span className="font-extrabold">{day.present}</span>
                         </div>
-                        <div className="flex items-center justify-between text-amber-600 dark:text-amber-400">
-                          <span className="flex items-center gap-1">
-                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500" /> Late
-                          </span>
-                          <span className="font-extrabold">{day.late}</span>
-                        </div>
                         <div className="flex items-center justify-between text-blue-600 dark:text-blue-400">
                           <span className="flex items-center gap-1">
                             <span className="w-1.5 h-1.5 rounded-full bg-blue-500" /> Half Day
@@ -1981,20 +2038,6 @@ const Attendance = () => {
                 <span>Present</span>
                 <span className="text-[9px] font-black text-emerald-600 dark:text-emerald-400 ml-0.5">
                   {calendarMonthTotals.present}
-                </span>
-              </div>
-
-              <div
-                onMouseEnter={() => setHoveredLegendStatus('late')}
-                onMouseLeave={() => setHoveredLegendStatus(null)}
-                className={`flex items-center gap-1 cursor-pointer transition-all px-1 py-0.5 rounded-md ${
-                  hoveredLegendStatus === 'late' ? 'bg-amber-50 dark:bg-amber-950/50 font-bold scale-105' : 'hover:opacity-80'
-                }`}
-              >
-                <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
-                <span>Late</span>
-                <span className="text-[9px] font-black text-amber-600 dark:text-amber-400 ml-0.5">
-                  {calendarMonthTotals.late}
                 </span>
               </div>
 
@@ -2164,7 +2207,7 @@ const Attendance = () => {
         )}
 
         {/* Table */}
-        <div className="h-[310px] min-h-[310px] max-h-[310px] overflow-x-auto overflow-y-hidden rounded-xl border border-[#e2eae7] dark:border-[#133029]">
+        <div className="min-h-[405px] overflow-x-auto rounded-xl border border-[#e2eae7] dark:border-[#133029]">
           <table className="w-full text-xs">
             <thead className="sticky top-0 z-10">
               <tr className="bg-slate-100 dark:bg-[#0d2a22] border-b border-[#e2eae7] dark:border-[#133029]">
@@ -2212,8 +2255,8 @@ const Attendance = () => {
                 return (
                   <tr
                     key={record._id || i}
-                    onClick={() => setSelectedSessionRecord(record)}
-                    className="hover:bg-emerald-50/60 dark:hover:bg-[#112d26] transition-colors cursor-pointer group"
+                    onClick={viewContext !== 'employee' ? () => setSelectedSessionRecord(record) : undefined}
+                    className={viewContext !== 'employee' ? "hover:bg-emerald-50/60 dark:hover:bg-[#112d26] transition-colors cursor-pointer group" : "transition-colors group"}
                   >
                     <td className="px-3 py-1.5 border-r border-[#e2eae7] dark:border-[#133029] w-[180px] max-w-[180px]">
                       <div className="flex items-center gap-2 overflow-hidden">
@@ -2254,8 +2297,8 @@ const Attendance = () => {
                     <td className="px-3 py-1.5 border-r border-[#e2eae7] dark:border-[#133029]">
                       <span className="text-[11.5px] font-bold text-slate-800 dark:text-white">
                         {(() => {
-                          const cIn = record.clockIn || record.clock_in || (record.checkInTime ? new Date(record.checkInTime).toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false }) : null);
-                          const cOut = record.clockOut || record.clock_out || (record.checkOutTime ? new Date(record.checkOutTime).toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false }) : null);
+                          const cIn = (record.clockIn && record.clockIn !== '--') ? record.clockIn : ((record.clock_in && record.clock_in !== '--') ? record.clock_in : record.checkInTime);
+                          const cOut = (record.clockOut && record.clockOut !== '--') ? record.clockOut : ((record.clock_out && record.clock_out !== '--') ? record.clock_out : record.checkOutTime);
                           return getWorkingHours(cIn, cOut, record.totalHours, record, liveActiveSeconds);
                         })()}
                       </span>
@@ -2268,8 +2311,8 @@ const Attendance = () => {
                     <td className="px-3 py-1.5 border-r border-[#e2eae7] dark:border-[#133029]">
                       <span className="text-[11.5px] font-black text-emerald-700 dark:text-emerald-300">
                         {(() => {
-                          const cIn = record.clockIn || record.clock_in || (record.checkInTime ? new Date(record.checkInTime).toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false }) : null);
-                          const cOut = record.clockOut || record.clock_out || (record.checkOutTime ? new Date(record.checkOutTime).toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false }) : null);
+                          const cIn = (record.clockIn && record.clockIn !== '--') ? record.clockIn : ((record.clock_in && record.clock_in !== '--') ? record.clock_in : record.checkInTime);
+                          const cOut = (record.clockOut && record.clockOut !== '--') ? record.clockOut : ((record.clock_out && record.clock_out !== '--') ? record.clock_out : record.checkOutTime);
                           return getTotalHoursCombined(cIn, cOut, record.totalHours, record, liveActiveSeconds, liveIdleSeconds);
                         })()}
                       </span>

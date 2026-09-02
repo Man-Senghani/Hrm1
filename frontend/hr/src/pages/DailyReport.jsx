@@ -126,6 +126,13 @@ const MOCK_DAILY_REPORTS = [
   }
 ];
 
+const formatShortWork = (text) => {
+  if (!text) return 'N/A';
+  const words = text.trim().split(/\s+/);
+  if (words.length <= 2) return text;
+  return words.slice(0, 2).join(' ') + '...';
+};
+
 const DailyReportHR = () => {
   const [currentUser, setCurrentUser] = useState(getUser);
 
@@ -484,7 +491,7 @@ const DailyReportHR = () => {
       case 'In Progress':
         return 'bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400 border-blue-200 dark:border-blue-900/50';
       case 'Pending':
-        return 'bg-amber-50 text-amber-700 dark:bg-amber-400 dark:text-amber-300 border-amber-200 dark:border-amber-900/50';
+        return 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 border-amber-200 dark:border-amber-900/50';
       case 'On Hold':
         return 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400 border-rose-200 dark:border-rose-900/50';
       default:
@@ -718,7 +725,11 @@ const DailyReportHR = () => {
                       <tr
                         key={rep._id}
                         onClick={() => setSelectedReport(rep)}
-                        className="hover:bg-slate-50/80 dark:hover:bg-[#111c18]/80 transition-colors cursor-pointer group"
+                        className={`transition-colors cursor-pointer group select-none ${
+                          selectedReport?._id === rep._id 
+                            ? 'bg-emerald-50/90 dark:bg-[#1a382e] border-l-4 border-l-[#00a76b]' 
+                            : 'hover:bg-slate-50 dark:hover:bg-[#142821]'
+                        }`}
                       >
                         <td className="py-4 px-4 font-bold text-slate-900 dark:text-white whitespace-nowrap">
                           {rep.reportDate}
@@ -728,8 +739,8 @@ const DailyReportHR = () => {
                             {rep.projectName}
                           </span>
                         </td>
-                        <td className="py-4 px-4 max-w-xs sm:max-w-md truncate">
-                          {rep.workDescription}
+                        <td className="py-4 px-4 max-w-xs sm:max-w-md truncate" title="Click to view full description">
+                          {formatShortWork(rep.workDescription)}
                         </td>
                         <td className="py-4 px-4 text-center whitespace-nowrap">
                           <span className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-[#111c18] font-black text-slate-900 dark:text-white border border-slate-200 dark:border-[#1a2d29]">
@@ -923,17 +934,16 @@ const DailyReportHR = () => {
                         <tr
                           key={rep._id}
                           onClick={() => setSelectedReport(rep)}
-                          className="hover:bg-slate-50/80 dark:hover:bg-[#111c18]/80 transition-colors cursor-pointer group"
+                          className={`transition-colors cursor-pointer group select-none ${
+                            selectedReport?._id === rep._id 
+                              ? 'bg-emerald-50/90 dark:bg-[#1a382e] border-l-4 border-l-[#00a76b]' 
+                              : 'hover:bg-slate-50 dark:hover:bg-[#142821]'
+                          }`}
                         >
                           <td className="py-4 px-4 whitespace-nowrap">
-                            <div className="flex items-center gap-3">
-                              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white font-black text-xs flex items-center justify-center shrink-0 shadow-xs">
-                                {empName.charAt(0).toUpperCase()}
-                              </div>
-                              <div>
-                                <p className="font-bold text-slate-900 dark:text-white">{empName}</p>
-                                <p className="text-[11px] text-slate-400 dark:text-slate-500">{empEmail}</p>
-                              </div>
+                            <div>
+                              <p className="font-bold text-slate-900 dark:text-white">{empName}</p>
+                              <p className="text-[11px] text-slate-400 dark:text-slate-500">{empEmail}</p>
                             </div>
                           </td>
                           <td className="py-4 px-4 whitespace-nowrap">
@@ -949,8 +959,8 @@ const DailyReportHR = () => {
                               {rep.projectName}
                             </span>
                           </td>
-                          <td className="py-4 px-4 max-w-xs sm:max-w-sm truncate" title={rep.workDescription}>
-                            {rep.workDescription}
+                          <td className="py-4 px-4 max-w-xs sm:max-w-sm truncate" title="Click to view full report popup">
+                            {formatShortWork(rep.workDescription)}
                           </td>
                           <td className="py-4 px-4 text-center whitespace-nowrap">
                             <span className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-[#111c18] font-black text-slate-900 dark:text-white border border-slate-200 dark:border-[#1a2d29]">

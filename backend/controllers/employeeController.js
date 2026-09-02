@@ -268,17 +268,35 @@ exports.updateEmployeeStatus = async (req, res) => {
       return res.status(400).json({ message: 'Invalid status' });
     }
 
-    const employee = await Employee.findById(req.params.id);
-    if (!employee) return res.status(404).json({ message: 'Employee not found' });
-
-    if (req.user.role === 'hr' && (employee.role === 'admin' || employee.userId?.role === 'admin')) {
-      return res.status(403).json({ message: 'Not authorized to modify Admin status' });
+    let employee = await Employee.findById(req.params.id);
+    if (!employee) {
+      employee = await Employee.findOne({ $or: [{ userId: req.params.id }, { employeeId: req.params.id }] });
     }
 
-    employee.status = status;
-    await employee.save();
+    const userIdToFind = employee ? employee.userId : req.params.id;
+    const user = await User.findById(userIdToFind);
 
-    await User.findByIdAndUpdate(employee.userId, { status });
+    if (!employee && !user) {
+      return res.status(404).json({ message: 'Employee or User record not found' });
+    }
+
+    if (req.user.role === 'hr') {
+      const isTargetAdmin = (employee?.role === 'admin' || user?.role === 'admin');
+      if (isTargetAdmin) {
+        return res.status(403).json({ message: 'Not authorized to modify Admin status' });
+      }
+    }
+
+    if (employee) {
+      employee.status = status;
+      await employee.save();
+    }
+
+    if (user) {
+      user.status = status;
+      await user.save();
+    }
+
     res.json({ message: `Employee status updated to ${status}` });
   } catch (error) {
     res.status(500).json({ message: error.message });

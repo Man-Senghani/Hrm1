@@ -243,11 +243,19 @@ const EmployeeDetail = () => {
                 </span>
               </div>
 
-              <div className="flex flex-col text-xs pt-1">
-                <span className="font-semibold text-slate-500 dark:text-slate-400 mb-0.5">Location Node (Address)</span>
-                <span className="font-medium text-slate-700 dark:text-slate-300 text-[11px] leading-relaxed break-words bg-slate-50 dark:bg-[#1f1b16] p-2 rounded-lg border border-slate-100 dark:border-[#2d2822]">
-                  {employee.address || 'No physical address entered yet.'}
-                </span>
+              <div className="flex flex-col text-xs pt-1 space-y-2">
+                <div>
+                  <span className="font-semibold text-slate-500 dark:text-slate-400 mb-0.5 block">1. Local Address</span>
+                  <span className="font-medium text-slate-700 dark:text-slate-300 text-[11px] leading-relaxed break-words bg-slate-50 dark:bg-[#1f1b16] p-2 rounded-lg border border-slate-100 dark:border-[#2d2822] block">
+                    {employee.address || 'No local address entered.'}
+                  </span>
+                </div>
+                <div>
+                  <span className="font-semibold text-slate-500 dark:text-slate-400 mb-0.5 block">2. Permanent Address</span>
+                  <span className="font-medium text-slate-700 dark:text-slate-300 text-[11px] leading-relaxed break-words bg-slate-50 dark:bg-[#1f1b16] p-2 rounded-lg border border-slate-100 dark:border-[#2d2822] block">
+                    {employee.permanentAddress || 'No permanent address entered.'}
+                  </span>
+                </div>
               </div>
             </div>
 

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
-import { Search, UserPlus, Trash2, Edit3, User, Eye, CheckCircle, XCircle, RefreshCw, Download, SlidersHorizontal, MoreHorizontal, Plus } from 'lucide-react';
+import { Search, UserPlus, Trash2, Edit3, User, Eye, CheckCircle, CheckCircle2, XCircle, RefreshCw, Download, SlidersHorizontal, MoreHorizontal, Plus, AlertTriangle } from 'lucide-react';
 import { API_BASE_URL, getImageUrl } from '@shared/services/api';
 
 const HREmployees = () => {
@@ -35,6 +35,8 @@ const HREmployees = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [statusModal, setStatusModal] = useState({ isOpen: false, employee: null, targetStatus: '' });
   const [statusUpdating, setStatusUpdating] = useState(false);
+  const [deleteModal, setDeleteModal] = useState({ isOpen: false, employee: null, isDeleting: false });
+  const [feedbackModal, setFeedbackModal] = useState({ isOpen: false, type: 'error', title: '', message: '' });
 
   const fetchEmployees = async () => {
     try {
@@ -74,7 +76,7 @@ const HREmployees = () => {
   const uniqueEmployees = Array.from(new Map(dbEmployees.map(emp => [emp._id, emp])).values());
   const filteredEmployees = uniqueEmployees.filter(emp => {
     const empRole = (emp.role || emp.userId?.role || '').toLowerCase();
-    if (currentRole === 'hr' && empRole === 'admin') return false;
+    if (empRole === 'admin') return false;
 
     const fullName = emp.fullName?.toLowerCase() || emp.userId?.name?.toLowerCase() || '';
     const email = emp.email?.toLowerCase() || emp.userId?.email?.toLowerCase() || '';
@@ -103,21 +105,39 @@ const HREmployees = () => {
     currentPage * itemsPerPage
   );
 
-  const handleDelete = async (id) => {
-    if (window.confirm('Are you sure you want to remove this employee? This will change their status to INACTIVE instead of permanently deleting the record.')) {
-      try {
-        const token = sessionStorage.getItem('token');
-        await axios.delete(`/api/employees/${id}`, { headers: { Authorization: `Bearer ${token}` } });
-        fetchEmployees();
-      } catch (err) {
-        console.error('Delete failed:', err);
+  const handleDeleteClick = (emp) => {
+    setDeleteModal({ isOpen: true, employee: emp, isDeleting: false });
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteModal.employee) return;
+    setDeleteModal(prev => ({ ...prev, isDeleting: true }));
+    const emp = deleteModal.employee;
+    const id = emp._id || emp.id || emp.userId?._id;
+    try {
+      if (String(id).startsWith('sample-')) {
+        setDbEmployees(prev => prev.filter(e => e._id !== id));
+        return;
       }
+      const token = sessionStorage.getItem('token');
+      await axios.delete(`/api/employees/${id}`, { headers: { Authorization: `Bearer ${token}` } });
+      fetchEmployees();
+    } catch (err) {
+      console.error('Delete failed:', err);
+      setFeedbackModal({
+        isOpen: true,
+        type: 'error',
+        title: 'Delete Failed',
+        message: err.response?.data?.message || 'Failed to remove employee.'
+      });
+    } finally {
+      setDeleteModal({ isOpen: false, employee: null, isDeleting: false });
     }
   };
 
   const handleEdit = (id) => {
     if (id.startsWith('sample-')) {
-      alert('Demo personnel records cannot be modified.');
+      setFeedbackModal({ isOpen: true, type: 'error', title: 'Demo Record', message: 'Demo personnel records cannot be modified.' });
       return;
     }
     navigate(`${targetPrefix}/employees/edit/${id}`);
@@ -125,7 +145,7 @@ const HREmployees = () => {
 
   const handleView = (id) => {
     if (id.startsWith('sample-')) {
-      alert(`Viewing demo profile for ${id}`);
+      setFeedbackModal({ isOpen: true, type: 'error', title: 'Demo Record', message: `Viewing demo profile for ${id}` });
       return;
     }
     navigate(`${targetPrefix}/employees/view/${id}`);
@@ -191,16 +211,28 @@ const HREmployees = () => {
     if (!statusModal.employee) return;
     setStatusUpdating(true);
     try {
-      const token = sessionStorage.getItem('token');
-      const empId = statusModal.employee._id;
+      const emp = statusModal.employee;
+      const empId = emp._id || emp.id || emp.userId?._id;
       const newStatus = statusModal.targetStatus;
+
+      if (String(empId).startsWith('sample-')) {
+        setDbEmployees(prev => prev.map(e => (e._id === emp._id || e._id === empId || e.userId?._id === empId) ? { ...e, status: newStatus } : e));
+        return;
+      }
+
+      const token = sessionStorage.getItem('token');
       await axios.patch(`/api/employees/${empId}/status`, { status: newStatus }, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      setDbEmployees(prev => prev.map(e => e._id === empId ? { ...e, status: newStatus } : e));
+      setDbEmployees(prev => prev.map(e => (e._id === emp._id || e._id === empId || e.userId?._id === empId) ? { ...e, status: newStatus } : e));
     } catch (err) {
       console.error('Failed to update status:', err);
-      alert(err.response?.data?.message || 'Failed to update employee status.');
+      setFeedbackModal({
+        isOpen: true,
+        type: 'error',
+        title: 'Status Update Failed',
+        message: err.response?.data?.message || 'Failed to update employee status.'
+      });
     } finally {
       setStatusUpdating(false);
       setStatusModal({ isOpen: false, employee: null, targetStatus: '' });
@@ -398,7 +430,7 @@ const HREmployees = () => {
       </div>
 
       {/* 3. Table Card Container */}
-      <div className="bg-white dark:bg-[#111c18] border border-[#e2eae7] dark:border-[#1a2d29] rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.02)] overflow-hidden">
+      <div className="bg-white dark:bg-[#111c18] border-2 border-slate-200 dark:border-[#1e3b32] rounded-2xl shadow-sm overflow-hidden">
         {loading ? (
           <div className="text-center py-20 bg-white dark:bg-[#111c18]">
             <RefreshCw size={24} className="text-[#00a76b] animate-spin mx-auto mb-3" />
@@ -416,16 +448,16 @@ const HREmployees = () => {
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-left text-xs">
               <thead>
-                <tr className="border-b border-[#e2eae7] dark:border-[#1a2d29] bg-slate-100 dark:bg-[#0d2a22]">
-                  <th className="py-2.5 px-4 text-[10px] font-bold text-slate-500 dark:text-[#829e92] uppercase tracking-wider border-r border-[#e2eae7] dark:border-[#1a2d29] w-[130px] max-w-[130px]">EMPLOYEE ID</th>
-                  <th className="py-2.5 px-4 text-[10px] font-bold text-slate-500 dark:text-[#829e92] uppercase tracking-wider border-r border-[#e2eae7] dark:border-[#1a2d29] w-[240px] max-w-[240px]">EMPLOYEE</th>
-                  <th className="py-2.5 px-4 text-[10px] font-bold text-slate-500 dark:text-[#829e92] uppercase tracking-wider border-r border-[#e2eae7] dark:border-[#1a2d29]">DESIGNATION</th>
-                  <th className="py-2.5 px-4 text-[10px] font-bold text-slate-500 dark:text-[#829e92] uppercase tracking-wider border-r border-[#e2eae7] dark:border-[#1a2d29]">JOIN DATE</th>
-                  <th className="py-2.5 px-4 text-[10px] font-bold text-slate-500 dark:text-[#829e92] uppercase tracking-wider border-r border-[#e2eae7] dark:border-[#1a2d29]">STATUS</th>
+                <tr className="border-b-2 border-slate-200 dark:border-[#1e3b32] bg-slate-100/90 dark:bg-[#0d2a22]">
+                  <th className="py-2.5 px-4 text-[10px] font-bold text-slate-500 dark:text-[#829e92] uppercase tracking-wider border-r border-slate-200 dark:border-[#1e3b32] w-[130px] max-w-[130px]">EMPLOYEE ID</th>
+                  <th className="py-2.5 px-4 text-[10px] font-bold text-slate-500 dark:text-[#829e92] uppercase tracking-wider border-r border-slate-200 dark:border-[#1e3b32] w-[240px] max-w-[240px]">EMPLOYEE</th>
+                  <th className="py-2.5 px-4 text-[10px] font-bold text-slate-500 dark:text-[#829e92] uppercase tracking-wider border-r border-slate-200 dark:border-[#1e3b32]">DESIGNATION</th>
+                  <th className="py-2.5 px-4 text-[10px] font-bold text-slate-500 dark:text-[#829e92] uppercase tracking-wider border-r border-slate-200 dark:border-[#1e3b32]">JOIN DATE</th>
+                  <th className="py-2.5 px-4 text-[10px] font-bold text-slate-500 dark:text-[#829e92] uppercase tracking-wider border-r border-slate-200 dark:border-[#1e3b32]">STATUS</th>
                   <th className="py-2.5 px-4 text-[10px] font-bold text-slate-500 dark:text-[#829e92] uppercase tracking-wider text-right">ACTION</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[#e2eae7] dark:divide-[#1a2d29]">
+              <tbody className="divide-y divide-slate-200 dark:divide-[#1e3b32]">
                 {paginatedEmployees.length === 0 ? (
                 <tr>
                   <td colSpan="6" className="text-center py-16 text-slate-400 dark:text-[#829e92] font-semibold text-xs">
@@ -440,12 +472,12 @@ const HREmployees = () => {
                     <tr
                       key={emp._id}
                       onClick={() => handleEdit(emp._id)}
-                      className="hover:bg-slate-50/60 dark:hover:bg-[#0d2a22]/50 transition-colors group cursor-pointer"
+                      className="hover:bg-slate-50/80 dark:hover:bg-[#0d2a22]/70 transition-colors group cursor-pointer"
                     >
-                      <td className="py-3 px-4 border-r border-[#e2eae7] dark:border-[#1a2d29] w-[130px] max-w-[130px]">
+                      <td className="py-3 px-4 border-r border-slate-200 dark:border-[#1e3b32] w-[130px] max-w-[130px]">
                         <span className="font-bold text-slate-800 dark:text-gray-200 text-xs font-mono">{emp.employeeId || 'NODE-UNDEF'}</span>
                       </td>
-                      <td className="py-3 px-4 border-r border-[#e2eae7] dark:border-[#1a2d29] w-[240px] max-w-[240px]">
+                      <td className="py-3 px-4 border-r border-slate-200 dark:border-[#1e3b32] w-[240px] max-w-[240px]">
                         <div className="flex items-center gap-2.5">
                           <div className="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/50 flex items-center justify-center text-[11px] font-bold text-emerald-600 dark:text-emerald-400 shrink-0 overflow-hidden">
                             {emp.profileImage ? (
@@ -461,22 +493,22 @@ const HREmployees = () => {
                         </div>
                       </td>
                       {/* Designation */}
-                      <td className="py-3 px-4 text-xs font-medium text-slate-700 dark:text-gray-300 border-r border-[#e2eae7] dark:border-[#1a2d29]">
+                      <td className="py-3 px-4 text-xs font-medium text-slate-700 dark:text-gray-300 border-r border-slate-200 dark:border-[#1e3b32]">
                         {emp.designation || 'N/A'}
                       </td>
                       {/* Join Date */}
-                      <td className="py-3 px-4 text-xs font-medium text-slate-600 dark:text-gray-400 border-r border-[#e2eae7] dark:border-[#1a2d29]">
+                      <td className="py-3 px-4 text-xs font-medium text-slate-600 dark:text-gray-400 border-r border-slate-200 dark:border-[#1e3b32]">
                         {formatDate(emp.joinDate)}
                       </td>
                       {/* Status badge */}
-                      <td className="py-3 px-4 border-r border-[#e2eae7] dark:border-[#1a2d29]" onClick={(e) => e.stopPropagation()}>
+                      <td className="py-3 px-4 border-r border-slate-200 dark:border-[#1e3b32]" onClick={(e) => e.stopPropagation()}>
                         {renderStatusSwitch(emp)}
                       </td>
                       {/* Row-level action options */}
                       <td className="py-3 px-4 text-right relative" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-end gap-2">
                           <button
-                            onClick={(e) => { e.stopPropagation(); handleDelete(emp._id); }}
+                            onClick={(e) => { e.stopPropagation(); handleDeleteClick(emp); }}
                             className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 border border-transparent hover:border-red-200 dark:hover:border-red-800/50 transition-all cursor-pointer"
                             title="Delete Employee"
                           >
@@ -575,6 +607,87 @@ const HREmployees = () => {
                 {statusUpdating ? 'Updating...' : `Yes, Make ${statusModal.targetStatus === 'active' ? 'Active' : 'Inactive'}`}
               </button>
             </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Stylish Delete Confirmation Modal Popup */}
+      {deleteModal.isOpen && createPortal(
+        <div 
+          className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-fade-in cursor-pointer"
+          onClick={() => setDeleteModal({ isOpen: false, employee: null, isDeleting: false })}
+        >
+          <div 
+            className="bg-white dark:bg-[#0c1512] border border-[#e2eae7] dark:border-[#1a2d29] rounded-2xl p-6 w-full max-w-md shadow-2xl space-y-4 animate-scale-in text-center cursor-default"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="w-12 h-12 rounded-full bg-red-50 dark:bg-red-950/40 text-red-500 flex items-center justify-center mx-auto">
+              <Trash2 size={24} strokeWidth={2.2} />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                Remove Employee Account?
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-[#829e92] mt-1.5 leading-relaxed">
+                Are you sure you want to remove <span className="font-semibold text-slate-700 dark:text-slate-200">{deleteModal.employee?.fullName || deleteModal.employee?.userId?.name || 'this employee'}</span>? This will mark their status as <span className="font-bold text-red-500">INACTIVE</span> instead of permanently deleting the record.
+              </p>
+            </div>
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                disabled={deleteModal.isDeleting}
+                onClick={() => setDeleteModal({ isOpen: false, employee: null, isDeleting: false })}
+                className="px-4 py-2 text-xs font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-[#111c18] rounded-xl transition-colors cursor-pointer border-none bg-transparent"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={deleteModal.isDeleting}
+                onClick={confirmDelete}
+                className="px-5 py-2 text-xs font-bold text-white bg-red-600 hover:bg-red-700 rounded-xl shadow-sm transition-all cursor-pointer border-none"
+              >
+                {deleteModal.isDeleting ? 'Removing...' : 'Yes, Remove Employee'}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Stylish Feedback Modal Popup */}
+      {feedbackModal.isOpen && createPortal(
+        <div 
+          className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-fade-in cursor-pointer"
+          onClick={() => setFeedbackModal({ isOpen: false, type: 'error', title: '', message: '' })}
+        >
+          <div 
+            className="bg-white dark:bg-[#0c1512] border border-[#e2eae7] dark:border-[#1a2d29] rounded-2xl p-6 w-full max-w-sm shadow-2xl text-center space-y-4 animate-scale-in cursor-default"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className={`w-12 h-12 rounded-full flex items-center justify-center mx-auto ${feedbackModal.type === 'error' ? 'bg-red-50 text-red-500 dark:bg-red-950/30' : 'bg-emerald-50 text-emerald-500 dark:bg-emerald-950/30'}`}>
+              {feedbackModal.type === 'error' ? (
+                <AlertTriangle size={24} strokeWidth={2.5} />
+              ) : (
+                <CheckCircle2 size={24} strokeWidth={2.5} />
+              )}
+            </div>
+            <div>
+              <h4 className="text-base font-bold text-slate-900 dark:text-white">
+                {feedbackModal.title}
+              </h4>
+              <p className="text-xs text-slate-500 dark:text-[#829e92] mt-1">
+                {feedbackModal.message}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setFeedbackModal({ isOpen: false, type: 'error', title: '', message: '' })}
+              className="w-full py-2.5 px-4 bg-[#00a76b] hover:bg-[#008f5b] text-white font-bold text-xs rounded-xl transition-all shadow-sm border-none cursor-pointer"
+            >
+              OK
+            </button>
           </div>
         </div>,
         document.body

@@ -16,6 +16,7 @@ const employeeSchema = new mongoose.Schema({
   gender: { type: String, default: 'Male' },
   dob: Date,
   address: String,
+  permanentAddress: String,
   joinDate: Date,
   employmentType: { type: String, default: 'Full-time' },
   profileImage: { type: String, default: null },

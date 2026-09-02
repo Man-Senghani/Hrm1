@@ -11,5 +11,8 @@
   - Task Attachments: `hrm/tasks/{task_title}/`
   - *Standardization:* Sanitize folder names by replacing spaces with underscores (e.g. `(name).replace(/\s+/g, '_')`) and lowercasing role variables to keep URLs clean and normalized.
 
+## Modal & Popup UX Standards
+- **Backdrop Click-Outside Dismissal:** Whenever creating popups, confirmation drawers, or modal dialogs across any module (`frontend/...`), always bind an `onClick` handler to the outer backdrop overlay container (`fixed inset-0 ...`) to dismiss/close the modal when a user clicks outside the modal card. Always call `e.stopPropagation()` on the inner modal card container (`onClick={(e) => e.stopPropagation()}`) to prevent clicks inside the modal from unintentionally closing it.
+
 ## Production Build & Dist File Synchronization
 - **Automatic Dist Bundle Rebuild:** Whenever frontend source code files (`frontend/...`) are edited or modified, always run `npm run build` so that production `dist/` static bundles (`frontend/admin/dist`, `frontend/hr/dist`, `frontend/employee/dist`, `frontend/manager/dist`, `frontend/login/dist`) remain freshly updated and in sync with the source code.

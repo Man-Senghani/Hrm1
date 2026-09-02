@@ -138,7 +138,7 @@ function App() {
       <MainLayout
         navItems={navItems}
         userRole="hr"
-        userName={user?.profile?.firstName || user?.name || user?.email || 'HR Manager'}
+        userName={user?.profile?.firstName || user?.name || user?.email || 'HR'}
         onLogout={handleLogout}
       >
         <Suspense fallback={<RouteLoadingFallback />}>

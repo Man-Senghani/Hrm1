@@ -42,12 +42,6 @@ exports.checkIn = async (req, res) => {
     }
 
     let status = 'Present';
-    if (timeInMinutes >= 14 * 60 + 30) { // 2:30 PM
-      status = 'Half Day';
-    } else if (timeInMinutes >= 10 * 60 + 30) { // 10:30 AM
-      status = 'Late';
-    }
-
     const clockInStr = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
 
     const attendance = await Attendance.create({
@@ -319,6 +313,18 @@ const buildEmployeeAttendanceHistory = async (userId) => {
         if (typeof tt.activeTime === 'number' && tt.activeTime > 0) {
           activeSecs = tt.activeTime;
           hoursVal = parseFloat((tt.activeTime / 3600).toFixed(4));
+        }
+      }
+
+      if (!hoursVal || hoursVal === 0) {
+        if (existingAtt.checkInTime && effectiveCheckOutTime) {
+          const startMs = new Date(existingAtt.checkInTime).getTime();
+          const endMs = new Date(effectiveCheckOutTime).getTime();
+          if (!isNaN(startMs) && !isNaN(endMs) && endMs >= startMs) {
+            const diffSecs = Math.floor((endMs - startMs) / 1000);
+            hoursVal = parseFloat((diffSecs / 3600).toFixed(4));
+            activeSecs = diffSecs;
+          }
         }
       }
 
@@ -613,6 +619,21 @@ exports.getAttendance = async (req, res) => {
             }
             rec.idleTime = tt.idleTime || 0;
             rec.totalTime = tt.totalTime || (rec.activeTime || 0) + (tt.idleTime || 0);
+          }
+
+          // Fallback calculation: calculate duration between checkInTime and checkOutTime if totalHours is 0
+          if (!rec.totalHours || rec.totalHours === 0) {
+            if (rec.checkInTime && rec.checkOutTime) {
+              const startMs = new Date(rec.checkInTime).getTime();
+              const endMs = new Date(rec.checkOutTime).getTime();
+              if (!isNaN(startMs) && !isNaN(endMs) && endMs >= startMs) {
+                const diffSecs = Math.floor((endMs - startMs) / 1000);
+                rec.totalHours = parseFloat((diffSecs / 3600).toFixed(4));
+                rec.totalActiveTime = diffSecs;
+                rec.activeTime = diffSecs;
+                rec.totalTime = diffSecs + (rec.idleTime || 0);
+              }
+            }
           }
         }
       }

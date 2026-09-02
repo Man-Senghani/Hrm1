@@ -135,11 +135,6 @@ exports.startTracking = async (req, res) => {
       const timeInMinutes = hours * 60 + minutes;
 
       let status = 'Present';
-      if (timeInMinutes >= 14 * 60 + 30) { // 2:30 PM
-        status = 'Half Day';
-      } else if (timeInMinutes >= 10 * 60 + 30) { // 10:30 AM
-        status = 'Late';
-      }
 
       await Attendance.create({
         user: id,

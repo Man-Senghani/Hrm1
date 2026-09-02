@@ -331,8 +331,8 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
     }
   }, [isProfileDropdownOpen]);
 
-  const displayRole = userRole || (activeRole === 'hr' ? 'HR Manager' : (role ? role.toUpperCase() : 'ADMIN'));
-
+  const displayRole = userRole || (activeRole === 'hr' ? 'HR' : (role ? role.toUpperCase() : 'ADMIN'));
+  
   useEffect(() => {
     const fetchLatestProfile = async () => {
       if (!token) {
@@ -381,7 +381,7 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
   const actualRole = (userProfile?.role || sessionRole || role || activeRole || 'admin').toLowerCase();
 
   const userRealRole = actualRole === 'admin' ? 'Admin' :
-    actualRole === 'hr' ? 'HR Manager' :
+    actualRole === 'hr' ? 'HR' :
       actualRole === 'manager' ? 'Team Manager' :
         actualRole === 'employee' ? 'Employee' : 'User';
 
@@ -750,40 +750,16 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
                       <button onClick={() => { setIsQuickActionOpen(false); handleNav('/create-user'); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-[#162722] text-xs font-bold text-gray-700 dark:text-slate-300 rounded-xl transition-colors border-none bg-transparent cursor-pointer">
                         Add Employee
                       </button>
-                      <button onClick={() => { setIsQuickActionOpen(false); handleNav('/leave'); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-[#162722] text-xs font-bold text-gray-700 dark:text-slate-300 rounded-xl transition-colors border-none bg-transparent cursor-pointer">
-                        Apply Leave
-                      </button>
                       <button onClick={() => { setIsQuickActionOpen(false); handleNav('/notifications'); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-[#162722] text-xs font-bold text-gray-700 dark:text-slate-300 rounded-xl transition-colors border-none bg-transparent cursor-pointer">
                         Create Announcement
-                      </button>
-                      <button onClick={() => { setIsQuickActionOpen(false); handleNav('/payroll'); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-[#162722] text-xs font-bold text-gray-700 dark:text-slate-300 rounded-xl transition-colors border-none bg-transparent cursor-pointer">
-                        Generate Payroll
-                      </button>
-                      <button onClick={() => { setIsQuickActionOpen(false); handleNav('/recruitment'); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-[#162722] text-xs font-bold text-gray-700 dark:text-slate-300 rounded-xl transition-colors border-none bg-transparent cursor-pointer">
-                        Schedule Interview
-                      </button>
-                      <button onClick={() => { setIsQuickActionOpen(false); handleNav('/task-management/create'); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-[#162722] text-xs font-bold text-gray-700 dark:text-slate-300 rounded-xl transition-colors border-none bg-transparent cursor-pointer">
-                        Assign Task
                       </button>
                     </>
                   )}
 
                   {activeRole === 'manager' && (
                     <>
-                      <button onClick={() => { setIsQuickActionOpen(false); window.dispatchEvent(new CustomEvent('trigger-open-leave-approval-drawer')); handleNav('/leave'); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-[#162722] text-xs font-bold text-gray-700 dark:text-slate-300 rounded-xl transition-colors border-none bg-transparent cursor-pointer">
-                        Approve / Reject Leave
-                      </button>
-                      <button onClick={() => { setIsQuickActionOpen(false); handleNav('/employees'); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-[#162722] text-xs font-bold text-gray-700 dark:text-slate-300 rounded-xl transition-colors border-none bg-transparent cursor-pointer">
-                        Add Team Member
-                      </button>
-                      <button onClick={() => { setIsQuickActionOpen(false); handleNav('/events'); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-[#162722] text-xs font-bold text-gray-700 dark:text-slate-300 rounded-xl transition-colors border-none bg-transparent cursor-pointer">
-                        Schedule
-                      </button>
-                      <button onClick={() => { setIsQuickActionOpen(false); handleNav('/projects'); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-[#162722] text-xs font-bold text-gray-700 dark:text-slate-300 rounded-xl transition-colors border-none bg-transparent cursor-pointer">
-                        Create Project
-                      </button>
-                      <button onClick={() => { setIsQuickActionOpen(false); handleNav('/attendance'); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-[#162722] text-xs font-bold text-gray-700 dark:text-slate-300 rounded-xl transition-colors border-none bg-transparent cursor-pointer">
-                        Team Attendance
+                      <button onClick={() => { setIsQuickActionOpen(false); handleNav('/notifications'); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-[#162722] text-xs font-bold text-gray-700 dark:text-slate-300 rounded-xl transition-colors border-none bg-transparent cursor-pointer">
+                        Create Announcement
                       </button>
                     </>
                   )}
@@ -983,19 +959,7 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
                       <User size={16} className="text-slate-400 dark:text-[#829e92]" />
                       <span>My Profile</span>
                     </button>
-                    {activeRole !== 'employee' && (
-                      <button
-                        role="menuitem"
-                        onClick={() => {
-                          setIsProfileDropdownOpen(false);
-                          handleNav('/settings');
-                        }}
-                        className="w-full px-6 py-2.5 flex items-center gap-3.5 text-left text-[13px] font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-[#162722]/50 hover:text-slate-900 dark:hover:text-white transition-colors border-none bg-transparent cursor-pointer outline-none"
-                      >
-                        <Settings size={16} className="text-slate-400 dark:text-[#829e92]" />
-                        <span>Settings</span>
-                      </button>
-                    )}
+
                     <button
                       role="menuitem"
                       onClick={() => {

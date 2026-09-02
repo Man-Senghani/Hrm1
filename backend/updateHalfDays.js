@@ -13,18 +13,16 @@ async function updateDatabase() {
       { $set: { status: 'Half Day' } }
     );
 
-    // 2. Mark records with 7.5 hours or more as Present / Late based on check-in time
+    // 2. Mark records with 7.5 hours or more as Present
     const fullDayRecords = await Attendance.find({ totalHours: { $gte: 7.5 } });
     let fullDayCount = 0;
     for (const att of fullDayRecords) {
-      const cTime = att.checkInTime ? new Date(att.checkInTime) : null;
-      const mins = cTime ? cTime.getHours() * 60 + cTime.getMinutes() : 0;
-      att.status = mins >= (10 * 60 + 30) ? 'Late' : 'Present';
+      att.status = 'Present';
       await att.save();
       fullDayCount++;
     }
 
-    console.log(`Updated database: ${halfDayResult.modifiedCount} records marked Half Day (< 7.5 hrs), ${fullDayCount} records marked Present/Late (>= 7.5 hrs).`);
+    console.log(`Updated database: ${halfDayResult.modifiedCount} records marked Half Day (< 7.5 hrs), ${fullDayCount} records marked Present (>= 7.5 hrs).`);
     process.exit(0);
   } catch (error) {
     console.error('Error updating database:', error);

@@ -143,14 +143,12 @@ const WeeklyAttendanceChart = ({ className, isZapTheme = true, hideFilters = fal
       // Today Attendance breakdown
       const todayLogs = safeLogs.filter(log => log && log.date === todayStr);
       const presentCount = todayLogs.filter(log => log.status === 'Present').length;
-      const lateCount = todayLogs.filter(log => log.status === 'Late').length;
-      const leaveCount = todayLogs.filter(log => log.status === 'On Leave').length;
-      const absentCount = totalEmployees - (presentCount + lateCount + leaveCount);
+      const leaveCount = todayLogs.filter(log => log.status === 'On Leave' || log.status === 'Leave').length;
+      const absentCount = totalEmployees - (presentCount + leaveCount);
 
       // Render as categories side-by-side or simple summary bars
       computedData = [
         { name: 'Present', count: Math.max(presentCount, 138) },
-        { name: 'Late', count: Math.max(lateCount, 6) },
         { name: 'On Leave', count: Math.max(leaveCount, 8) },
         { name: 'Absent', count: Math.max(absentCount, 8) }
       ];
@@ -161,16 +159,14 @@ const WeeklyAttendanceChart = ({ className, isZapTheme = true, hideFilters = fal
       computedData = weekDates.map(w => {
         const dayLogs = safeLogs.filter(log => log && log.date === w.dateStr);
         const presentCount = dayLogs.filter(log => log.status === 'Present').length;
-        const lateCount = dayLogs.filter(log => log.status === 'Late').length;
-        const leaveCount = dayLogs.filter(log => log.status === 'On Leave').length;
+        const leaveCount = dayLogs.filter(log => log.status === 'On Leave' || log.status === 'Leave').length;
 
         // Custom High-Fidelity seed overlays if database is empty/mock
         const daySeed = new Date(w.dateStr).getDate();
         let mockPresent = 138 + (w.name === 'Sat' ? -78 : w.name === 'Sun' ? -138 : Math.floor(Math.sin(daySeed) * 5));
         let mockLeave = w.name === 'Sun' ? 0 : 8 + Math.floor(Math.sin(daySeed + 1) * 2);
-        let mockLate = w.name === 'Sun' ? 0 : 6 + Math.floor(Math.sin(daySeed + 2) * 1);
 
-        const finalPresent = Math.min(mockPresent + presentCount + mockLate + lateCount, totalEmployees);
+        const finalPresent = Math.min(mockPresent + presentCount, totalEmployees);
         const finalLeave = Math.min(mockLeave + leaveCount, totalEmployees - finalPresent);
         const finalAbsent = Math.max(0, totalEmployees - (finalPresent + finalLeave));
 
@@ -195,8 +191,7 @@ const WeeklyAttendanceChart = ({ className, isZapTheme = true, hideFilters = fal
         const dayNum = dateStr.split('-')[2];
         const dayLogs = safeLogs.filter(log => log && log.date === dateStr);
         const presentCount = dayLogs.filter(log => log.status === 'Present').length;
-        const lateCount = dayLogs.filter(log => log.status === 'Late').length;
-        const leaveCount = dayLogs.filter(log => log.status === 'On Leave').length;
+        const leaveCount = dayLogs.filter(log => log.status === 'On Leave' || log.status === 'Leave').length;
 
         const dayObj = new Date(dateStr);
         const isWeekend = dayObj.getDay() === 0 || dayObj.getDay() === 6;
@@ -204,17 +199,14 @@ const WeeklyAttendanceChart = ({ className, isZapTheme = true, hideFilters = fal
 
         let mockPresent = isWeekend ? (dayObj.getDay() === 6 ? 60 : 0) : 138 + Math.floor(Math.sin(daySeed) * 4);
         let mockLeave = isWeekend ? 0 : 7 + Math.floor(Math.sin(daySeed + 1) * 2);
-        let mockLate = isWeekend ? 0 : 5 + Math.floor(Math.sin(daySeed + 2) * 1);
 
         const finalPresent = Math.min(mockPresent + presentCount, totalEmployees);
         const finalLeave = Math.min(mockLeave + leaveCount, totalEmployees - finalPresent);
-        const finalLate = Math.min(mockLate + lateCount, totalEmployees - finalPresent - finalLeave);
-        const finalAbsent = isWeekend ? (dayObj.getDay() === 6 ? totalEmployees - 60 : 0) : Math.max(0, totalEmployees - (finalPresent + finalLeave + finalLate));
+        const finalAbsent = isWeekend ? (dayObj.getDay() === 6 ? totalEmployees - 60 : 0) : Math.max(0, totalEmployees - (finalPresent + finalLeave));
 
         return {
           name: dayNum,
           Present: finalPresent,
-          Late: finalLate,
           Leave: finalLeave,
           Absent: finalAbsent
         };
@@ -231,19 +223,16 @@ const WeeklyAttendanceChart = ({ className, isZapTheme = true, hideFilters = fal
         });
 
         const presentCount = monthLogs.filter(log => log.status === 'Present').length;
-        const lateCount = monthLogs.filter(log => log.status === 'Late').length;
-        const leaveCount = monthLogs.filter(log => log.status === 'On Leave').length;
+        const leaveCount = monthLogs.filter(log => log.status === 'On Leave' || log.status === 'Leave').length;
 
         // Smooth high fidelity averages
         const finalPresent = Math.min(136 + presentCount, totalEmployees);
         const finalLeave = Math.min(8 + leaveCount, totalEmployees - finalPresent);
-        const finalLate = Math.min(6 + lateCount, totalEmployees - finalPresent - finalLeave);
-        const finalAbsent = Math.max(0, totalEmployees - (finalPresent + finalLeave + finalLate));
+        const finalAbsent = Math.max(0, totalEmployees - (finalPresent + finalLeave));
 
         return {
           name: m,
           Present: finalPresent,
-          Late: finalLate,
           Leave: finalLeave,
           Absent: finalAbsent
         };
@@ -265,8 +254,7 @@ const WeeklyAttendanceChart = ({ className, isZapTheme = true, hideFilters = fal
       computedData = datesInRange.map(dateStr => {
         const dayLogs = safeLogs.filter(log => log && log.date === dateStr);
         const presentCount = dayLogs.filter(log => log.status === 'Present').length;
-        const lateCount = dayLogs.filter(log => log.status === 'Late').length;
-        const leaveCount = dayLogs.filter(log => log.status === 'On Leave').length;
+        const leaveCount = dayLogs.filter(log => log.status === 'On Leave' || log.status === 'Leave').length;
 
         const dayObj = new Date(dateStr);
         const isWeekend = dayObj.getDay() === 0 || dayObj.getDay() === 6;
@@ -274,17 +262,14 @@ const WeeklyAttendanceChart = ({ className, isZapTheme = true, hideFilters = fal
 
         let mockPresent = isWeekend ? (dayObj.getDay() === 6 ? 60 : 0) : 138 + Math.floor(Math.sin(daySeed) * 4);
         let mockLeave = isWeekend ? 0 : 7 + Math.floor(Math.sin(daySeed + 1) * 2);
-        let mockLate = isWeekend ? 0 : 5 + Math.floor(daySeed % 3);
 
         const finalPresent = Math.min(mockPresent + presentCount, totalEmployees);
         const finalLeave = Math.min(mockLeave + leaveCount, totalEmployees - finalPresent);
-        const finalLate = Math.min(mockLate + lateCount, totalEmployees - finalPresent - finalLeave);
-        const finalAbsent = isWeekend ? (dayObj.getDay() === 6 ? totalEmployees - 60 : 0) : Math.max(0, totalEmployees - (finalPresent + finalLeave + finalLate));
+        const finalAbsent = isWeekend ? (dayObj.getDay() === 6 ? totalEmployees - 60 : 0) : Math.max(0, totalEmployees - (finalPresent + finalLeave));
 
         return {
           name: dateStr.substring(5), // MM-DD formatting
           Present: finalPresent,
-          Late: finalLate,
           Leave: finalLeave,
           Absent: finalAbsent
         };

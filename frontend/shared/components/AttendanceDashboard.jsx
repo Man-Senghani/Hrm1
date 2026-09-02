@@ -202,7 +202,8 @@ const AttendanceDashboard = ({ userRole }) => {
                     <td className="px-6 py-4">
                       <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${
                         r.status === 'Present' ? 'bg-green-100 text-green-700' :
-                        r.status === 'Late' ? 'bg-emerald-100 text-emerald-700' :
+                        r.status === 'Half Day' ? 'bg-blue-100 text-blue-700' :
+                        r.status === 'Leave' ? 'bg-purple-100 text-purple-700' :
                         'bg-red-100 text-red-700'
                       }`}>
                         {r.status}

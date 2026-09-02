@@ -71,6 +71,7 @@ const EmployeeForm = () => {
     gender: 'Male',
     dob: '',
     address: '',
+    permanentAddress: '',
     role: 'employee',
     designation: '',
     managerId: '',
@@ -128,6 +129,12 @@ const EmployeeForm = () => {
           const lastName = nameParts.length > 1 ? nameParts[nameParts.length - 1] : '';
           const middleName = nameParts.length > 2 ? nameParts.slice(1, -1).join(' ') : '';
 
+          const fetchedRole = emp.userId?.role || emp.role || 'employee';
+          let fetchedDesignation = emp.designation || emp.position || '';
+          if (!fetchedDesignation || fetchedDesignation === 'Employee' || fetchedDesignation === 'Staff Member') {
+            fetchedDesignation = fetchedRole === 'admin' ? 'Admin' : fetchedRole === 'hr' ? 'HR' : fetchedRole === 'manager' ? 'Manager' : 'Employee';
+          }
+
           setFormData({
             employeeId: emp.employeeId || '',
             firstName,
@@ -140,8 +147,9 @@ const EmployeeForm = () => {
             gender: emp.gender || 'Male',
             dob: emp.dob ? emp.dob.split('T')[0] : '',
             address: emp.address || '',
-            role: emp.userId?.role || emp.role || 'employee',
-            designation: emp.designation || emp.position || '',
+            permanentAddress: emp.permanentAddress || '',
+            role: fetchedRole,
+            designation: fetchedDesignation,
             managerId: emp.managerId?._id || emp.managerId || '',
             joinDate: emp.joinDate ? emp.joinDate.split('T')[0] : new Date().toISOString().split('T')[0],
             employmentType: emp.employmentType || 'Full-time',
@@ -206,7 +214,16 @@ const EmployeeForm = () => {
     }
 
     setErrors(newErrors);
-    setFormData({ ...formData, [name]: value });
+    if (name === 'role') {
+      const capRole = value === 'admin' ? 'Admin' : value === 'hr' ? 'HR' : value === 'manager' ? 'Manager' : 'Employee';
+      setFormData(prev => ({
+        ...prev,
+        role: value,
+        designation: (!prev.designation || prev.designation === 'Employee' || prev.designation === 'Staff Member' || prev.designation === 'Manager' || prev.designation === 'HR' || prev.designation === 'Admin') ? capRole : prev.designation
+      }));
+    } else {
+      setFormData({ ...formData, [name]: value });
+    }
   };
 
   const handleFileChange = (e) => {
@@ -449,12 +466,12 @@ const EmployeeForm = () => {
             <div className="flex items-center gap-2 mb-1">
               {formData.employeeId && (
                 <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-[#00a76b] dark:text-emerald-400 uppercase tracking-wider flex items-center gap-1">
-                  <Fingerprint size={12} className="text-[#00a76b]" /> Node ID: {formData.employeeId}
+                  <Fingerprint size={12} className="text-[#00a76b]" /> Employee ID: {formData.employeeId}
                 </span>
               )}
             </div>
             <h1 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight">
-              {isEdit ? 'UPDATE NODE' : 'Create Employee'}
+              {isEdit ? 'UPDATE EMPLOYEE' : 'Create Employee'}
             </h1>
             <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 font-medium">
               {isEdit ? 'Update team member profile details, credentials, and verification documents.' : 'Add a new team member with profile details, credentials, and verification documents.'}
@@ -473,7 +490,7 @@ const EmployeeForm = () => {
               className="px-5 py-2.5 bg-[#00a76b] hover:bg-[#00915c] text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer uppercase tracking-wider"
             >
               {loading ? <RefreshCw className="animate-spin" size={16} /> : <Save size={16} />}
-              {loading ? 'Saving...' : 'SAVE MUTATIONS'}
+              {loading ? 'Saving...' : 'SAVE EMPLOYEE'}
             </button>
             <button
               type="button"
@@ -492,7 +509,9 @@ const EmployeeForm = () => {
               
               {/* Profile Picture */}
               <div className="relative group mb-4">
-                <div className="w-32 h-32 rounded-2xl bg-slate-100 dark:bg-[#221e19] border-2 border-dashed border-slate-200 dark:border-[#38352e] flex items-center justify-center overflow-hidden transition-all group-hover:border-[#00a76b]">
+                <div className={`w-32 h-32 rounded-2xl bg-slate-100 dark:bg-[#221e19] flex items-center justify-center overflow-hidden transition-all ${
+                  previewUrl ? 'border border-slate-200 dark:border-[#38352e]' : 'border-2 border-dashed border-slate-200 dark:border-[#38352e] group-hover:border-[#00a76b]'
+                }`}>
                   {previewUrl ? (
                     <img src={previewUrl} alt="Preview" className="w-full h-full object-cover" />
                   ) : (
@@ -518,7 +537,7 @@ const EmployeeForm = () => {
                   : 'Employee Profile'}
               </h3>
               <p className="text-xs font-semibold text-slate-400 dark:text-slate-400 capitalize mt-0.5">
-                {formData.designation || 'Staff Member'}
+                {formData.designation || (formData.role ? formData.role.charAt(0).toUpperCase() + formData.role.slice(1) : 'Staff Member')}
               </p>
 
               {/* Real-Time Live Data Summary */}
@@ -578,11 +597,19 @@ const EmployeeForm = () => {
                   </div>
                 )}
 
-                <div className="flex flex-col text-xs pt-1">
-                  <span className="font-semibold text-slate-500 dark:text-slate-400 mb-0.5">Address</span>
-                  <span className="font-medium text-slate-700 dark:text-slate-300 text-[11px] leading-relaxed break-words bg-slate-50 dark:bg-[#1f1b16] p-2 rounded-lg border border-slate-100 dark:border-[#2d2822]">
-                    {formData.address || 'No physical address entered yet.'}
-                  </span>
+                <div className="flex flex-col text-xs pt-1 space-y-2">
+                  <div>
+                    <span className="font-semibold text-slate-500 dark:text-slate-400 mb-0.5 block">1. Local Address</span>
+                    <span className="font-medium text-slate-700 dark:text-slate-300 text-[11px] leading-relaxed break-words bg-slate-50 dark:bg-[#1f1b16] p-2 rounded-lg border border-slate-100 dark:border-[#2d2822] block">
+                      {formData.address || 'No local address entered yet.'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="font-semibold text-slate-500 dark:text-slate-400 mb-0.5 block">2. Permanent Address</span>
+                    <span className="font-medium text-slate-700 dark:text-slate-300 text-[11px] leading-relaxed break-words bg-slate-50 dark:bg-[#1f1b16] p-2 rounded-lg border border-slate-100 dark:border-[#2d2822] block">
+                      {formData.permanentAddress || 'No permanent address entered yet.'}
+                    </span>
+                  </div>
                 </div>
               </div>
 
@@ -816,18 +843,35 @@ const EmployeeForm = () => {
                 </div>
               </div>
 
-              {/* Address / Location Node */}
-              <div className="space-y-1.5">
-                <label className="text-[11px] font-extrabold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Location Node (Address) <span className="text-red-500">*</span></label>
-                <div className="relative">
+              {/* Residential Addresses */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* 1. Local Address */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[11px] font-extrabold text-slate-600 dark:text-slate-300 uppercase tracking-wider">1. Local Address <span className="text-red-500">*</span></label>
+                    <span className="text-[10px] font-bold text-slate-400 font-mono">{(formData.address || '').length}/250</span>
+                  </div>
                   <textarea
                     required name="address" value={formData.address} onChange={handleChange} maxLength="250" rows="3"
                     className="w-full p-3 bg-white dark:bg-[#1a1714] border border-slate-200 dark:border-[#38352e] rounded-xl text-xs font-semibold text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-[#00a76b] focus:ring-1 focus:ring-[#00a76b] transition-all resize-none"
-                    placeholder="Full residential address..."
+                    placeholder="Current local residential address..."
                   />
-                  <div className="absolute right-3 bottom-2 text-[10px] font-bold text-slate-400">{formData.address.length}/250</div>
+                  {errors.address && <p className="text-red-500 text-[10px] font-semibold">{errors.address}</p>}
                 </div>
-                {errors.address && <p className="text-red-500 text-[10px] font-semibold">{errors.address}</p>}
+
+                {/* 2. Permanent Address */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[11px] font-extrabold text-slate-600 dark:text-slate-300 uppercase tracking-wider">2. Permanent Address <span className="text-red-500">*</span></label>
+                    <span className="text-[10px] font-bold text-slate-400 font-mono">{(formData.permanentAddress || '').length}/250</span>
+                  </div>
+                  <textarea
+                    required name="permanentAddress" value={formData.permanentAddress} onChange={handleChange} maxLength="250" rows="3"
+                    className="w-full p-3 bg-white dark:bg-[#1a1714] border border-slate-200 dark:border-[#38352e] rounded-xl text-xs font-semibold text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-[#00a76b] focus:ring-1 focus:ring-[#00a76b] transition-all resize-none"
+                    placeholder="Permanent home address..."
+                  />
+                  {errors.permanentAddress && <p className="text-red-500 text-[10px] font-semibold">{errors.permanentAddress}</p>}
+                </div>
               </div>
             </div>
 
