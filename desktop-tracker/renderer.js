@@ -71,8 +71,8 @@ const IDLE_REMINDER_MS = 3 * 60 * 1000; // 3 minutes
 let socket = null;
 
 // ── Config ────────────────────────────────────────────────
-const PRODUCTION_BACKEND_URL = 'https://hrm1-wljp.onrender.com';
-const PRODUCTION_FRONTEND_URL = 'https://hrm-staging.aupanishad.tech';
+const PRODUCTION_BACKEND_URL = 'https://hrmf-1-zli1.onrender.com';
+const PRODUCTION_FRONTEND_URL = 'https://hrm.aupanishad.tech';
 
 let BACKEND_HOST = PRODUCTION_BACKEND_URL;
 let FRONTEND_HOST = PRODUCTION_FRONTEND_URL;
