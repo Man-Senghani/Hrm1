@@ -2,22 +2,18 @@ import axios from 'axios';
 
 // 🛰️ DYNAMIC ENDPOINT CONFIGURATION
 export const getDynamicApiUrl = () => {
-  if (import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL;
   if (typeof window !== 'undefined') {
     const host = window.location.hostname;
     const port = window.location.port;
-    if (host.includes('hrm-staging.aupanishad.tech')) {
+    if (host.includes('staging')) {
       return 'https://hrm1-wljp.onrender.com';
-    }
-    if (host.includes('aupanishad.tech')) {
-      return 'https://hrm1-1-zli1.onrender.com';
     }
     if ((host === 'localhost' || host === '127.0.0.1') && port && port !== '5000') {
       return 'http://localhost:5000';
     }
-    return window.location.origin;
+    return 'https://hrm1-1-zli1.onrender.com';
   }
-  return '';
+  return 'https://hrm1-1-zli1.onrender.com';
 };
 
 export const API_BASE_URL = getDynamicApiUrl();
