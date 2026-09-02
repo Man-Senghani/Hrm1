@@ -14,19 +14,16 @@ import {
   ArrowDownToLine
 } from 'lucide-react';
 
-const DesktopAppRequiredModal = ({
-  isOpen,
-  onClose,
-  onRetry,
-  token,
-  isRetrying = false
-}) => {
+import { API_BASE_URL } from '../services/api';
+
+const DesktopAppRequiredModal = ({ isOpen, onClose, onRetry, isRetrying = false }) => {
   const [appInfo, setAppInfo] = useState({
     version: '1.2.8',
     platform: 'Windows (x64)',
     downloadUrl: '/api/desktop-app/download'
   });
   const [downloading, setDownloading] = useState(false);
+  const token = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('token') : '';
 
   useEffect(() => {
     if (isOpen) {
@@ -47,7 +44,7 @@ const DesktopAppRequiredModal = ({
 
   const handleLaunchApp = () => {
     const userToken = token || (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('token') : '');
-    const serverHost = import.meta.env?.VITE_API_URL || 'https://hrm1-wljp.onrender.com';
+    const serverHost = API_BASE_URL || window.location.origin;
     window.location.href = `fluidhr-tracker://start?token=${encodeURIComponent(userToken || '')}&server=${encodeURIComponent(serverHost)}`;
   };
 

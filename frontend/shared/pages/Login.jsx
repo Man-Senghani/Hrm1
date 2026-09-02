@@ -4,6 +4,8 @@ import axios from 'axios';
 import { ShieldCheck, ArrowRight, Lock, Mail, AlertCircle, Zap } from 'lucide-react';
 import { EntryButton, EntryInput, EntrySelect } from '../components/EntryPrimitives';
 
+import { API_BASE_URL } from '../services/api';
+
 const Login = () => {
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
@@ -18,7 +20,7 @@ const Login = () => {
 
     if (isDesktop) {
       setShowThankYou(true);
-      const serverHost = import.meta.env.VITE_API_URL || axios.defaults.baseURL || 'https://hrm1-wljp.onrender.com';
+      const serverHost = API_BASE_URL || window.location.origin;
       window.location.href = `fluidhr-tracker://auth?token=${encodeURIComponent(authToken)}&server=${encodeURIComponent(serverHost)}`;
       return;
     }
@@ -129,7 +131,7 @@ const Login = () => {
   
                 <div className="space-y-4">
                    <a 
-                     href={`fluidhr-tracker://auth?token=${encodeURIComponent(token)}&server=${encodeURIComponent(import.meta.env.VITE_API_URL || axios.defaults.baseURL || 'https://hrm1-wljp.onrender.com')}`}
+                     href={`fluidhr-tracker://auth?token=${encodeURIComponent(token)}&server=${encodeURIComponent(API_BASE_URL || window.location.origin)}`}
                      className="h-[48px] w-full text-[15px] font-bold bg-[#00a76b] text-[#fffefb] hover:bg-[#201515] rounded-[4px] flex items-center justify-center gap-2 transition-all shadow-sm"
                    >
                       Open FluidHR Tracker <ArrowRight size={20} />

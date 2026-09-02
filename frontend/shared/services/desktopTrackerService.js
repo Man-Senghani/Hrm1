@@ -3,6 +3,8 @@
  * Connects the web application to the FluidHR Desktop Application.
  */
 
+import { API_BASE_URL } from './api';
+
 const LOCAL_BRIDGE_URL = 'http://127.0.0.1:28734';
 
 /**
@@ -67,7 +69,7 @@ export const startDesktopTracker = async (token) => {
     window.addEventListener('blur', onBlur);
 
     // Launch custom protocol with server origin
-    const serverHost = import.meta.env?.VITE_API_URL || 'https://hrm1-wljp.onrender.com';
+    const serverHost = API_BASE_URL || window.location.origin;
     const protocolUrl = `fluidhr-tracker://start?token=${encodeURIComponent(token || '')}&server=${encodeURIComponent(serverHost)}`;
     
     // Create invisible iframe or navigation
