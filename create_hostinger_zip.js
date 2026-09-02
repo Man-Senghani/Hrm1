@@ -29,6 +29,35 @@ for (const mod of distModules) {
   }
 }
 
+// Write .htaccess for SPA routing and HTTPS compatibility
+const htaccessContent = `<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /
+
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteCond %{REQUEST_FILENAME} !-d
+  RewriteRule ^admin/(.*)$ /admin/index.html [L]
+
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteCond %{REQUEST_FILENAME} !-d
+  RewriteRule ^hr/(.*)$ /hr/index.html [L]
+
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteCond %{REQUEST_FILENAME} !-d
+  RewriteRule ^employee/(.*)$ /employee/index.html [L]
+
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteCond %{REQUEST_FILENAME} !-d
+  RewriteRule ^manager/(.*)$ /manager/index.html [L]
+
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteCond %{REQUEST_FILENAME} !-d
+  RewriteRule . /index.html [L]
+</IfModule>
+`;
+
+fs.writeFileSync(path.join(baseDir, '.htaccess'), htaccessContent, 'utf8');
+
 if (fs.existsSync(zipPath)) {
   fs.unlinkSync(zipPath);
 }
