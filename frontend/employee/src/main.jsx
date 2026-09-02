@@ -4,13 +4,17 @@ import { BrowserRouter } from 'react-router-dom'
 import axios from 'axios'
 import './index.css'
 import App from './App.jsx'
-import { API_BASE_URL } from '@shared/services/api';
+import { API_BASE_URL, getDynamicApiUrl } from '@shared/services/api';
 
 // 🛰️ DYNAMIC AXIOS BASE URL CONFIGURATION
 axios.defaults.baseURL = API_BASE_URL;
 
 // Attach authorization token
 axios.interceptors.request.use((config) => {
+  const dynamicUrl = getDynamicApiUrl();
+  if (dynamicUrl) {
+    config.baseURL = dynamicUrl;
+  }
   const token = sessionStorage.getItem('token');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;

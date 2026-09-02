@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 // 🛰️ DYNAMIC ENDPOINT CONFIGURATION
-const getDynamicApiUrl = () => {
+export const getDynamicApiUrl = () => {
   if (import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL;
   if (typeof window !== 'undefined') {
     const host = window.location.hostname;
@@ -10,7 +10,7 @@ const getDynamicApiUrl = () => {
       return 'https://hrm1-wljp.onrender.com';
     }
     if (host.includes('aupanishad.tech')) {
-      return 'https://hrmf-1-zli1.onrender.com';
+      return 'https://hrm1-1-zli1.onrender.com';
     }
     if ((host === 'localhost' || host === '127.0.0.1') && port && port !== '5000') {
       return 'http://localhost:5000';

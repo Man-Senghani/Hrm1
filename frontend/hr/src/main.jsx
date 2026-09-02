@@ -4,14 +4,18 @@ import { BrowserRouter } from 'react-router-dom'
 import axios from 'axios'
 import App from './App';
 import ErrorBoundary from '@shared/components/ErrorBoundary';
-import { API_BASE_URL } from '@shared/services/api';
+import { API_BASE_URL, getDynamicApiUrl } from '@shared/services/api';
 import './index.css';
 
-// Automatically route API requests to same origin or VITE_API_URL
+// 🛰️ DYNAMIC AXIOS BASE URL CONFIGURATION
 axios.defaults.baseURL = API_BASE_URL;
 
-// Attach authorization token
+// Configure global axios interceptor to automatically attach authorization header
 axios.interceptors.request.use((config) => {
+  const dynamicUrl = getDynamicApiUrl();
+  if (dynamicUrl) {
+    config.baseURL = dynamicUrl;
+  }
   const token = sessionStorage.getItem('token');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
