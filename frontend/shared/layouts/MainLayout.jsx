@@ -409,11 +409,11 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
   }, [role, location.pathname]);
 
   const getMenuItemsByRole = (currentRole) => {
-    const prefix = '';
+    const prefix = `/${currentRole}`;
     switch (currentRole) {
       case 'hr':
         return [
-          { name: 'Dashboard', path: `${prefix}/dashboard`, icon: LayoutDashboard },
+          { name: 'Dashboard', path: `${prefix}/employees`, icon: LayoutDashboard },
           { name: 'Employees', path: `${prefix}/employees`, icon: Users },
           { name: 'Daily Tasks Board', path: `${prefix}/tasks`, icon: CheckSquare },
           { name: 'Daily Report', path: `${prefix}/daily-report`, icon: FileText },
@@ -430,7 +430,7 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
         ];
       case 'employee':
         return [
-          { name: 'Dashboard', path: `${prefix}/dashboard`, icon: LayoutDashboard },
+          { name: 'Dashboard', path: `${prefix}/attendance`, icon: LayoutDashboard },
           { name: 'Attendance', path: `${prefix}/attendance`, icon: Calendar },
           { name: 'Daily Report', path: `${prefix}/daily-report`, icon: FileText },
           { name: 'Apply Leave', path: `${prefix}/leave`, icon: ClipboardList },
@@ -440,7 +440,7 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
         ];
       case 'manager':
         return [
-          { name: 'Dashboard', path: `${prefix}/dashboard`, icon: LayoutDashboard },
+          { name: 'Dashboard', path: `${prefix}/employees`, icon: LayoutDashboard },
           { name: 'Team / Employees', path: `${prefix}/employees`, icon: Users },
           { name: 'Daily Tasks Board', path: `${prefix}/tasks`, icon: CheckSquare },
           { name: 'Daily Report', path: `${prefix}/daily-report`, icon: FileText },
