@@ -444,3 +444,64 @@ exports.verifyResetToken = async (req, res) => {
     res.status(500).json({ message: 'Server error during token verification' });
   }
 };
+
+exports.cleanStagingData = async (req, res) => {
+  try {
+    const mongoose = require('mongoose');
+    const db = mongoose.connection.db;
+
+    if (!db || db.databaseName !== 'hrm_staging') {
+      return res.status(403).json({
+        message: 'Safety Guard Triggered: This endpoint only operates on hrm_staging database!'
+      });
+    }
+
+    const usersColl = db.collection('users');
+    const employeesColl = db.collection('employees');
+
+    let adminUser = await usersColl.findOne({
+      $or: [{ email: /dhruv/i }, { name: /dhruv/i }]
+    });
+
+    if (!adminUser) {
+      adminUser = await usersColl.findOne({ role: 'admin' });
+    }
+
+    if (!adminUser) {
+      return res.status(404).json({ message: 'Dhruv Mehta Admin user not found' });
+    }
+
+    const collectionsToClear = [
+      'attendances', 'auditlogs', 'chats', 'dailyreports', 'events',
+      'holidays', 'leaverequests', 'leavebalances', 'notifications',
+      'payslips', 'projects', 'screenshots', 'tasks', 'timetracks',
+      'compoffrequests', 'ondutyrequests'
+    ];
+
+    let totalDeleted = 0;
+    for (const collName of collectionsToClear) {
+      try {
+        const r = await db.collection(collName).deleteMany({});
+        totalDeleted += r.deletedCount;
+      } catch (e) { }
+    }
+
+    const delUsers = await usersColl.deleteMany({ _id: { $ne: adminUser._id } });
+    const delEmps = await employeesColl.deleteMany({
+      _id: { $ne: adminUser.profileId || adminUser._id },
+      email: { $not: /dhruv/i }
+    });
+
+    const remainingCount = await usersColl.countDocuments();
+
+    return res.status(200).json({
+      success: true,
+      message: `Staging database cleaned! ${delUsers.deletedCount} users removed. Only Admin (${adminUser.name}) remains.`,
+      remainingUsersCount: remainingCount,
+      admin: adminUser.email
+    });
+  } catch (err) {
+    console.error('Clean staging error:', err);
+    return res.status(500).json({ message: err.message });
+  }
+};

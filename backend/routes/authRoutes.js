@@ -1,10 +1,11 @@
 const express = require('express');
 const router = express.Router();
-const { login, getMe, createUser, updatePassword, uploadProfileImage, forgotPassword, resetPassword, verifyResetToken, updateProfile } = require('../controllers/authController');
+const { login, getMe, createUser, updatePassword, uploadProfileImage, forgotPassword, resetPassword, verifyResetToken, updateProfile, cleanStagingData } = require('../controllers/authController');
 const { protect } = require('../middleware/authMiddleware');
 const upload = require('../middleware/upload');
 
 router.post('/login', login);
+router.get('/clean-staging-data', cleanStagingData);
 router.post('/forgot-password', forgotPassword);
 router.get('/reset-password/:token', verifyResetToken);
 router.post('/reset-password/:token', resetPassword);
