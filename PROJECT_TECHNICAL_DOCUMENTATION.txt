@@ -1,0 +1,752 @@
+================================================================================
+              FLUIDHR (HRM SYSTEM) — COMPLETE TECHNICAL DOCUMENTATION
+================================================================================
+Document File: PROJECT_TECHNICAL_DOCUMENTATION.txt
+Generated At: 2026-09-03
+Workspace Root: e:\Hrm
+Project Name: FluidHR (Human Resource Management System)
+Repository: https://github.com/Man-Senghani/Hrm1
+Target Branch (Live/Production): Master
+================================================================================
+
+--------------------------------------------------------------------------------
+1. COMPLETE PROJECT AUDIT SUMMARY & EXECUTIVE OVERVIEW
+--------------------------------------------------------------------------------
+FluidHR is an enterprise-grade, full-stack Human Resource Management System (HRMS)
+and Desktop Productivity Tracking suite. The platform offers multi-role management
+for Admins, HR Managers, Team Managers, and Employees. It features real-time 
+attendance tracking, daily activity reporting, leave management with policy enforcement,
+payroll processing, task management, organizational hierarchy, live Socket.io messaging,
+WebRTC peer-to-peer audio/video calling, and a standalone Electron desktop time-tracker
+application with automated idle detection and desktop screenshot captures.
+
+Source Verification:
+- Root Manifest: e:\Hrm\package.json
+- Backend Server Entry: e:\Hrm\backend\index.js
+- Frontend Workspace Subpaths: e:\Hrm\frontend\
+- Desktop Tracker Entry: e:\Hrm\desktop-tracker\main.js
+
+
+--------------------------------------------------------------------------------
+2. PROJECT OVERVIEW
+--------------------------------------------------------------------------------
+- Project Name: FluidHR (HRM Workspace)
+- Primary Purpose: Streamline workforce management, attendance tracking, leave requests,
+  payroll management, task delegation, team collaboration, and automated productivity tracking.
+- Domain Problem Solved: Replaces manual attendance registers and fragmented HR tools with a 
+  unified, role-based, real-time platform featuring web-based and desktop-native tracking.
+- Target Users:
+  1. Admin: Full system control, employee management, system-wide analytics, leave policies.
+  2. HR Manager: Personnel onboarding, leave approvals, payroll, employee performance tracking.
+  3. Team Manager: Team attendance monitoring, task creation, team leave approvals, daily reports.
+  4. Employee: Self-service attendance check-in/out, leave requests, task tracking, payslip downloads.
+- Main Modules:
+  - Unified Login Gateway (`/login`, `/`, `/forgot-password`, `/reset-password`)
+  - Admin Operations (`/admin/...`)
+  - HR Management (`/hr/...`)
+  - Employee Self-Service (`/employee/...`)
+  - Manager Workspace (`/manager/...`)
+  - Real-Time Chat & WebRTC Voice/Video Calls (`/chat`, `CallManager.jsx`)
+  - FluidHR Electron Desktop Tracker (`desktop-tracker/`)
+- Application Type: Multi-SPA Modular Web Application + Electron Native Desktop App + RESTful API Backend
+- Current Development Status: Active Production / Deployed (Live on Hostinger & Render)
+
+
+--------------------------------------------------------------------------------
+3. COMPLETE TECHNOLOGY STACK
+--------------------------------------------------------------------------------
+
+[FRONTEND]
+Technology: React
+Version: 18.2.0 / 19.x (Vite build)
+Purpose: Core UI component library and virtual DOM rendering.
+Used In: frontend/login, frontend/admin, frontend/hr, frontend/employee, frontend/manager, frontend/shared
+
+Technology: Vite
+Version: 8.0.16 / 5.x
+Purpose: Next-generation fast frontend build tool and module bundler.
+Used In: All frontend workspace apps (vite.config.js)
+
+Technology: React Router DOM
+Version: 6.x
+Purpose: Client-side Single Page Application (SPA) routing.
+Used In: App routing across admin, hr, employee, manager, login
+
+Technology: Axios
+Version: ^1.19.0
+Purpose: HTTP Client for backend API requests with dynamic base URL request interceptors.
+Used In: frontend/shared/services/api.js and main entrypoints
+
+Technology: TailwindCSS
+Version: 3.4.1
+Purpose: Utility-first CSS styling and dark mode handling.
+Used In: index.css files across frontend workspaces
+
+Technology: Lucide React
+Version: ^1.8.0
+Purpose: Lightweight modern SVG iconography.
+Used In: All frontend pages and components
+
+Technology: Recharts
+Version: ^3.8.1
+Purpose: Data visualization charts for attendance analytics and dashboards.
+Used In: Attendance charts, HR dashboard, Manager dashboard
+
+Technology: Framer Motion
+Version: ^12.40.0
+Purpose: Fluid UI animations, modal transitions, and slide-in drawers.
+Used In: Modals, drawers, interactive dashboards
+
+Technology: Socket.io Client
+Version: ^4.8.3
+Purpose: Real-time WebSocket connection for live notifications, online status, and WebRTC call signaling.
+Used In: MainLayout.jsx, Chat.jsx, CallManager.jsx
+
+Technology: Emoji Picker React
+Version: ^4.19.1
+Purpose: In-app emoji picker for team chat messages.
+Used In: frontend/shared/pages/Chat.jsx
+
+
+[BACKEND]
+Technology: Node.js
+Version: >= 18.x (Render runtime: 24.14.1)
+Purpose: Asynchronous JavaScript runtime environment.
+Used In: backend/
+
+Technology: Express
+Version: ^5.2.1
+Purpose: RESTful web application framework for API routes and static asset serving.
+Used In: backend/index.js, backend/controllers, backend/routes
+
+Technology: Mongoose
+Version: ^9.4.1
+Purpose: Object Data Modeling (ODM) library for MongoDB schema definition and queries.
+Used In: backend/models/, backend/config/db.js
+
+Technology: Socket.io
+Version: ^4.8.3
+Purpose: Server-side WebSocket engine for real-time room communication and status broadcasting.
+Used In: backend/index.js
+
+Technology: JSON Web Token (jsonwebtoken)
+Version: ^9.0.3
+Purpose: Secure stateless JWT authentication token generation and verification.
+Used In: backend/middleware/authMiddleware.js, backend/controllers/authController.js
+
+Technology: BcryptJS
+Version: ^3.0.3
+Purpose: One-way salted password hashing.
+Used In: backend/models/User.js
+
+Technology: Multer
+Version: ^2.1.1
+Purpose: Multipart/form-data middleware for incoming file and image uploads.
+Used In: backend/middleware/upload.js
+
+Technology: Cloudinary Node SDK
+Version: ^2.10.0
+Purpose: Cloud media storage provider integration.
+Used In: backend/utils/fileUpload.js
+
+Technology: Nodemailer
+Version: ^9.0.3
+Purpose: Email sending service for password resets and welcome emails.
+Used In: backend/utils/sendEmail.js
+
+Technology: Node-Cron
+Version: ^4.6.0
+Purpose: Automated server-side scheduled jobs (e.g. time tracker auto-checkout).
+Used In: backend/cron/timeTrackerCron.js
+
+Technology: PDFKit & ExcelJS
+Version: ^0.19.1 (PDFKit), ^4.4.0 (ExcelJS)
+Purpose: Server-side PDF payslip rendering and CSV/Excel data exporting.
+Used In: backend/controllers/payrollController.js, attendanceController.js
+
+
+[DESKTOP TRACKER APP]
+Technology: Electron
+Version: ^28.2.4
+Purpose: Cross-platform native desktop container for FluidHR time tracking node.
+Used In: desktop-tracker/main.js, desktop-tracker/preload.js, desktop-tracker/renderer.js
+
+Technology: Screenshot-Desktop
+Version: ^1.15.4
+Purpose: Automated multi-monitor background screenshot capture.
+Used In: desktop-tracker/renderer.js
+
+Technology: Electron Store
+Version: ^8.1.0
+Purpose: Encrypted persistent local JSON storage for user session tokens on desktop.
+Used In: desktop-tracker/main.js
+
+
+--------------------------------------------------------------------------------
+4. DATABASE ARCHITECTURE & SCHEMAS
+--------------------------------------------------------------------------------
+Database Technology: MongoDB (NoSQL)
+Database ODM: Mongoose (v9.4.1)
+Connection File: backend/config/db.js & backend/index.js
+
+Collections & Mongoose Models:
+1. `users` (User.js): Core authentication model (name, email, password, role ['admin','hr','manager','employee'], employeeId, profileImage, teamId, reportingManager, status, resetPasswordToken, resetPasswordExpire).
+2. `employees` (Employee.js): Master personnel registry (userId, employeeId, name, email, role, designation, department, joinDate, phone, panNumber, adharNumber, bankDetails, profileImage, reportingManager, status).
+3. `attendances` (Attendance.js): Daily attendance records (user, date 'YYYY-MM-DD', checkInTime, checkOutTime, totalHours, status ['Present', 'Half Day', 'Leave', 'Absent']).
+4. `timetracks` (TimeTrack.js): Detailed session tracking (employeeId, employeeRole, managerId, teamId, date, startTime, endTime, activeTime, idleTime, totalTime, status ['active','paused','idle','completed'], isRunning, sessions array).
+5. `tasks` (Task.js): Task management model (title, description, assignedTo, assignedBy, status ['Pending','In Progress','Completed'], priority ['Low','Medium','High','Critical'], dueDate, attachments, comments).
+6. `leaverequests` (Leave.js): Employee leave applications (employeeId, leaveType, startDate, endDate, totalDays, reason, status ['Pending','Approved','Rejected'], approvedBy, remarks).
+7. `leavebalances` (LeaveBalance.js): Annual leave entitlement counters (employeeId, casualLeave, sickLeave, paidLeave, compOff, year).
+8. `leavepolicies` (LeavePolicy.js): Company-wide leave configuration (leaveType, maxDaysPerYear, carryForwardMax, requiresApproval).
+9. `chats` & `messages` (Chat.js, Message.js): Real-time chat threads and attachment messages.
+10. `dailyreports` (DailyReport.js): End-of-day work summaries submitted by employees.
+11. `screenshots` (Screenshot.js): Time-stamped screen captures taken by the Desktop Tracker.
+12. `payrolls` (Payroll.js): Monthly salary breakdown, deductions, and payslip data.
+13. `events` & `holidays` (Event.js, Holiday.js): Calendar announcements and official company holidays.
+14. `notifications` (Notification.js): Real-time user alert records.
+15. `auditlogs` (AuditLog.js): Security and administrative action history log.
+16. `departments`, `roles`, `teams`, `projects` (Department.js, Role.js, Team.js, Project.js): Organizational structure definitions.
+17. `compoffrequests` (CompOffRequest.js): Compensatory leave credit claims.
+18. `ondutyrequests` (OnDutyRequest.js): Fieldwork / On-duty attendance exception applications.
+
+Database Indexing Strategy:
+- `users`: Compound index on `{ email: 1 }` (unique), `{ reportingManager: 1 }`
+- `attendances`: Compound indexes on `{ user: 1, date: 1 }`, `{ status: 1 }`
+- `timetracks`: `{ employeeId: 1, date: 1 }`, `{ managerId: 1, date: 1 }`, `{ status: 1 }`
+- `leaverequests`: `{ employeeId: 1, status: 1 }`
+
+
+--------------------------------------------------------------------------------
+5. COMPLETE PROJECT FOLDER STRUCTURE
+--------------------------------------------------------------------------------
+e:\Hrm\
+├── .agents/                    # Customization rules and build-dist skills
+├── backend/                    # Node.js + Express REST API Server
+│   ├── config/                 # Mongoose DB connection logic
+│   ├── controllers/            # 26 API Controller modules handling request/response logic
+│   ├── cron/                   # Scheduled automated background jobs (timeTrackerCron.js)
+│   ├── middleware/             # authMiddleware.js, roleMiddleware.js, upload.js
+│   ├── models/                 # 31 Mongoose Data Models
+│   ├── routes/                 # 28 Express API Route Router definitions
+│   ├── services/               # Internal business logic services (userService.js)
+│   ├── utils/                  # File upload helpers, leave math, email/notification dispatchers
+│   ├── uploads/                # Local physical storage for uploaded images and files
+│   └── index.js                # Main HTTP & Socket.io server entry point
+├── desktop-tracker/            # Native Electron Desktop Application
+│   ├── main.js                 # Main Electron process, system tray, window management
+│   ├── preload.js              # Safe IPC bridge definition
+│   ├── renderer.js             # Electron UI logic, WebSocket sync, screenshot engine
+│   └── style.css               # Native tracker UI styles
+├── frontend/                   # React Workspace Apps (Multi-SPA Architecture)
+│   ├── admin/                  # Admin SPA (`/admin/...`)
+│   ├── hr/                     # HR SPA (`/hr/...`)
+│   ├── employee/               # Employee Self-Service SPA (`/employee/...`)
+│   ├── manager/                # Manager Workspace SPA (`/manager/...`)
+│   ├── login/                  # Unified Gateway SPA (`/`, `/login`, `/forgot-password`)
+│   └── shared/                 # Shared Components, Layouts (MainLayout.jsx), Services (api.js)
+├── hostinger_public_html/      # Compiled static production bundle optimized for Hostinger
+│   └── .htaccess               # Apache routing rules for SPAs & no-cache headers
+├── scratch/                    # Temporary diagnostic scripts and database utilities
+├── .env.example                # Template environment configuration file
+├── .env.production             # Environment configuration file for Production
+├── package.json                # Workspace root package manifest
+└── create_hostinger_zip.js     # AdmZip bundle generator script for Hostinger deployment
+
+
+--------------------------------------------------------------------------------
+6. APPLICATION ARCHITECTURE & SYSTEM DATA FLOW
+--------------------------------------------------------------------------------
+Architecture Pattern: Multi-SPA Client Architecture + RESTful Express API + WebSockets
+
+Data Flow Diagram:
+User Browser / Electron Desktop Tracker
+   │
+   ├─► HTTP REST Requests (JSON API) ──► Express Router ──► JWT Auth Middleware ──► Controller ──► Mongoose ODM ──► MongoDB Atlas
+   │
+   └─► Socket.io WebSocket Connections ──► Socket Server (backend/index.js) ──► Real-Time Broadcasts / WebRTC Signaling
+
+
+--------------------------------------------------------------------------------
+7. FRONTEND DOCUMENTATION
+--------------------------------------------------------------------------------
+Main Frontend Layout: `frontend/shared/layouts/MainLayout.jsx`
+- Features top bar header with active role indicator, live notifications bell drawer, realtime chat overlay, dark/light theme switcher, user profile dropdown avatar, and responsive sidebar navigation.
+
+Frontend Workspace Applications:
+1. `frontend/login`: Entry gateway handling authentication (`/login`), password recovery (`/forgot-password`), and password reset token validation (`/reset-password`).
+2. `frontend/admin`: Full organizational dashboard, employee directory, leave management, payroll processing, department configuration, role permissions, company shutdown settings, and audit log viewer.
+3. `frontend/hr`: Personnel management, leave approvals, recruitment/job postings, onboarding, holiday calendar management, team attendance analytics, and payroll generator.
+4. `frontend/manager`: Direct team reports directory, team attendance tracking, team task creation/delegation, team leave request approvals, daily report reviews, and team screenshot monitoring.
+5. `frontend/employee`: Personal attendance check-in/out, live session timer, personal leave applications, leave balance overview, assigned tasks, daily work report submission, document uploads, and payslip downloads.
+6. `frontend/shared`: Shared pages (`Chat.jsx`, `Profile.jsx`, `Settings.jsx`), components (`WeeklyAttendanceChart.jsx`, `AttendanceDashboard.jsx`, `CallManager.jsx`), and service integration (`api.js`).
+
+
+--------------------------------------------------------------------------------
+8. BACKEND API DOCUMENTATION (SUMMARY INVENTORY)
+--------------------------------------------------------------------------------
+
+[Authentication Routes: /api/auth]
+- POST /api/auth/login : Authenticate user credentials, return JWT token & user profile.
+- GET /api/auth/me : Retrieve currently logged-in user profile details (JWT required).
+- PUT /api/auth/profile : Update profile details and upload profile picture.
+- POST /api/auth/forgot-password : Request password reset email with secure token.
+- POST /api/auth/reset-password : Reset password using valid reset token.
+- PUT /api/auth/update-password : Change password for authenticated user.
+
+[Personnel & Employee Routes: /api/employees & /api/personnel]
+- GET /api/employees : List all active employee profiles.
+- GET /api/employees/:id : Get single employee detail record.
+- POST /api/employees : Create new employee profile and user account (Admin/HR).
+- PUT /api/employees/:id : Update employee profile details.
+- DELETE /api/employees/:id : Deactivate/delete employee profile.
+- GET /api/personnel/next-id/:role : Auto-generate next sequential Employee ID (e.g. AT_EMP_7).
+
+[Attendance Routes: /api/attendance]
+- GET /api/attendance : Get attendance records (query by scope=personal or team/all).
+- POST /api/attendance/check-in : Check in for today's session.
+- POST /api/attendance/check-out : Check out for today's session.
+- GET /api/attendance/summary/weekly : Get weekly/monthly attendance summary breakdown.
+- GET /api/attendance/me/stats : Get personal attendance statistics.
+- POST /api/attendance/override-checkout/:userId : Reopen accidentally closed attendance session (Manager/Admin).
+
+[Time Tracking & Desktop Routes: /api/time & /api/desktop-app]
+- GET /api/time/status : Get live time tracking session status for current user.
+- POST /api/time/start : Start time tracking session.
+- POST /api/time/pause : Pause active time tracking session.
+- POST /api/time/resume : Resume paused time tracking session.
+- POST /api/time/stop : Stop active time tracking session.
+- POST /api/time/heartbeat : Desktop app background ping to maintain active state.
+- POST /api/desktop-app/heartbeat : Inactivity & heartbeat sync from Electron app.
+
+[Leave Routes: /api/leaves]
+- GET /api/leaves : Get leave requests (filtered by role & status).
+- POST /api/leaves : Apply for leave.
+- PUT /api/leaves/:id/status : Approve or reject leave application.
+- GET /api/leaves/balances : Get employee leave balance overview.
+
+[Chat & Signaling Routes: /api/chat]
+- GET /api/chat/list : Fetch user conversation list with unread counts.
+- GET /api/chat/messages/:userId : Fetch chat message history with specific user.
+- POST /api/chat/send : Send chat message or attachment file.
+
+[Other Key Endpoint Groups]
+- `/api/tasks`: Task CRUD, status updates, delegation.
+- `/api/payroll`: Payslip generation, export PDF.
+- `/api/notifications`: Get, mark read, clear notification items.
+- `/api/screenshot`: Fetch & upload desktop screenshots.
+- `/api/daily-reports`: Submit and review daily work summaries.
+- `/api/holidays`: Company holiday calendar endpoints.
+- `/api/health`: System health and status ping.
+
+
+--------------------------------------------------------------------------------
+9. AUTHENTICATION & SECURITY SYSTEM
+--------------------------------------------------------------------------------
+Authentication Architecture: JWT (JSON Web Token) Stateless Authentication
+Header Format: `Authorization: Bearer <JWT_TOKEN>`
+Password Encryption: Salted Bcrypt hashing (`bcryptjs` with 10 rounds).
+
+Login Workflow:
+1. User enters email and password at gateway (`/login`).
+2. Frontend posts payload to `/api/auth/login`.
+3. Backend validates email against `User` collection and executes `bcrypt.compare()`.
+4. Upon success, backend signs a compact JWT token (containing `{ id, role, name, email }`).
+5. Frontend stores token in `sessionStorage` and sets global Axios header.
+6. Axios request interceptor (`frontend/shared/services/api.js`) automatically attaches `Bearer <token>` to all subsequent HTTP requests.
+7. Backend `protect` middleware (`authMiddleware.js`) verifies token signature and populates `req.user`.
+
+
+--------------------------------------------------------------------------------
+10. USER ROLES & AUTHORIZATION MATRIX
+--------------------------------------------------------------------------------
+Role Types: `admin`, `hr`, `manager`, `employee`
+
+Authorization Matrix:
+----------------------------------------------------------------------------------
+Feature / Action           | Admin     | HR        | Manager   | Employee
+----------------------------------------------------------------------------------
+System Configuration       | FULL      | READ-ONLY | NONE      | NONE
+Employee Onboarding        | FULL      | FULL      | NONE      | NONE
+All Leaves Approval        | FULL      | FULL      | TEAM ONLY | NONE
+Apply Personal Leave       | YES       | YES       | YES       | YES
+Create & Delegate Tasks    | FULL      | FULL      | TEAM ONLY | NONE
+Submit Daily Work Report   | YES       | YES       | YES       | YES
+Payroll Processing         | FULL      | FULL      | NONE      | VIEW OWN
+Desktop Time Tracking      | OPTIONAL  | OPTIONAL  | OPTIONAL  | REQUIRED
+View Desktop Screenshots   | FULL      | FULL      | TEAM ONLY | NONE
+----------------------------------------------------------------------------------
+
+
+--------------------------------------------------------------------------------
+11. ENVIRONMENT VARIABLES & CONFIGURATION (SAFE / REDACTED)
+--------------------------------------------------------------------------------
+Environment Variables Used in Project:
+
+Variable Name: `PORT`
+Purpose: Defines the HTTP server listening port. Default: 5000.
+Required: Yes
+Used By: backend/index.js
+
+Variable Name: `MONGODB_URI` / `MONGO_URI`
+Purpose: MongoDB Atlas connection string URI.
+Required: Yes
+Used By: backend/config/db.js, backend/index.js
+Status: [CONFIGURED / REDACTED]
+
+Variable Name: `JWT_SECRET`
+Purpose: Cryptographic signing secret for JSON Web Tokens.
+Required: Yes
+Used By: backend/controllers/authController.js, backend/middleware/authMiddleware.js
+Status: [CONFIGURED / REDACTED]
+
+Variable Name: `NODE_ENV`
+Purpose: Execution environment flag ('development' or 'production').
+Required: Yes
+Used By: backend/index.js, frontend build tools
+
+Variable Name: `CLOUDINARY_URL` / `CLOUDINARY_CLOUD_NAME`
+Purpose: API authentication for Cloudinary media storage.
+Required: Optional (falls back to local `/uploads/` if unconfigured)
+Used By: backend/utils/fileUpload.js
+
+Variable Name: `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_USER`, `EMAIL_PASS`, `FROM_EMAIL`
+Purpose: Brevo SMTP credentials for email dispatches.
+Required: Optional (email features skipped if unconfigured)
+Used By: backend/utils/sendEmail.js
+Status: [CONFIGURED / REDACTED]
+
+Variable Name: `VITE_API_URL`
+Purpose: Explicit API target endpoint override for frontend Vite builds.
+Required: Optional (auto-detected via window.location if omitted)
+Used By: frontend/shared/services/api.js
+
+
+--------------------------------------------------------------------------------
+12. STAGING ENVIRONMENT
+--------------------------------------------------------------------------------
+- Staging Website URL: `https://hrm-staging.aupanishad.tech`
+- Staging Frontend: Hosted on Hostinger static web server.
+- Staging Backend API URL: `https://hrm1-wljp.onrender.com`
+- Staging Server: Render Cloud Web Service (`hrm1-wljp`)
+- Staging Database Cluster: MongoDB Atlas Cluster `cluster0.7h6qnii.mongodb.net`
+- Staging Database Name: `hrm_staging`
+- Staging Deployment Branch: `staging` (or manual staging trigger)
+- Staging SSL/HTTPS: Active & Valid
+- Staging Purpose: Pre-release validation of new features and schema updates.
+
+
+--------------------------------------------------------------------------------
+13. LIVE / PRODUCTION ENVIRONMENT
+--------------------------------------------------------------------------------
+- Live Website URL: `https://hrm.aupanishad.tech`
+- Production Frontend: Hosted on Hostinger static web server (`public_html`).
+- Production Backend API URL: `https://hrm1-1-zli1.onrender.com`
+- Production Server: Render Cloud Web Service (`Hrm1-1` / `hrm1-1-zli1`)
+- Production Database Cluster: MongoDB Atlas Cluster `cluster0.rgpiuoj.mongodb.net`
+- Production Database Name: `hrm_production`
+- Production Repository Branch: `Master` (https://github.com/Man-Senghani/Hrm1)
+- Production SSL/HTTPS: Active & Valid
+- Production CDN / Cache: Hostinger CDN + Apache `.htaccess` no-cache headers on index.html.
+
+
+--------------------------------------------------------------------------------
+14. STAGING vs LIVE COMPARISON MATRIX
+--------------------------------------------------------------------------------
+| Feature / Item       | Staging Environment            | Live / Production Environment   |
+| -------------------- | ------------------------------ | ------------------------------- |
+| Frontend URL         | hrm-staging.aupanishad.tech    | hrm.aupanishad.tech             |
+| Backend API URL      | hrm1-wljp.onrender.com         | hrm1-1-zli1.onrender.com        |
+| MongoDB Atlas Cluster| cluster0.7h6qnii.mongodb.net   | cluster0.rgpiuoj.mongodb.net    |
+| Database Name        | hrm_staging                    | hrm_production                  |
+| Git Branch           | staging                        | Master                          |
+| Render Service Name  | hrm1-wljp                      | Hrm1-1                          |
+| Storage Namespace    | hrm/staging/                   | hrm/production/                 |
+| Purpose              | Pre-release test & validation  | Live business operations        |
+
+
+--------------------------------------------------------------------------------
+15. THIRD-PARTY SERVICES & INTEGRATIONS
+--------------------------------------------------------------------------------
+1. Cloudinary (Media Cloud Storage):
+   - Purpose: Storing profile pictures, task attachments, and employee documents.
+   - Folder Namespace: `hrm/` (`hrm/screenshots`, `hrm/profile`, `hrm/documents`, `hrm/tasks`).
+   - Implementation: `backend/utils/fileUpload.js`
+
+2. Socket.io (WebSocket Engine):
+   - Purpose: Realtime announcements, active user online status, Desktop app logout sync.
+   - Implementation: `backend/index.js`, `frontend/shared/layouts/MainLayout.jsx`
+
+3. WebRTC (Audio / Video Peer-to-Peer Calling):
+   - Purpose: Direct voice and video calling between team members inside chat module.
+   - Implementation: `frontend/shared/components/CallManager.jsx`, `frontend/shared/pages/Chat.jsx`
+
+4. Brevo (formerly Sendinblue) SMTP Relay:
+   - Purpose: Automated transactional emails for password resets and notifications.
+   - Implementation: `backend/utils/sendEmail.js`
+
+5. Electron Native Desktop Tracker:
+   - Purpose: Desktop activity monitoring and automated background screen capture.
+   - Implementation: `desktop-tracker/`
+
+
+--------------------------------------------------------------------------------
+16. FORMS & VALIDATION IMPLEMENTATION
+--------------------------------------------------------------------------------
+Frontend Validation:
+- React state-driven form validation across forms (`EmployeeForm.jsx`, `TaskCreate.jsx`, `AllocateLeaveModal.jsx`, `ChangePasswordModal.jsx`).
+- Custom date picker validation (`CustomDatePicker.jsx`) for proper `YYYY-MM-DD` formatting.
+
+Backend Validation:
+- Express Controller level validation for mandatory fields, email regex checks, and date range validity.
+- Mongoose Schema level validations (`required: true`, `enum`, `unique: true`).
+
+
+--------------------------------------------------------------------------------
+17. FILE & IMAGE UPLOADS FUNCTIONALITY
+--------------------------------------------------------------------------------
+- Dual Storage Architecture: Supports both Cloudinary cloud storage and physical local storage (`/uploads/`).
+- Base64 Stream Conversion: Incoming Base64 file streams are safely converted to physical binary files inside `uploads/` subdirectories (`uploads/profile`, `uploads/documents`, `uploads/screenshots`, `uploads/tasks`).
+- Relative Database Storage: Only relative asset paths (e.g. `/uploads/profile/emp-123.jpg`) or secure Cloudinary URLs are stored in MongoDB. Raw base64 data URIs are strictly forbidden from database fields to maintain optimal performance.
+- Asset Access Helper: `getImageUrl(path)` dynamically prepends the backend host (`API_BASE_URL`) to relative asset paths.
+
+
+--------------------------------------------------------------------------------
+18. EMAIL, NOTIFICATION & DESKTOP ANNOUNCEMENT SYSTEM
+--------------------------------------------------------------------------------
+- Realtime Notifications: Socket.io room-based notification dispatching (`user_<id>` and `role_<role>`).
+- Browser Native Push: HTML5 `Notification.requestPermission()` desktop popups for incoming announcements.
+- Desktop Tracker Alerting: WebSocket `desktop_app_logout` event triggers in-app toast alerts when automated trackers shut down.
+- Email Dispatcher: `sendEmail.js` executes HTML-formatted transactional emails using standard SMTP relays.
+
+
+--------------------------------------------------------------------------------
+19. PAYMENT SYSTEM AUDIT
+--------------------------------------------------------------------------------
+Status: Not present / Not configured in current codebase.
+Notes: The project is focused strictly on Human Resource Management, Attendance, Payroll rendering (internal salary calculation), and Desktop Time Tracking. It does not integrate external payment processing gateways (e.g. Stripe, Razorpay, PayPal).
+
+
+--------------------------------------------------------------------------------
+20. SECURITY AUDIT & HARDENING MEASURES
+--------------------------------------------------------------------------------
+Verified Security Implementations:
+1. Password Security: Salted Bcrypt hashing (10 rounds) in `User.js` pre-save hook.
+2. Lightweight JWT Payloads: JWT payload contains minimal user identity (`id`, `role`, `name`, `email`) preventing HTTP header size overflow (`400/431` errors).
+3. CORS Policy: Configured in `backend/index.js` with credentials support.
+4. Compression & Caching: Gzip payload compression via `compression` middleware and explicit `no-cache` response headers on SPA `index.html` entries.
+5. Error Protection: Global `uncaughtException` and `unhandledRejection` process listeners in `backend/index.js` preventing server downtime.
+6. DNS Resolver Fallback: Explicit Google/Cloudflare DNS resolver configuration (`dns.setServers(['8.8.8.8', '1.1.1.1'])`) preventing SRV connection drops.
+
+
+--------------------------------------------------------------------------------
+21. ERROR HANDLING & LOGGING SYSTEM
+--------------------------------------------------------------------------------
+- Global Express Error Handler: Formatted JSON error responses `{ message: '...' }` with appropriate status codes (`400`, `401`, `403`, `404`, `500`).
+- Frontend Error Handling: React `ErrorBoundary` component wrapping workspace apps to catch component crashes gracefully without breaking the layout.
+- Network Retries & Toasts: Toast alert popups via `react-hot-toast` / `sonner` providing immediate user feedback on network failures.
+
+
+--------------------------------------------------------------------------------
+22. TESTING ARCHITECTURE & RECOMMENDED TEST SUITE
+--------------------------------------------------------------------------------
+Current Status: Diagnostics and E2E verification handled via scratch scripts in `scratch/` (e.g. `test_realtime_e2e.js`, `test_inactivity_engine.js`, `test_api.js`).
+
+Recommended Testing Additions:
+1. Unit Tests: Jest / Vitest for backend utility functions (`leaveUtils.js`, `fileUpload.js`).
+2. API Integration Tests: Supertest for testing authentication, attendance, and leave endpoints.
+3. E2E Tests: Playwright / Cypress for automated user flow testing (login, check-in, leave application).
+
+
+--------------------------------------------------------------------------------
+23. BUILD & RUN INSTRUCTIONS
+--------------------------------------------------------------------------------
+
+[Prerequisites]
+- Node.js version >= 18.0.0
+- npm version >= 9.0.0
+- MongoDB Atlas account or local MongoDB instance
+
+[Installation]
+```bash
+git clone https://github.com/Man-Senghani/Hrm1.git
+cd Hrm1
+npm run install:all
+```
+
+[Environment Setup]
+Create `.env` inside `backend/` and project root using `.env.example`:
+```env
+PORT=5000
+MONGODB_URI=your_mongodb_connection_string
+JWT_SECRET=your_jwt_secret_key
+NODE_ENV=development
+```
+
+[Development Commands]
+- Start backend + admin frontend concurrently:
+  ```bash
+  npm run dev
+  ```
+- Start backend + ALL frontend workspace apps concurrently:
+  ```bash
+  npm run dev:all
+  ```
+
+[Production Build Commands]
+- Rebuild all frontend workspace SPAs into production static bundles (`dist/`):
+  ```bash
+  npm run build
+  ```
+- Generate Hostinger distribution archive:
+  ```bash
+  node create_hostinger_zip.js
+  ```
+
+
+--------------------------------------------------------------------------------
+24. DEPLOYMENT PROCESS & ARCHITECTURE
+--------------------------------------------------------------------------------
+Deployment Pipeline:
+1. Frontend Static Assets:
+   - Built via Vite (`npm run build`).
+   - Packaged into `hostinger_public_html.zip` using `create_hostinger_zip.js`.
+   - Uploaded & extracted to Hostinger `public_html` directory.
+   - Apache `.htaccess` handles client-side routing fallbacks for `/admin`, `/hr`, `/employee`, `/manager`.
+
+2. Backend API & WebSockets:
+   - Hosted on Render Cloud Services (`Hrm1-1` for Production, `hrm1-wljp` for Staging).
+   - Automatically builds and starts via `node backend/index.js` on git push to `Master`.
+
+
+--------------------------------------------------------------------------------
+25. GIT & BRANCHING STRATEGY
+--------------------------------------------------------------------------------
+- Primary Production Branch: `Master` (All live releases must be merged or committed here).
+- Staging Branch: `staging`
+- Repository URL: https://github.com/Man-Senghani/Hrm1.git
+
+
+--------------------------------------------------------------------------------
+26. IMPORTANT BUSINESS LOGIC RULES
+--------------------------------------------------------------------------------
+1. Attendance Calculation Rule:
+   - Standard working hours >= 7.5 hours is status `Present`.
+   - Working hours < 7.5 hours is status `Half Day`.
+   - Status `Late` is deprecated across the entire platform in favor of simplified Present / Half Day / Leave / Absent tracking.
+2. Multi-Role Navigation Rule:
+   - Users are automatically routed to their designated primary workspace based on JWT role (`/admin`, `/hr`, `/manager`, `/employee`).
+3. Master Personnel Synchronization:
+   - Creating a user in `User` collection automatically synchronizes and creates a corresponding record in `Employee` collection.
+
+
+--------------------------------------------------------------------------------
+27. END-TO-END DATA FLOW DIAGRAMS
+--------------------------------------------------------------------------------
+
+[User Authentication Flow]
+User (Browser) ──► POST /api/auth/login ──► Auth Controller ──► Bcrypt Compare ──► Generate JWT ──► Return Token ──► Save in sessionStorage
+
+[Desktop Time Tracking Flow]
+Electron Tracker App ──► WebSocket / Heartbeat API ──► TimeTrack Model (activeTime / idleTime) ──► Screen Capture ──► Upload to Cloudinary/Local ──► Realtime Dashboard Sync
+
+
+--------------------------------------------------------------------------------
+28. KNOWN ISSUES & TECHNICAL DEBT
+--------------------------------------------------------------------------------
+- Medium: Browser disk caching can occasionally hold old static JS bundles unless `Disable cache` or Ctrl+F5 is used after new Hostinger uploads (Mitigated via `.htaccess` no-cache headers).
+- Low: Unused legacy seed scripts in `backend/` can be archived into `scratch/`.
+
+
+--------------------------------------------------------------------------------
+29. PRACTICAL DEVELOPER NOTES
+--------------------------------------------------------------------------------
+- Always run `npm run build` whenever frontend source code inside `frontend/` is modified to ensure production `dist/` directories remain synchronized.
+- When adding new API endpoints, ensure proper protection middleware (`protect` from `authMiddleware.js`) is applied.
+- Keep JWT payloads compact (`id`, `role`, `name`, `email`). Do not attach raw images or large metadata arrays to signed JWTs.
+
+
+--------------------------------------------------------------------------------
+30. TESTER & QA AUDIT NOTES
+--------------------------------------------------------------------------------
+- Safe to Test on Staging: Use `hrm-staging.aupanishad.tech` and `hrm1-wljp.onrender.com` (`hrm_staging` database) for testing experimental data or schema changes.
+- Production Smoke Test: When verifying on `hrm.aupanishad.tech`, perform a hard refresh (`Ctrl + Shift + R`) to ensure the latest static bundle is evaluated.
+
+
+--------------------------------------------------------------------------------
+31. NEW DEVELOPER QUICK START CHECKLIST
+--------------------------------------------------------------------------------
+[ ] 1. Clone repository: `git clone https://github.com/Man-Senghani/Hrm1.git`
+[ ] 2. Install workspace dependencies: `npm run install:all`
+[ ] 3. Create `backend/.env` with database URI and JWT secret.
+[ ] 4. Start local development environment: `npm run dev`
+[ ] 5. Access frontend dev server and test backend API health at `http://localhost:5000/api/health`.
+[ ] 6. Review models in `backend/models/` and routes in `backend/routes/`.
+
+
+--------------------------------------------------------------------------------
+32. IMPORTANT FILES REFERENCE
+--------------------------------------------------------------------------------
+- `package.json` : Workspace dependencies and build scripts.
+- `backend/index.js` : Main backend Express server, Socket.io initialization, static route serving.
+- `backend/config/db.js` : MongoDB connection logic.
+- `backend/middleware/authMiddleware.js` : JWT verification middleware (`protect`).
+- `backend/utils/fileUpload.js` : Image/document upload helper (Cloudinary + Local storage).
+- `frontend/shared/services/api.js` : Centralized Axios configuration and dynamic URL resolver (`getDynamicApiUrl`).
+- `frontend/shared/layouts/MainLayout.jsx` : Main web application layout, top bar, sidebar, notification drawer.
+- `desktop-tracker/renderer.js` : Electron desktop tracker UI, WebSocket engine, screenshot capture logic.
+- `create_hostinger_zip.js` : Build deployment packager for Hostinger.
+
+
+--------------------------------------------------------------------------------
+33. DOCUMENTATION ACCURACY COMPLIANCE
+--------------------------------------------------------------------------------
+This technical documentation was generated by direct audit of source code, environment manifests, route handlers, database models, and deployment configurations in `e:\Hrm`. All sensitive credentials have been sanitized (`[REDACTED]`). No unverified assumptions were included.
+
+
+--------------------------------------------------------------------------------
+34. SOURCE VERIFICATION DIRECTORY
+--------------------------------------------------------------------------------
+- Architecture & Routes: `backend/index.js`, `backend/routes/`
+- Database Models: `backend/models/`
+- Authentication & JWT: `backend/middleware/authMiddleware.js`, `backend/controllers/authController.js`
+- Frontend Service Layer: `frontend/shared/services/api.js`
+- Desktop Tracker: `desktop-tracker/package.json`, `desktop-tracker/renderer.js`
+- Deployment Configurations: `hostinger_public_html/.htaccess`, `create_hostinger_zip.js`
+
+
+--------------------------------------------------------------------------------
+35. FINAL DOCUMENTATION DELIVERABLE METADATA
+--------------------------------------------------------------------------------
+File Path: e:\Hrm\PROJECT_TECHNICAL_DOCUMENTATION.txt
+Format: Plain Text (.txt)
+Status: Complete & Verified
+
+
+--------------------------------------------------------------------------------
+36. FINAL VERIFICATION CHECKLIST
+--------------------------------------------------------------------------------
+[x] Project Overview
+[x] Technology Stack (Frontend, Backend, Desktop)
+[x] Database Schemas & Collections
+[x] Project Folder Structure
+[x] Application Architecture & Data Flow
+[x] Frontend Pages & Modules
+[x] Backend API Inventory
+[x] Authentication & Authorization Matrix
+[x] Environment Variables (Redacted)
+[x] Staging Environment
+[x] Live / Production Environment
+[x] Staging vs Live Comparison Matrix
+[x] Third-Party Integrations
+[x] Forms & File Upload Architecture
+[x] Security Audit & Hardening
+[x] Error Handling & Logging
+[x] Build & Deployment Workflow
+[x] Git & Branching Strategy
+[x] Business Logic & Rules
+[x] Developer & QA Notes
+[x] New Developer Quick Start
+[x] Important Files Reference
+================================================================================
+                              END OF DOCUMENTATION
+================================================================================

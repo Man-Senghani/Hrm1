@@ -681,13 +681,6 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
     };
   }, [isTrackingActive, trackerRawStatus, isPausedByIdle]);
 
-  const getImageUrl = (path) => {
-    if (!path) return '';
-    if (path.startsWith('http') || path.startsWith('data:')) return path;
-    const normalized = path.replace(/\\/g, '/');
-    return normalized.startsWith('/') ? normalized : `/${normalized}`;
-  };
-
   return (
     <div className="flex flex-col min-h-screen bg-[#f8fafc] dark:bg-[#08100e] text-[#201515] dark:text-[#e2e8f0] transition-colors duration-300 ease-in-out overflow-x-clip w-full">
       {/* 1. FULL WIDTH TOP BAR (Fixed at top) */}
@@ -918,8 +911,8 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
                   aria-haspopup="true"
                 >
                   <div className="w-8 h-8 rounded-full flex items-center justify-center bg-[#00a76b] text-white font-bold text-[13px] overflow-hidden shrink-0">
-                    {userProfile?.profileImage ? (
-                      <img src={getImageUrl(userProfile.profileImage)} alt="" className="w-full h-full object-cover" />
+                    {userProfile?.profileImage || userProfile?.profilePic || userProfile?.avatar || userProfile?.employeeId?.profileImage ? (
+                      <img src={getImageUrl(userProfile.profileImage || userProfile.profilePic || userProfile.avatar || userProfile.employeeId?.profileImage)} alt="" className="w-full h-full object-cover" />
                     ) : (
                       initials
                     )}

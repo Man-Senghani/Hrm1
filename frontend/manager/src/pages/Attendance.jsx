@@ -575,6 +575,7 @@ const Attendance = () => {
   const [records, setRecords] = useState([]);
   const [weeklyChartData, setWeeklyChartData] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState(null);
   const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'));
   const [yearlyStats, setYearlyStats] = useState(null);
@@ -1148,6 +1149,22 @@ const Attendance = () => {
 
   useEffect(() => { fetchAttendance(); }, [fetchAttendance]);
 
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    statsCacheRef.current = {};
+    chartCacheRef.current = {};
+    try {
+      await fetchAttendance();
+      if (typeof fetchLiveTimeStatus === 'function') await fetchLiveTimeStatus();
+      if (typeof fetchDailyActivityLog === 'function') await fetchDailyActivityLog();
+      toast.success('Attendance data refreshed!');
+    } catch (e) {
+      toast.error('Failed to refresh data');
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
   // ── Filtered & Sorted ──
   const filteredRecords = useMemo(() => {
     let filtered = [...allCombinedRecords];
@@ -1530,10 +1547,11 @@ const Attendance = () => {
         </div>
         <div className="flex items-center gap-3">
           <button
-            onClick={fetchAttendance}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white dark:bg-[#0a1f1a] border border-[#e2eae7] dark:border-[#133029] text-xs font-bold text-slate-600 dark:text-slate-300 hover:border-emerald-300 dark:hover:border-emerald-700 transition-all cursor-pointer"
+            onClick={handleRefresh}
+            disabled={isRefreshing}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white dark:bg-[#0a1f1a] border border-[#e2eae7] dark:border-[#133029] text-xs font-bold text-slate-600 dark:text-slate-300 hover:border-emerald-300 dark:hover:border-emerald-700 transition-all cursor-pointer disabled:opacity-50"
           >
-            <RefreshCw size={14} />
+            <RefreshCw size={14} className={isRefreshing ? 'animate-spin text-emerald-600' : ''} />
             Refresh
           </button>
           <button
