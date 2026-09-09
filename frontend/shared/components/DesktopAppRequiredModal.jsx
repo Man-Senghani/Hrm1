@@ -18,7 +18,7 @@ import { API_BASE_URL } from '../services/api';
 
 const DesktopAppRequiredModal = ({ isOpen, onClose, onRetry, isRetrying = false }) => {
   const [appInfo, setAppInfo] = useState({
-    version: '1.3.6',
+    version: '1.3.7',
     platform: 'Windows (x64)',
     downloadUrl: '/api/desktop-app/download'
   });

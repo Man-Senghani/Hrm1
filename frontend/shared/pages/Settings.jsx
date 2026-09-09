@@ -165,7 +165,7 @@ const Settings = () => {
             </div>
             <div className="flex justify-between items-center py-1">
               <span className="text-slate-500 dark:text-slate-400">Desktop Tracker Node</span>
-              <span className="font-bold text-slate-700 dark:text-slate-300">FluidHR Desktop Sync v1.3.6</span>
+              <span className="font-bold text-slate-700 dark:text-slate-300">FluidHR Desktop Sync v1.3.7</span>
             </div>
           </div>
         </div>

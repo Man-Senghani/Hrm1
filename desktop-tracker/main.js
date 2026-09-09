@@ -32,15 +32,32 @@ function handleDeepLink(urlStr) {
   try {
     const parsedUrl = new URL(urlStr);
     if (parsedUrl.protocol === 'fluidhr-tracker:') {
+      const token = parsedUrl.searchParams.get('token');
+      const server = parsedUrl.searchParams.get('server');
       let action = parsedUrl.searchParams.get('action');
+
       if (!action) {
         if (parsedUrl.hostname === 'stop' || parsedUrl.pathname.includes('stop')) {
           action = 'stop';
         } else if (parsedUrl.hostname === 'pause' || parsedUrl.pathname.includes('pause')) {
           action = 'pause';
+        } else if (parsedUrl.hostname === 'auth' || parsedUrl.pathname.includes('auth')) {
+          action = 'auth';
         } else {
           action = 'start';
         }
+      }
+
+      // 💾 Immediately persist token and serverHost to store
+      if (token) {
+        store.set('authToken', token);
+      }
+      if (server) {
+        let cleanServer = server.replace(/\/+$/, '');
+        if (cleanServer.includes('aupanishad.tech') || cleanServer.includes(':3000')) {
+          cleanServer = 'https://hrm.aupanishad.tech';
+        }
+        store.set('serverHost', cleanServer);
       }
       
       if (mainWindow) {
@@ -63,6 +80,8 @@ function handleDeepLink(urlStr) {
         if (action) {
           mainWindow.webContents.send('deep-link-action', action);
         }
+      } else {
+        app.readyUrl = urlStr;
       }
     }
   } catch (err) {
@@ -99,8 +118,29 @@ function startLocalBridgeServer() {
         return;
       }
 
+      if (pathname === '/auth') {
+        const token = reqUrl.searchParams.get('token');
+        const server = reqUrl.searchParams.get('server');
+        if (token) store.set('authToken', token);
+        if (server) store.set('serverHost', server);
+        if (mainWindow) {
+          if (mainWindow.isMinimized()) mainWindow.restore();
+          mainWindow.show();
+          mainWindow.focus();
+          mainWindow.setAlwaysOnTop(true);
+          setTimeout(() => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.setAlwaysOnTop(false); }, 800);
+          if (server) mainWindow.webContents.send('deep-link-server', server);
+          if (token) mainWindow.webContents.send('deep-link-token', token);
+          mainWindow.webContents.send('deep-link-action', 'auth');
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, message: 'Authenticated' }));
+        return;
+      }
+
       if (pathname === '/start') {
         const token = reqUrl.searchParams.get('token');
+        if (token) store.set('authToken', token);
         if (mainWindow) {
           if (mainWindow.isMinimized()) mainWindow.restore();
           mainWindow.show();
@@ -187,13 +227,16 @@ function createWindow() {
   mainWindow.setMenuBarVisibility(false);
   mainWindow.loadFile('index.html');
 
-  mainWindow.once('ready-to-show', () => {
-    mainWindow.show();
-    mainWindow.focus();
+  mainWindow.webContents.once('did-finish-load', () => {
     if (app.readyUrl) {
       handleDeepLink(app.readyUrl);
       app.readyUrl = null;
     }
+  });
+
+  mainWindow.once('ready-to-show', () => {
+    mainWindow.show();
+    mainWindow.focus();
   });
 }
 
@@ -218,13 +261,12 @@ if (!gotTheLock) {
   });
 
   app.whenReady().then(() => {
-    createWindow();
-    startLocalBridgeServer();
-
     const url = process.argv.find(arg => arg.startsWith('fluidhr-tracker://'));
     if (url) {
-      handleDeepLink(url);
+      app.readyUrl = url;
     }
+    createWindow();
+    startLocalBridgeServer();
 
     // Check for updates
     autoUpdater.checkForUpdatesAndNotify();

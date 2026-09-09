@@ -878,7 +878,16 @@ if (window.electronAPI?.onDeepLinkAction) {
     if (!authToken) {
       authToken = await window.electronAPI.getStoreValue('authToken');
     }
-    if (action === 'start') {
+    if (action === 'auth') {
+      if (authToken) {
+        hideAuthSection();
+        await fetchUserProfile();
+        await pollSessionStatus();
+        startPolling();
+        startHeartbeat();
+        updateUI();
+      }
+    } else if (action === 'start') {
       if (authToken) {
         hideAuthSection();
         await startSession();
