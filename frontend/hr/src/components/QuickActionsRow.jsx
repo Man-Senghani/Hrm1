@@ -60,6 +60,13 @@ const QuickActionsRow = ({ role = 'admin', title = 'Quick Actions' }) => {
 
   useEffect(() => {
     fetchStatus();
+    const handleTimerChange = () => fetchStatus();
+    window.addEventListener('timerStatusChanged', handleTimerChange);
+    window.addEventListener('desktop_tracker_stopped', handleTimerChange);
+    return () => {
+      window.removeEventListener('timerStatusChanged', handleTimerChange);
+      window.removeEventListener('desktop_tracker_stopped', handleTimerChange);
+    };
   }, []);
 
   const handleCheckIn = async () => {
@@ -73,10 +80,7 @@ const QuickActionsRow = ({ role = 'admin', title = 'Quick Actions' }) => {
       }
       const headers = { Authorization: `Bearer ${t}` };
 
-      // 1. Direct Backend Check-in (instant attendance record)
-      await axios.post('/api/attendance/clock-in', {}, { headers }).catch(() => null);
-
-      // 2. Start Desktop App Tracker
+      // 1. Launch/Start Desktop App Tracker
       const trackerResult = await startDesktopTracker(t);
       if (!trackerResult.success) {
         setShowTrackerModal(true);
@@ -84,16 +88,30 @@ const QuickActionsRow = ({ role = 'admin', title = 'Quick Actions' }) => {
         return;
       }
 
-      // 3. Start Web Work Session
-      await axios.post('/api/time/start', { taskName: 'General Work' }, { headers }).catch(() => null);
+      // 2. Direct backend clock-in
+      try {
+        await axios.post('/api/attendance/clock-in', {}, { headers });
+      } catch (err) {
+        if (err.response?.status === 400 && (err.response?.data?.message?.includes('Already clocked in') || err.response?.data?.message?.includes('already'))) {
+          setIsCheckedIn(true);
+          await fetchStatus();
+          toast.success('You are currently checked in.');
+          return;
+        }
+        throw err;
+      }
+
+      try {
+        await axios.post('/api/time/start', {}, { headers });
+      } catch (_) { }
 
       setIsCheckedIn(true);
       toast.success('Check-in successful & Desktop Tracker started!', {
         style: {
           borderRadius: '12px',
-          background: '#1c1917',
+          background: '#0d2a22',
           color: '#fff',
-          border: '1px solid #00a76b',
+          border: '1px solid #10b981',
           fontSize: '13px',
           fontWeight: '600'
         }
@@ -109,19 +127,15 @@ const QuickActionsRow = ({ role = 'admin', title = 'Quick Actions' }) => {
   const handleCheckOut = async () => {
     setCheckInLoading(true);
     try {
-      const t = token();
-      if (!t) return;
-      const headers = { Authorization: `Bearer ${t}` };
-
-      // 1. Stop Desktop Tracker
+      // 1. Trigger Desktop Tracker confirmation dialog
       const trackerResult = await stopDesktopTracker();
-      if (!trackerResult.success) {
-        toast.error(trackerResult.message || 'Please close/stop the Desktop Tracker application first to check out.', {
+      if (trackerResult && !trackerResult.success) {
+        toast.error(trackerResult.message || 'Could not open Desktop Tracker application.', {
           style: {
             borderRadius: '12px',
             background: '#1c1917',
             color: '#fff',
-            border: '1px solid #00a76b',
+            border: '1px solid #ef4444',
             fontSize: '13px',
             fontWeight: '600'
           }
@@ -130,27 +144,27 @@ const QuickActionsRow = ({ role = 'admin', title = 'Quick Actions' }) => {
         return;
       }
 
-      // 2. Direct backend clock-out
-      try {
-        await axios.put('/api/attendance/clock-out', {}, { headers });
-      } catch (_) { }
-
-      try {
-        await axios.post('/api/time/stop', {}, { headers });
-      } catch (_) { }
-
-      setIsCheckedIn(false);
-      toast.success('Check-out successful & Desktop Tracker stopped!', {
+      toast('Please confirm check-out in the Desktop Application.', {
+        icon: '💻',
+        duration: 5000,
         style: {
           borderRadius: '12px',
-          background: '#2a0d0d',
+          background: '#1c1917',
           color: '#fff',
-          border: '1px solid #ef4444',
+          border: '1px solid #00a76b',
           fontSize: '13px',
           fontWeight: '600'
         }
       });
-      await fetchStatus();
+
+      let attempts = 0;
+      const pollTimer = setInterval(async () => {
+        attempts++;
+        await fetchStatus();
+        if (attempts >= 15) {
+          clearInterval(pollTimer);
+        }
+      }, 2000);
     } catch (e) {
       toast.error(e.response?.data?.message || 'Check-out failed');
     } finally {

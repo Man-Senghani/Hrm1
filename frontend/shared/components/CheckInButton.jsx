@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { createPortal } from 'react-dom';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import { LogIn, LogOut, Clock, Loader2 } from 'lucide-react';
@@ -15,7 +14,6 @@ const CheckInButton = ({ className = '', variant = 'default' }) => {
   const [initialChecking, setInitialChecking] = useState(true);
   const [hovered, setHovered] = useState(false);
   const [showTrackerModal, setShowTrackerModal] = useState(false);
-  const [showCheckoutConfirm, setShowCheckoutConfirm] = useState(false);
 
   const fetchStatus = async () => {
     try {
@@ -64,7 +62,19 @@ const CheckInButton = ({ className = '', variant = 'default' }) => {
   useEffect(() => {
     fetchStatus();
     const interval = setInterval(fetchStatus, 15000);
-    return () => clearInterval(interval);
+
+    const handleTimerChange = () => {
+      fetchStatus();
+    };
+
+    window.addEventListener('timerStatusChanged', handleTimerChange);
+    window.addEventListener('desktop_tracker_stopped', handleTimerChange);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('timerStatusChanged', handleTimerChange);
+      window.removeEventListener('desktop_tracker_stopped', handleTimerChange);
+    };
   }, []);
 
   const handleCheckIn = async () => {
@@ -126,33 +136,37 @@ const CheckInButton = ({ className = '', variant = 'default' }) => {
     }
   };
 
-  const promptCheckOut = () => {
-    // Bring desktop app forward to show confirmation
-    stopDesktopTracker().catch(() => {});
-    setShowCheckoutConfirm(true);
-  };
-
-  const confirmCheckOut = async () => {
-    setShowCheckoutConfirm(false);
+  const handleCheckOut = async () => {
     setLoading(true);
     try {
-      const t = token();
-      const headers = { Authorization: `Bearer ${t}` };
+      // Direct user confirmation exclusively to Desktop Tracker application
+      const trackerResult = await stopDesktopTracker();
+      if (trackerResult && !trackerResult.success) {
+        toast.error(trackerResult.message || 'Could not open Desktop Tracker application.');
+      } else {
+        toast('Please confirm check-out in the Desktop Application.', {
+          icon: '💻',
+          duration: 5000,
+          style: {
+            borderRadius: '12px',
+            background: '#1c1917',
+            color: '#fff',
+            border: '1px solid #00a76b',
+            fontSize: '13px',
+            fontWeight: '600'
+          }
+        });
+      }
 
-      try {
-        await stopDesktopTracker();
-      } catch (_) {}
-
-      await axios.put('/api/attendance/clock-out', {}, { headers }).catch(() => {});
-      try {
-        await axios.post('/api/time/stop', {}, { headers });
-      } catch (_) {}
-
-      setIsCheckedIn(false);
-      setCheckInTime(null);
-
-      toast.success('Checked out successfully!');
-      await fetchStatus();
+      // Fast-poll every 2 seconds for 30s so the UI switches to checked-out as soon as user confirms in Desktop App
+      let attempts = 0;
+      const pollTimer = setInterval(async () => {
+        attempts++;
+        await fetchStatus();
+        if (attempts >= 15) {
+          clearInterval(pollTimer);
+        }
+      }, 2000);
     } catch (e) {
       toast.error(e.response?.data?.message || 'Check-out failed');
     } finally {
@@ -161,57 +175,12 @@ const CheckInButton = ({ className = '', variant = 'default' }) => {
   };
 
   const renderModals = () => (
-    <>
-      {/* CHECKOUT CONFIRMATION MODAL */}
-      {showCheckoutConfirm && createPortal(
-        <div
-          className="fixed inset-0 z-[999999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
-          onClick={() => setShowCheckoutConfirm(false)}
-        >
-          <div
-            className="relative w-full max-w-sm bg-white dark:bg-[#181612] border border-slate-200 dark:border-[#38352e] rounded-3xl p-6 shadow-2xl animate-in zoom-in-95 duration-200 text-center"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="w-14 h-14 rounded-2xl bg-rose-100 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400 flex items-center justify-center mx-auto mb-4 border border-rose-200 dark:border-rose-900/40">
-              <LogOut size={26} strokeWidth={2.5} />
-            </div>
-            <h3 className="text-lg font-extrabold text-slate-900 dark:text-white tracking-tight mb-2">
-              End Workday?
-            </h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium leading-relaxed mb-6">
-              Are you sure you want to check out? This will finalize your work hours for today and stop the Desktop Tracker.
-            </p>
-            <div className="flex flex-col sm:flex-row items-center gap-3">
-              <button
-                type="button"
-                onClick={() => setShowCheckoutConfirm(false)}
-                className="w-full sm:flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-[#25201b] dark:hover:bg-[#2d2721] text-slate-700 dark:text-slate-300 font-bold text-xs rounded-xl transition-all cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={confirmCheckOut}
-                disabled={loading}
-                className="w-full sm:flex-1 py-2.5 bg-rose-600 hover:bg-rose-500 active:scale-95 text-white font-extrabold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-              >
-                {loading ? <Loader2 size={14} className="animate-spin" /> : <LogOut size={14} />}
-                <span>{loading ? 'Checking out...' : 'Yes, Check Out'}</span>
-              </button>
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
-
-      {/* DESKTOP APP REQUIRED MODAL */}
-      <DesktopAppRequiredModal
-        isOpen={showTrackerModal}
-        onClose={() => setShowTrackerModal(false)}
-        onRetry={handleCheckIn}
-        isRetrying={loading}
-      />
-    </>
+    <DesktopAppRequiredModal
+      isOpen={showTrackerModal}
+      onClose={() => setShowTrackerModal(false)}
+      onRetry={handleCheckIn}
+      isRetrying={loading}
+    />
   );
 
   if (initialChecking) {
@@ -239,7 +208,7 @@ const CheckInButton = ({ className = '', variant = 'default' }) => {
 
               <button
                 type="button"
-                onClick={promptCheckOut}
+                onClick={handleCheckOut}
                 disabled={loading}
                 className="flex items-center gap-1 px-3 py-1 bg-rose-600 hover:bg-rose-500 active:scale-95 text-white font-bold text-[11px] rounded-full shadow-xs transition-all cursor-pointer border-none shrink-0 disabled:opacity-50"
                 title="Click to Check Out"
@@ -272,7 +241,7 @@ const CheckInButton = ({ className = '', variant = 'default' }) => {
           {isCheckedIn ? (
             <button
               type="button"
-              onClick={promptCheckOut}
+              onClick={handleCheckOut}
               onMouseEnter={() => setHovered(true)}
               onMouseLeave={() => setHovered(false)}
               disabled={loading}
@@ -353,7 +322,7 @@ const CheckInButton = ({ className = '', variant = 'default' }) => {
 
             <button
               type="button"
-              onClick={promptCheckOut}
+              onClick={handleCheckOut}
               disabled={loading}
               className="flex items-center gap-1.5 px-3.5 py-2 bg-rose-600 hover:bg-rose-500 active:scale-95 text-white font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer border-none shrink-0 select-none disabled:opacity-50"
             >

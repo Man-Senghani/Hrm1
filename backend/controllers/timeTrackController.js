@@ -317,6 +317,13 @@ exports.stopTracking = async (req, res) => {
     }
 
     await session.save();
+
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`user_${id}`).emit('timer_stopped', buildPayload(session));
+      io.to(`user_${id}`).emit('timer_update', buildPayload(session));
+    }
+
     res.json({ message: 'Tracking stopped', session: buildPayload(session) });
   } catch (err) {
     console.error('[STOP ERROR]', err);
