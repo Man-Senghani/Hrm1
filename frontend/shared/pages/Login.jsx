@@ -11,6 +11,7 @@ const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [formErrors, setFormErrors] = useState({});
   const [loading, setLoading] = useState(false);
   const [showThankYou, setShowThankYou] = useState(false);
 
@@ -47,6 +48,24 @@ const Login = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    const newErrors = {};
+    if (!email.trim()) {
+      newErrors.email = 'Please enter your email address.';
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      newErrors.email = 'Please enter a valid email address.';
+    }
+
+    if (!password) {
+      newErrors.password = 'Please enter your password.';
+    }
+
+    if (Object.keys(newErrors).length > 0) {
+      setFormErrors(newErrors);
+      return;
+    }
+
+    setFormErrors({});
     setLoading(true);
     setError('');
 
@@ -96,7 +115,7 @@ const Login = () => {
                 </div>
                 <span className="text-[22px] font-bold text-[#fffefb] tracking-tight">FluidHR</span>
              </div>
-  
+
              <div className="relative z-10 my-8">
                 <h2 className="text-[30px] font-medium text-[#fffefb] mb-4 leading-[1.1] tracking-tight">
                    Identity <br/><span className="text-[#00a76b]">Linked</span>.
@@ -105,7 +124,7 @@ const Login = () => {
                    Your desktop protocol handshake has been completed.
                 </p>
              </div>
-  
+
              <div className="relative z-10 pt-6 border-t border-[#36342e]">
                 <div className="flex items-center gap-4 text-[#939084]">
                   <Zap size={18} className="text-[#00a76b]" />
@@ -113,7 +132,7 @@ const Login = () => {
                 </div>
              </div>
           </div>
-  
+
           {/* THANK YOU CONTENT */}
           <div className="lg:col-span-7 p-6 md:p-8 flex flex-col justify-center bg-[#fffefb] text-center">
              <div className="max-w-[380px] w-full mx-auto">
@@ -128,7 +147,7 @@ const Login = () => {
                 <p className="text-[14px] text-[#36342e] font-medium leading-relaxed mb-6">
                    Thank you for logging in. The **FluidHR Tracker** desktop app should launch automatically.
                 </p>
-  
+
                 <div className="space-y-4">
                    <a 
                      href={`fluidhr-tracker://auth?token=${encodeURIComponent(token)}&server=${encodeURIComponent(API_BASE_URL || window.location.origin)}`}
@@ -198,26 +217,34 @@ const Login = () => {
                  </p>
               </div>
 
-              <form onSubmit={handleSubmit} className="space-y-4">
+              <form onSubmit={handleSubmit} noValidate className="space-y-4">
                  <EntryInput 
-                    label="Corporate Email"
+                    label="Email"
                     type="email" 
-                    required
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    onChange={(e) => {
+                      setEmail(e.target.value);
+                      if (formErrors.email) setFormErrors(prev => ({ ...prev, email: '' }));
+                      if (error) setError('');
+                    }}
                     placeholder="name@company.io"
                     icon={<Mail size={20} />}
+                    error={formErrors.email}
                   />
 
                  <div>
                    <EntryInput 
-                      label="Secret Key"
+                      label="Password"
                       type="password" 
-                      required
                       value={password}
-                      onChange={(e) => setPassword(e.target.value)}
+                      onChange={(e) => {
+                        setPassword(e.target.value);
+                        if (formErrors.password) setFormErrors(prev => ({ ...prev, password: '' }));
+                        if (error) setError('');
+                      }}
                       placeholder="Enter password"
                       icon={<Lock size={20} />}
+                      error={formErrors.password}
                     />
                    <div className="flex justify-end mt-1.5">
                      <button type="button" onClick={() => navigate('/forgot-password')} className="text-[13px] font-bold text-[#00a76b] hover:text-[#201515] transition-colors">

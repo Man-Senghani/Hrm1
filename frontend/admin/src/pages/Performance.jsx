@@ -8,7 +8,7 @@ const Performance = () => {
          {/* HEADER */}
          <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
             <div>
-               <h1 className="text-2xl font-black text-[#1E2026] tracking-tight leading-none mb-2">
+               <h1 className="text-2xl font-semibold text-[#1E2026] tracking-tight leading-none mb-2">
                   Performance <span className="text-[#F0B90B]">Matrix</span>
                </h1>
                <p className="text-[#848E9C] font-bold text-[11px] uppercase tracking-[0.2em] flex items-center gap-3">
@@ -16,7 +16,7 @@ const Performance = () => {
                   Talent Optimization Protocols
                </p>
             </div>
-            <button className="bg-[#F0B90B] text-[#1E2026] px-6 py-2.5 rounded-full font-black text-[13px] uppercase tracking-wider shadow-md hover:bg-[#FFD000] transition-all flex items-center gap-2">
+            <button className="bg-[#F0B90B] text-[#1E2026] px-6 py-2.5 rounded-full font-semibold text-[13px] uppercase tracking-wider shadow-md hover:bg-[#FFD000] transition-all flex items-center gap-2">
                <Award size={16} />
                Initialize Review
             </button>

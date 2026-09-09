@@ -830,7 +830,7 @@ const TaskCreate = ({ isModal = false, onClose, onSuccess, defaultStatus = 'Ongo
           {!isModal && (
             <div className="flex items-center justify-between w-full mb-2">
               <div>
-                <h1 className="text-3xl font-black text-[#201515] tracking-tighter uppercase">
+                <h1 className="text-3xl font-semibold text-[#201515] tracking-tight uppercase">
                   Hello {currentUser?.fullName?.split(' ')[0] || currentUser?.name?.split(' ')[0] || ''}, <span className="text-[#00a76b]">{new Date().getHours() < 12 ? 'Good morning' : new Date().getHours() < 18 ? 'Good afternoon' : 'Good evening'}.</span>
                 </h1>
               </div>

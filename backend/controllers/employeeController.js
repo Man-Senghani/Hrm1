@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const Employee = require('../models/Employee');
 const User = require('../models/User');
 const HR = require('../models/HR');
@@ -18,11 +19,45 @@ exports.getEmployees = async (req, res) => {
       .populate('managerId', 'name email')
       .lean();
 
+    // Exclude orphaned records whose user document was deleted
+    employees = employees.filter(emp => emp.userId != null);
+
+    if (role === 'admin') {
+      const adminUsers = await User.find({ role: 'admin' }).select('name email status role employeeId profile createdAt joinDate').lean();
+      const existingUserIds = new Set(employees.map(e => (e.userId?._id || e.userId || '').toString()));
+      for (const adm of adminUsers) {
+        if (!existingUserIds.has(adm._id.toString())) {
+          employees.push({
+            _id: adm._id,
+            userId: adm,
+            employeeId: adm.employeeId || 'EMP-ADM',
+            fullName: adm.name || adm.email?.split('@')[0] || 'Admin',
+            email: adm.email,
+            role: 'admin',
+            designation: 'System Administrator',
+            department: 'Administration',
+            status: adm.status || 'Active',
+            joinDate: adm.joinDate || adm.createdAt || new Date(),
+            createdAt: adm.createdAt
+          });
+        }
+      }
+    }
+
     if (role === 'hr') {
       employees = employees.filter(emp => 
         (emp.role || '').toLowerCase() !== 'admin' && 
         (emp.userId?.role || '').toLowerCase() !== 'admin'
       );
+    }
+
+    if (role === 'manager') {
+      employees = employees.filter(emp => {
+        const empRole = (emp.role || emp.userId?.role || '').toLowerCase();
+        const empUserId = (emp.userId?._id || emp.userId || '').toString();
+        // A manager only sees team members: exclude admin, hr, and themselves
+        return empRole !== 'admin' && empRole !== 'hr' && empUserId !== (req.user?.id || '').toString();
+      });
     }
 
     res.json(employees);
@@ -243,17 +278,28 @@ exports.updateEmployee = async (req, res) => {
 // DELETE /api/employees/:id (Soft delete per requirement)
 exports.deleteEmployee = async (req, res) => {
   try {
-    const employee = await Employee.findById(req.params.id);
+    let employee = null;
+    if (mongoose.Types.ObjectId.isValid(req.params.id)) {
+      employee = await Employee.findById(req.params.id);
+    }
+    if (!employee) {
+      employee = await Employee.findOne({
+        $or: [
+          ...(mongoose.Types.ObjectId.isValid(req.params.id) ? [{ userId: req.params.id }] : []),
+          { employeeId: req.params.id }
+        ]
+      });
+    }
     if (!employee) return res.status(404).json({ message: 'Employee not found' });
 
     if (req.user.role === 'hr' && (employee.role === 'admin' || employee.userId?.role === 'admin')) {
       return res.status(403).json({ message: 'Not authorized to delete Admin profiles' });
     }
 
-    employee.status = 'inactive';
-    await employee.save();
-
-    await User.findByIdAndUpdate(employee.userId, { status: 'inactive' });
+    await Employee.findByIdAndUpdate(employee._id, { status: 'inactive' });
+    if (employee.userId) {
+      await User.findByIdAndUpdate(employee.userId, { status: 'inactive' });
+    }
     res.json({ message: 'Employee marked as inactive' });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -268,13 +314,24 @@ exports.updateEmployeeStatus = async (req, res) => {
       return res.status(400).json({ message: 'Invalid status' });
     }
 
-    let employee = await Employee.findById(req.params.id);
+    let employee = null;
+    if (mongoose.Types.ObjectId.isValid(req.params.id)) {
+      employee = await Employee.findById(req.params.id);
+    }
     if (!employee) {
-      employee = await Employee.findOne({ $or: [{ userId: req.params.id }, { employeeId: req.params.id }] });
+      employee = await Employee.findOne({
+        $or: [
+          ...(mongoose.Types.ObjectId.isValid(req.params.id) ? [{ userId: req.params.id }] : []),
+          { employeeId: req.params.id }
+        ]
+      });
     }
 
-    const userIdToFind = employee ? employee.userId : req.params.id;
-    const user = await User.findById(userIdToFind);
+    let user = null;
+    const userIdToFind = employee?.userId || req.params.id;
+    if (mongoose.Types.ObjectId.isValid(userIdToFind)) {
+      user = await User.findById(userIdToFind);
+    }
 
     if (!employee && !user) {
       return res.status(404).json({ message: 'Employee or User record not found' });
@@ -288,13 +345,15 @@ exports.updateEmployeeStatus = async (req, res) => {
     }
 
     if (employee) {
-      employee.status = status;
-      await employee.save();
+      await Employee.findByIdAndUpdate(employee._id, { status });
+      if (employee.userId) {
+        await User.findByIdAndUpdate(employee.userId, { status });
+      }
     }
 
     if (user) {
-      user.status = status;
-      await user.save();
+      await User.findByIdAndUpdate(user._id, { status });
+      await Employee.findOneAndUpdate({ userId: user._id }, { status });
     }
 
     res.json({ message: `Employee status updated to ${status}` });

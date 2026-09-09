@@ -550,7 +550,7 @@ const ManagerDashboard = () => {
       {/* 1. HEADER SECTION */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-3">
         <div>
-          <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-gray-900 dark:text-white" style={{ fontFamily: 'Playfair Display, serif' }}>
+          <h1 className="text-3xl md:text-4xl font-semibold tracking-tight text-gray-900 dark:text-white" style={{ fontFamily: 'Playfair Display, serif' }}>
             {getGreeting()}, {managerName}! 👋
           </h1>
           <p className="text-gray-500 dark:text-[#a3a094] mt-1 font-medium">

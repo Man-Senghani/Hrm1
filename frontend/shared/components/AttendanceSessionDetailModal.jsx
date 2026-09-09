@@ -1,11 +1,54 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Calendar, ChevronLeft, ChevronRight } from 'lucide-react';
+import { X, Calendar, ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react';
+import axios from 'axios';
+import CustomDatePicker from './CustomDatePicker';
 
 const ITEMS_PER_PAGE = 10;
 
 const AttendanceSessionDetailModal = ({ isOpen, onClose, record }) => {
   const [currentPage, setCurrentPage] = useState(1);
+  const [selectedDate, setSelectedDate] = useState('');
+  const [activeRecord, setActiveRecord] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const getTodayStr = () => {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const todayStr = getTodayStr();
+
+  const parseToYYYYMMDD = (rawDate) => {
+    if (!rawDate) return getTodayStr();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(rawDate)) return rawDate;
+    if (typeof rawDate === 'string' && rawDate.includes('/')) {
+      const parts = rawDate.split('/');
+      if (parts.length === 3) {
+        return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+      }
+    }
+    const d = new Date(rawDate);
+    if (!isNaN(d.getTime())) {
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
+    return getTodayStr();
+  };
+
+  // Sync initial record when modal opens or record changes
+  useEffect(() => {
+    if (record) {
+      setActiveRecord(record);
+      setSelectedDate(parseToYYYYMMDD(record.date));
+      setCurrentPage(1);
+    }
+  }, [record, isOpen]);
 
   // Close modal when pressing Escape key
   useEffect(() => {
@@ -22,32 +65,89 @@ const AttendanceSessionDetailModal = ({ isOpen, onClose, record }) => {
 
   if (!isOpen || !record) return null;
 
-  const empName = record.user?.name || record.name || record.employeeName || 'Bhavik';
-  const empRole = record.department || record.user?.role || 'employee';
+  const currentRecord = activeRecord || record;
+  const empName = currentRecord.user?.name || currentRecord.name || currentRecord.employeeName || 'Employee';
+  const empRole = currentRecord.department || currentRecord.user?.role || 'employee';
+
+  // Fetch activity log for selected date
+  const handleDateChange = async (newDateStr) => {
+    if (!newDateStr) return;
+    // Reject future dates if typed manually
+    if (newDateStr > todayStr) {
+      return;
+    }
+
+    setSelectedDate(newDateStr);
+    setCurrentPage(1);
+
+    try {
+      setIsLoading(true);
+      const userId = record.user?._id || record.user?.id || (typeof record.user === 'string' ? record.user : null) || record.userId;
+      const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+      
+      const response = await axios.get(`/api/attendance?date=${newDateStr}${userId ? `&userId=${userId}` : ''}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      const resData = response.data?.attendance || response.data?.logs || response.data || [];
+      const match = Array.isArray(resData) 
+        ? resData.find(r => r.date === newDateStr || (r.user && (r.user._id === userId || r.user === userId)))
+        : (resData.date === newDateStr ? resData : null);
+
+      if (match) {
+        setActiveRecord(match);
+      } else {
+        setActiveRecord({
+          date: newDateStr,
+          user: record.user,
+          name: record.name,
+          employeeName: record.employeeName,
+          department: record.department,
+          pauseHistory: [],
+          breaks: []
+        });
+      }
+    } catch (err) {
+      console.warn('Could not fetch activity for selected date:', err);
+      setActiveRecord({
+        date: newDateStr,
+        user: record.user,
+        name: record.name,
+        employeeName: record.employeeName,
+        department: record.department,
+        pauseHistory: [],
+        breaks: []
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   // Helper to format 24h/ISO time string to clean 12h time (e.g. "01:33 pm")
   const format12hTime = (t) => {
     if (!t || t === '--:--' || t === '--') return '--:--';
-    if (t.includes('AM') || t.includes('PM') || t.includes('am') || t.includes('pm')) return t;
+    if (typeof t === 'string' && (t.includes('AM') || t.includes('PM') || t.includes('am') || t.includes('pm'))) return t;
     const d = new Date(t);
     if (!isNaN(d.getTime())) {
       return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }).toLowerCase();
     }
-    const parts = t.split(':');
-    if (parts.length >= 2) {
-      let h = parseInt(parts[0], 10);
-      const m = parts[1];
-      const ampm = h >= 12 ? 'pm' : 'am';
-      h = h % 12 || 12;
-      return `${String(h).padStart(2, '0')}:${m} ${ampm}`;
+    if (typeof t === 'string' && t.includes(':')) {
+      const parts = t.split(':');
+      if (parts.length >= 2) {
+        let h = parseInt(parts[0], 10);
+        const m = parts[1];
+        const ampm = h >= 12 ? 'pm' : 'am';
+        h = h % 12 || 12;
+        return `${String(h).padStart(2, '0')}:${m} ${ampm}`;
+      }
     }
     return t;
   };
 
   // Helper to format date string to "31 Aug 2026"
   const formatDateDisplay = (rawDate) => {
-    if (!rawDate) return '31 Aug 2026';
-    if (rawDate.includes('/')) {
+    if (!rawDate) return 'Select Date';
+    if (typeof rawDate === 'string' && rawDate.includes('/')) {
       const parts = rawDate.split('/');
       if (parts.length === 3) {
         const d = new Date(parts[2], parseInt(parts[1], 10) - 1, parts[0]);
@@ -63,17 +163,17 @@ const AttendanceSessionDetailModal = ({ isOpen, onClose, record }) => {
     return rawDate;
   };
 
-  const formattedDate = formatDateDisplay(record.date);
+  const formattedDate = formatDateDisplay(selectedDate || currentRecord.date);
 
   // Initial check-in time formatted cleanly
-  const rawCheckIn = record.clockIn || record.clock_in || record.checkInTime || '01:33 pm';
+  const rawCheckIn = currentRecord.clockIn || currentRecord.clock_in || currentRecord.checkInTime || '--:--';
   const initialCheckIn = format12hTime(rawCheckIn);
 
-  // Format pause/resume logs matching Screenshot 1 table structure:
+  // Format pause/resume logs matching table structure:
   // Columns: CHECK-IN TIME | NO. OF PAUSES | RESUME TIME | PAUSE TIME | TOTAL TIME
   const getDailyActivityRows = () => {
-    if (Array.isArray(record.pauseHistory) && record.pauseHistory.length > 0) {
-      return record.pauseHistory.map((item, index) => ({
+    if (Array.isArray(currentRecord.pauseHistory) && currentRecord.pauseHistory.length > 0) {
+      return currentRecord.pauseHistory.map((item, index) => ({
         checkInTime: initialCheckIn,
         noOfPauses: index + 1,
         resumeTime: format12hTime(item.resumeTime || item.resumedAt || initialCheckIn),
@@ -82,8 +182,8 @@ const AttendanceSessionDetailModal = ({ isOpen, onClose, record }) => {
       }));
     }
 
-    if (Array.isArray(record.breaks) && record.breaks.length > 0) {
-      return record.breaks.map((item, index) => ({
+    if (Array.isArray(currentRecord.breaks) && currentRecord.breaks.length > 0) {
+      return currentRecord.breaks.map((item, index) => ({
         checkInTime: initialCheckIn,
         noOfPauses: index + 1,
         resumeTime: format12hTime(item.resumeTime || item.start || initialCheckIn),
@@ -92,21 +192,7 @@ const AttendanceSessionDetailModal = ({ isOpen, onClose, record }) => {
       }));
     }
 
-    // Default sample activity logs matching Screenshot 1
-    return [
-      { checkInTime: initialCheckIn, noOfPauses: 1, resumeTime: '01:33 pm', pauseTime: '01:37 pm', totalTime: '4m' },
-      { checkInTime: initialCheckIn, noOfPauses: 2, resumeTime: '02:09 pm', pauseTime: '02:12 pm', totalTime: '2m' },
-      { checkInTime: initialCheckIn, noOfPauses: 3, resumeTime: '02:12 pm', pauseTime: '02:14 pm', totalTime: '1m' },
-      { checkInTime: initialCheckIn, noOfPauses: 4, resumeTime: '02:30 pm', pauseTime: '02:31 pm', totalTime: '1m' },
-      { checkInTime: initialCheckIn, noOfPauses: 5, resumeTime: '02:36 pm', pauseTime: '02:38 pm', totalTime: '1m' },
-      { checkInTime: initialCheckIn, noOfPauses: 6, resumeTime: '06:11 pm', pauseTime: '07:02 pm', totalTime: '50m' },
-      { checkInTime: initialCheckIn, noOfPauses: 7, resumeTime: '07:35 pm', pauseTime: '07:40 pm', totalTime: '4m' },
-      { checkInTime: initialCheckIn, noOfPauses: 8, resumeTime: '07:41 pm', pauseTime: '07:41 pm', totalTime: '0m' },
-      { checkInTime: initialCheckIn, noOfPauses: 9, resumeTime: '08:00 pm', pauseTime: '08:15 pm', totalTime: '15m' },
-      { checkInTime: initialCheckIn, noOfPauses: 10, resumeTime: '08:30 pm', pauseTime: '08:40 pm', totalTime: '10m' },
-      { checkInTime: initialCheckIn, noOfPauses: 11, resumeTime: '09:00 pm', pauseTime: '09:05 pm', totalTime: '5m' },
-      { checkInTime: initialCheckIn, noOfPauses: 12, resumeTime: '09:30 pm', pauseTime: '09:32 pm', totalTime: '2m' }
-    ];
+    return [];
   };
 
   const rawRows = getDailyActivityRows();
@@ -143,11 +229,15 @@ const AttendanceSessionDetailModal = ({ isOpen, onClose, record }) => {
           </div>
 
           <div className="flex items-center gap-3">
-            {/* Date Pill */}
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-[#0d1c18] border border-slate-200 dark:border-[#1e3831] text-xs font-bold text-slate-700 dark:text-slate-200">
-              <span>{formattedDate}</span>
-              <Calendar size={14} className="text-emerald-500" />
-            </div>
+            {/* Custom Interactive Date Picker - RESTRICTED TO PAST DATES & TODAY ONLY */}
+            <CustomDatePicker
+              name="dailyActivityDate"
+              value={selectedDate}
+              onChange={(e) => handleDateChange(e.target.value)}
+              maxDate={todayStr}
+              align="right"
+              placeholder={formattedDate}
+            />
 
             <button
               onClick={onClose}
@@ -172,7 +262,14 @@ const AttendanceSessionDetailModal = ({ isOpen, onClose, record }) => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-[#1e3831] font-medium text-slate-700 dark:text-slate-200">
-                {paginatedRows.map((row, index) => (
+                {sortedRows.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="py-16 text-center text-slate-400 dark:text-slate-500 font-semibold italic">
+                      No daily pause or break activity recorded for this date.
+                    </td>
+                  </tr>
+                ) : (
+                  paginatedRows.map((row, index) => (
                   <tr key={index} className="h-[41px] hover:bg-slate-50/60 dark:hover:bg-[#0d1c18]/60 transition-colors">
                     <td className="py-2.5 px-6 font-bold text-slate-800 dark:text-slate-200 whitespace-nowrap">
                       {row.checkInTime}
@@ -189,10 +286,11 @@ const AttendanceSessionDetailModal = ({ isOpen, onClose, record }) => {
                     <td className="py-2.5 px-6 text-right font-bold text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
                       {row.totalTime}
                     </td>
-                  </tr>
-                ))}
+                    </tr>
+                  ))
+                )}
                 {/* Spacer rows so table height remains 100% constant even if page 2 has fewer than 10 entries */}
-                {emptyRowsCount > 0 && Array.from({ length: emptyRowsCount }).map((_, idx) => (
+                {sortedRows.length > 0 && emptyRowsCount > 0 && Array.from({ length: emptyRowsCount }).map((_, idx) => (
                   <tr key={`empty-${idx}`} className="h-[41px]">
                     <td colSpan={5} className="py-2.5 px-6">&nbsp;</td>
                   </tr>

@@ -46,6 +46,7 @@ const screenshotRoutes = require('./routes/screenshotRoutes');
 const jobRoutes = require('./routes/jobRoutes');
 const compOffRoutes = require('./routes/compOffRoutes');
 const roleRoutes = require('./routes/roleRoutes');
+const systemRoleRoutes = require('./routes/systemRoleRoutes');
 const searchRoutes = require('./routes/searchRoutes');
 const path = require('path');
 const fs = require('fs');
@@ -69,7 +70,7 @@ app.use(compression());
 app.use(cors({
   origin: true, // Allow all origins during dev
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
 }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
@@ -237,6 +238,7 @@ app.use('/api/managers', managerRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/jobs', jobRoutes);
 app.use('/api/roles', roleRoutes);
+app.use('/api/system-roles', systemRoleRoutes);
 app.use('/api/comp-off', compOffRoutes);
 app.use('/api/audit-logs', require('./routes/auditLogRoutes'));
 app.use('/api/search', searchRoutes);
@@ -262,10 +264,11 @@ app.get('/api/version', (req, res) => {
 });
 
 // Cache configuration for static assets
+const isProd = process.env.NODE_ENV === 'production' && !process.env.DEV_MODE;
 const staticOptions = {
-  maxAge: '1y',
+  maxAge: isProd ? '1d' : 0,
   setHeaders: (res, filePath) => {
-    if (filePath.endsWith('.html')) {
+    if (filePath.endsWith('.html') || !isProd) {
       res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
       res.setHeader('Pragma', 'no-cache');
       res.setHeader('Expires', '0');

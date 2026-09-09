@@ -16,7 +16,7 @@ const getTodayStr = () => {
 // Default project options required by initial business spec
 const INITIAL_PROJECT_OPTIONS = [
   'HRMS',
-  'Aupan ishad',
+  'Aupanishad',
   'MTK',
   'Client side work',
   'Management kinda thing'
@@ -29,8 +29,10 @@ exports.getProjectList = async (req, res) => {
   try {
     const dbProjects = await Project.find({}, 'projectName').lean();
     const dbProjectNames = dbProjects.map(p => p.projectName).filter(Boolean);
-    const combined = Array.from(new Set([...INITIAL_PROJECT_OPTIONS, ...dbProjectNames]));
-    res.json(combined);
+    const combined = Array.from(new Set([...INITIAL_PROJECT_OPTIONS, ...dbProjectNames]))
+      .map(p => typeof p === 'string' ? p.trim().replace(/\bAupan\s+ishad\b/gi, 'Aupanishad') : p)
+      .filter(Boolean);
+    res.json(Array.from(new Set(combined)));
   } catch (error) {
     console.error('Error fetching project list:', error);
     res.json(INITIAL_PROJECT_OPTIONS);
@@ -44,8 +46,15 @@ exports.createReport = async (req, res) => {
   try {
     const { projectName, workDescription, hoursSpent, reportDate, status } = req.body;
 
+    let finalProjectName = '';
+    if (Array.isArray(projectName)) {
+      finalProjectName = projectName.filter(Boolean).map(p => String(p).trim()).filter(Boolean).join(', ');
+    } else if (typeof projectName === 'string') {
+      finalProjectName = projectName.trim();
+    }
+
     // Validation
-    if (!projectName || !projectName.trim()) {
+    if (!finalProjectName) {
       return res.status(400).json({ message: 'Project Name is required' });
     }
     if (!workDescription || !workDescription.trim()) {
@@ -55,8 +64,41 @@ exports.createReport = async (req, res) => {
     if (isNaN(numericHours) || numericHours <= 0) {
       return res.status(400).json({ message: 'Hours Spent must be a valid positive number' });
     }
+    if (numericHours > 24) {
+      return res.status(400).json({ message: 'Hours Spent cannot exceed 24 hours in a single day' });
+    }
 
     const targetDate = reportDate ? String(reportDate).trim() : getTodayStr();
+
+    // Restrict reportDate to last week (past 7 days up to today)
+    const now = new Date();
+    const minAllowedDate = new Date();
+    minAllowedDate.setDate(now.getDate() - 7);
+    const pad = (n) => String(n).padStart(2, '0');
+    const minAllowedStr = `${minAllowedDate.getFullYear()}-${pad(minAllowedDate.getMonth() + 1)}-${pad(minAllowedDate.getDate())}`;
+    const todayStr = getTodayStr();
+
+    if (targetDate < minAllowedStr) {
+      return res.status(400).json({
+        message: 'You cannot submit reports for dates older than last week (past 7 days).'
+      });
+    }
+    if (targetDate > todayStr) {
+      return res.status(400).json({
+        message: 'You cannot submit reports for future dates.'
+      });
+    }
+
+    // Limit to max 2 reports per single date
+    const dateReportsCount = await DailyReport.countDocuments({
+      user: req.user.id,
+      reportDate: targetDate
+    });
+    if (dateReportsCount >= 2) {
+      return res.status(400).json({
+        message: `Maximum 2 reports allowed per date. You have already submitted ${dateReportsCount} reports for ${targetDate}.`
+      });
+    }
 
     // Fetch employee details automatically from logged in session
     const employeeDoc = await Employee.findOne({ userId: req.user.id });
@@ -68,13 +110,13 @@ exports.createReport = async (req, res) => {
     // Check duplicate report for exact same user, project, and date
     const duplicate = await DailyReport.findOne({
       user: req.user.id,
-      projectName: projectName.trim(),
+      projectName: finalProjectName,
       reportDate: targetDate
     });
 
     if (duplicate) {
       return res.status(400).json({
-        message: `You have already submitted a report for project "${projectName.trim()}" on ${targetDate}. Please edit your existing report instead.`
+        message: `You have already submitted a report for project "${finalProjectName}" on ${targetDate}. Please edit your existing report instead.`
       });
     }
 
@@ -82,7 +124,7 @@ exports.createReport = async (req, res) => {
       user: req.user.id,
       employee: employeeDoc ? employeeDoc._id : null,
       department: deptName,
-      projectName: projectName.trim(),
+      projectName: finalProjectName,
       workDescription: workDescription.trim(),
       hoursSpent: parseFloat(numericHours.toFixed(2)),
       reportDate: targetDate,
@@ -110,7 +152,7 @@ exports.getMyReports = async (req, res) => {
     const query = { user: req.user.id };
 
     if (projectName && projectName !== 'all') {
-      query.projectName = projectName;
+      query.projectName = new RegExp(projectName.trim(), 'i');
     }
     if (status && status !== 'all') {
       query.status = status;
@@ -200,7 +242,7 @@ exports.getAllReports = async (req, res) => {
 
     // Filter by Project
     if (project && project !== 'all') {
-      baseQuery.projectName = project;
+      baseQuery.projectName = new RegExp(project.trim(), 'i');
     }
 
     // Filter by Status
@@ -339,7 +381,15 @@ exports.updateReport = async (req, res) => {
     }
 
     const { projectName, workDescription, hoursSpent, reportDate, status } = req.body;
-    if (projectName) report.projectName = projectName.trim();
+    if (projectName) {
+      let finalProjectName = '';
+      if (Array.isArray(projectName)) {
+        finalProjectName = projectName.filter(Boolean).map(p => String(p).trim()).filter(Boolean).join(', ');
+      } else if (typeof projectName === 'string') {
+        finalProjectName = projectName.trim();
+      }
+      if (finalProjectName) report.projectName = finalProjectName;
+    }
     if (workDescription) report.workDescription = workDescription.trim();
     if (hoursSpent !== undefined) {
       const h = parseFloat(hoursSpent);

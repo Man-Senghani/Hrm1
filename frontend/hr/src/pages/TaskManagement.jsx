@@ -176,7 +176,7 @@ const TaskManagement = () => {
       <div className="max-w-7xl mx-auto space-y-8">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 bg-white p-8 rounded-[5px] border border-[#eceae3] shadow-sm">
           <div>
-            <h1 className="text-4xl font-black text-[#201515] tracking-tighter uppercase leading-none">Mission <span className="text-[#00a76b]">Control.</span></h1>
+            <h1 className="text-3xl font-semibold text-[#201515] tracking-tight uppercase leading-none">Mission <span className="text-[#00a76b]">Control.</span></h1>
             <p className="text-[12px] font-bold text-[#939084] uppercase tracking-[0.2em] mt-2 flex items-center gap-2 ml-1"><Briefcase size={12} className="text-[#00a76b]" /> Orchestrating Operational Tasks</p>
           </div>
           <button 

@@ -17,93 +17,290 @@ import TimeTrackerWidget from '@shared/components/TimeTrackerWidget';
 import ViewHolidaysDrawer from '../components/modals/ViewHolidaysDrawer';
 import CheckInButton from '../components/CheckInButton';
 import AttendanceSessionDetailModal from '@shared/components/AttendanceSessionDetailModal';
+import ExportFilterModal from '@shared/components/ExportFilterModal';
 
-// ─── ATTRACTIVE CUSTOM DATE PICKER ─────────────────────────
-export const AttendanceDatePicker = ({ value, onChange, placeholder = 'dd-mm-yyyy' }) => {
+// ─── LOCAL DATE HELPER ─────────────────────────
+export const getLocalYYYYMMDD = (d) => {
+  if (!d) return '';
+  if (typeof d === 'string') return d.split('T')[0];
+  const offset = d.getTimezoneOffset() * 60000;
+  return new Date(d.getTime() - offset).toISOString().split('T')[0];
+};
+
+// ─── ATTRACTIVE CUSTOM DATE & RANGE PICKER ─────────────────────────
+export const AttendanceDatePicker = ({
+  value,
+  onChange,
+  placeholder = 'dd-mm-yyyy',
+  allowRange = true,
+  disableFuture = true
+}) => {
   const [isOpen, setIsOpen] = useState(false);
+  const [viewMode, setViewMode] = useState('days'); // 'days' | 'months' | 'years'
+  const [selectingField, setSelectingField] = useState('start'); // 'start' | 'end'
+  const [hoverDate, setHoverDate] = useState(null);
+  const [rangeNotice, setRangeNotice] = useState('');
   const dropdownRef = useRef(null);
 
-  const parsedDate = useMemo(() => {
-    if (!value) return null;
-    const parts = value.split('-');
+  const pad = (n) => String(n).padStart(2, '0');
+
+  const parseDateStr = (str) => {
+    if (!str || typeof str !== 'string') return null;
+    const parts = str.split('-');
     if (parts.length === 3) {
-      return new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+      const y = parseInt(parts[0], 10);
+      const m = parseInt(parts[1], 10) - 1;
+      const d = parseInt(parts[2], 10);
+      if (!isNaN(y) && !isNaN(m) && !isNaN(d)) {
+        return new Date(y, m, d);
+      }
     }
     return null;
+  };
+
+  // Parse current value (single 'YYYY-MM-DD' or range 'start:end')
+  const { startDateStr, endDateStr } = useMemo(() => {
+    if (!value) return { startDateStr: '', endDateStr: '' };
+    if (typeof value === 'string' && value.includes(':')) {
+      const [s, e] = value.split(':');
+      return { startDateStr: s, endDateStr: e };
+    }
+    return { startDateStr: value, endDateStr: value };
   }, [value]);
 
-  const [viewDate, setViewDate] = useState(() => parsedDate || new Date());
+  const todayStr = useMemo(() => getLocalYYYYMMDD(new Date()), []);
+  const todayDate = useMemo(() => new Date(), []);
+  const currentYear = todayDate.getFullYear();
+  const currentMonthNumber = todayDate.getMonth();
 
+  // Internal draft states for From / To selection inside popover
+  const [draftStart, setDraftStart] = useState(startDateStr || todayStr);
+  const [draftEnd, setDraftEnd] = useState(endDateStr || todayStr);
+
+  const [viewDate, setViewDate] = useState(() => {
+    if (startDateStr) {
+      const parsed = parseDateStr(startDateStr);
+      if (parsed) return parsed;
+    }
+    return new Date();
+  });
+
+  // Keep draft in sync when value changes or when opened
   useEffect(() => {
-    if (parsedDate) setViewDate(parsedDate);
-  }, [parsedDate]);
+    if (startDateStr) {
+      setDraftStart(startDateStr);
+      setDraftEnd(endDateStr || startDateStr);
+      const parsed = parseDateStr(startDateStr);
+      if (parsed) setViewDate(parsed);
+    } else {
+      setDraftStart('');
+      setDraftEnd('');
+    }
+  }, [startDateStr, endDateStr, isOpen]);
 
+  // Click outside to apply draft and close
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        if (draftStart && draftEnd) {
+          if (draftStart === draftEnd) {
+            onChange(draftStart);
+          } else {
+            onChange(`${draftStart}:${draftEnd}`);
+          }
+        } else if (draftStart) {
+          onChange(draftStart);
+        }
         setIsOpen(false);
+        setViewMode('days');
+        setHoverDate(null);
+        setRangeNotice('');
       }
     };
     if (isOpen) document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [isOpen]);
+  }, [isOpen, draftStart, draftEnd, onChange]);
 
-  const pad = (n) => String(n).padStart(2, '0');
+  const formatDateDisplay = (dStr) => {
+    const d = parseDateStr(dStr);
+    if (!d) return '';
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const yr = d.getFullYear();
+    return `${day}/${month}/${yr}`;
+  };
 
   const formattedDisplay = useMemo(() => {
-    if (!parsedDate) return '';
-    return parsedDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-  }, [parsedDate]);
+    if (!value) return '';
+    if (typeof value === 'string' && value.includes(':')) {
+      const [s, e] = value.split(':');
+      if (s === e) return formatDateDisplay(s);
+      return `${formatDateDisplay(s)} - ${formatDateDisplay(e)}`;
+    }
+    return formatDateDisplay(value);
+  }, [value]);
 
   const year = viewDate.getFullYear();
   const month = viewDate.getMonth();
   const totalDays = new Date(year, month + 1, 0).getDate();
   const startDay = (new Date(year, month, 1).getDay() + 6) % 7; // Monday start (0=Mo, 6=Su)
 
-  const monthNames = [
+  const isCurrentOrFutureMonth = disableFuture && (year > currentYear || (year === currentYear && month >= currentMonthNumber));
+
+  const monthNamesFull = [
     'January', 'February', 'March', 'April', 'May', 'June',
     'July', 'August', 'September', 'October', 'November', 'December'
   ];
+  const monthNamesShort = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const yearList = Array.from({ length: 30 }, (_, idx) => currentYear - 20 + idx);
 
-  const handleDateSelect = (day) => {
-    const dStr = `${year}-${pad(month + 1)}-${pad(day)}`;
-    onChange(dStr);
-    setIsOpen(false);
-  };
+  // Selected range duration
+  const selectedDaysCount = useMemo(() => {
+    if (!draftStart) return 0;
+    if (!draftEnd || draftStart === draftEnd) return 1;
+    const d1 = parseDateStr(draftStart);
+    const d2 = parseDateStr(draftEnd);
+    if (!d1 || !d2) return 1;
+    return Math.abs(Math.round((d2.getTime() - d1.getTime()) / (1000 * 60 * 60 * 24))) + 1;
+  }, [draftStart, draftEnd]);
 
   const handlePrevMonth = (e) => {
     e.stopPropagation();
-    setViewDate(new Date(year, month - 1, 1));
+    if (viewMode === 'years') {
+      setViewDate(new Date(year - 12, month, 1));
+    } else {
+      setViewDate(new Date(year, month - 1, 1));
+    }
   };
 
   const handleNextMonth = (e) => {
     e.stopPropagation();
-    setViewDate(new Date(year, month + 1, 1));
+    if (isCurrentOrFutureMonth) return;
+    if (viewMode === 'years') {
+      const targetYear = Math.min(year + 12, disableFuture ? currentYear : year + 12);
+      setViewDate(new Date(targetYear, month, 1));
+    } else {
+      setViewDate(new Date(year, month + 1, 1));
+    }
+  };
+
+  const handleDateSelect = (day) => {
+    const clickedStr = `${year}-${pad(month + 1)}-${pad(day)}`;
+
+    if (disableFuture && clickedStr > todayStr) {
+      return;
+    }
+
+    if (!allowRange) {
+      setDraftStart(clickedStr);
+      setDraftEnd(clickedStr);
+      onChange(clickedStr);
+      setIsOpen(false);
+      return;
+    }
+
+    if (selectingField === 'start') {
+      setDraftStart(clickedStr);
+      if (!draftEnd || draftEnd < clickedStr) {
+        setDraftEnd(clickedStr);
+      } else {
+        // Verify range does not exceed 30 days
+        const d1 = parseDateStr(clickedStr);
+        const d2 = parseDateStr(draftEnd);
+        const diff = Math.round((d2.getTime() - d1.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+        if (diff > 30) {
+          const maxDate = new Date(d1.getTime() + 29 * 24 * 60 * 60 * 1000);
+          let cappedStr = getLocalYYYYMMDD(maxDate);
+          if (disableFuture && cappedStr > todayStr) {
+            cappedStr = todayStr;
+          }
+          setDraftEnd(cappedStr);
+          setRangeNotice('Max range is 30 days. Auto-adjusted to 30 days.');
+          setTimeout(() => setRangeNotice(''), 3000);
+        }
+      }
+      setSelectingField('end');
+    } else {
+      // Selecting End
+      let s = draftStart || clickedStr;
+      let e = clickedStr;
+      if (e < s) {
+        [s, e] = [e, s];
+      }
+      if (disableFuture && e > todayStr) {
+        e = todayStr;
+      }
+      const d1 = parseDateStr(s);
+      const d2 = parseDateStr(e);
+      const diff = Math.round((d2.getTime() - d1.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+      if (diff > 30) {
+        const maxDate = new Date(d1.getTime() + 29 * 24 * 60 * 60 * 1000);
+        let cappedStr = getLocalYYYYMMDD(maxDate);
+        if (disableFuture && cappedStr > todayStr) {
+          cappedStr = todayStr;
+        }
+        e = cappedStr;
+        setRangeNotice('Max range is 30 days. Auto-adjusted to 30 days.');
+        setTimeout(() => setRangeNotice(''), 3000);
+      }
+      setDraftStart(s);
+      setDraftEnd(e);
+      setSelectingField('start');
+    }
+  };
+
+  const handleApply = (e) => {
+    e?.stopPropagation();
+    if (draftStart && draftEnd) {
+      if (draftStart === draftEnd) {
+        onChange(draftStart);
+      } else {
+        onChange(`${draftStart}:${draftEnd}`);
+      }
+    } else if (draftStart) {
+      onChange(draftStart);
+    }
+    setIsOpen(false);
+    setViewMode('days');
+    setHoverDate(null);
+    setRangeNotice('');
   };
 
   const handleSetToday = (e) => {
-    e.stopPropagation();
-    const today = new Date();
-    const dStr = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`;
-    onChange(dStr);
-    setViewDate(today);
+    e?.stopPropagation();
+    setDraftStart(todayStr);
+    setDraftEnd(todayStr);
+    setViewDate(new Date());
+    onChange(todayStr);
     setIsOpen(false);
+    setViewMode('days');
+    setHoverDate(null);
+    setRangeNotice('');
   };
 
   const handleClear = (e) => {
-    e.stopPropagation();
+    e?.stopPropagation();
+    setDraftStart('');
+    setDraftEnd('');
     onChange('');
     setIsOpen(false);
+    setViewMode('days');
+    setHoverDate(null);
+    setRangeNotice('');
   };
-
-  const todayStr = `${new Date().getFullYear()}-${pad(new Date().getMonth() + 1)}-${pad(new Date().getDate())}`;
 
   return (
     <div className="relative inline-block" ref={dropdownRef}>
-      {/* Trigger Button - Clickable anywhere on the button */}
+      {/* Trigger Button */}
       <button
         type="button"
-        onClick={() => setIsOpen(prev => !prev)}
+        onClick={() => {
+          setIsOpen(prev => !prev);
+          setViewMode('days');
+          setHoverDate(null);
+          setRangeNotice('');
+          setSelectingField('start');
+        }}
         className="flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-xl bg-slate-50 dark:bg-[#0d2a22] border border-[#e2eae7] dark:border-[#133029] text-slate-700 dark:text-white hover:border-emerald-500/50 hover:bg-slate-100/80 dark:hover:bg-[#133029] transition-all cursor-pointer shadow-xs select-none group"
       >
         <span className={formattedDisplay ? 'font-bold text-slate-800 dark:text-white' : 'text-slate-400 dark:text-[#829e92]'}>
@@ -112,11 +309,95 @@ export const AttendanceDatePicker = ({ value, onChange, placeholder = 'dd-mm-yyy
         <Calendar size={13} className="text-emerald-500 shrink-0 group-hover:scale-110 transition-transform" />
       </button>
 
-      {/* Modern Popover Calendar UI */}
+      {/* Popover */}
       {isOpen && (
-        <div className="absolute right-0 top-full mt-2 w-72 bg-white dark:bg-[#0d2a22] border border-[#e2eae7] dark:border-[#133029] rounded-2xl shadow-2xl p-3.5 z-50 animate-in fade-in zoom-in-95 duration-150 select-none">
-          {/* Header Controls */}
-          <div className="flex items-center justify-between gap-1 mb-3">
+        <div
+          onClick={(e) => e.stopPropagation()}
+          className="absolute right-0 top-full mt-2 w-80 bg-white dark:bg-[#0d2a22] border border-[#e2eae7] dark:border-[#133029] rounded-2xl shadow-2xl p-3.5 z-50 animate-in fade-in zoom-in-95 duration-150 select-none"
+        >
+          {/* FROM / TO Custom Date Selectors */}
+          {allowRange ? (
+            <div className="mb-2.5">
+              <div className="flex items-center gap-2">
+                {/* FROM BOX */}
+                <button
+                  type="button"
+                  onClick={() => setSelectingField('start')}
+                  className={`flex-1 px-2.5 py-1.5 rounded-xl text-left border transition-all cursor-pointer flex items-center justify-between gap-1.5 ${
+                    selectingField === 'start'
+                      ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-500 ring-2 ring-emerald-500/20 shadow-xs'
+                      : 'bg-slate-50 dark:bg-[#12382e] border-slate-200 dark:border-[#1e483c] hover:border-slate-300 dark:hover:border-[#2a5a4c]'
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 dark:text-[#829e92] shrink-0">
+                      FROM
+                    </span>
+                    <span className="text-xs font-bold text-slate-800 dark:text-white truncate">
+                      {draftStart ? formatDateDisplay(draftStart) : 'Select date'}
+                    </span>
+                  </div>
+                  {selectingField === 'start' && (
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                  )}
+                </button>
+
+                <span className="text-slate-400 dark:text-slate-500 font-bold text-xs shrink-0">→</span>
+
+                {/* TO BOX */}
+                <button
+                  type="button"
+                  onClick={() => setSelectingField('end')}
+                  className={`flex-1 px-2.5 py-1.5 rounded-xl text-left border transition-all cursor-pointer flex items-center justify-between gap-1.5 ${
+                    selectingField === 'end'
+                      ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-500 ring-2 ring-emerald-500/20 shadow-xs'
+                      : 'bg-slate-50 dark:bg-[#12382e] border-slate-200 dark:border-[#1e483c] hover:border-slate-300 dark:hover:border-[#2a5a4c]'
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 dark:text-[#829e92] shrink-0">
+                      TO
+                    </span>
+                    <span className="text-xs font-bold text-slate-800 dark:text-white truncate">
+                      {draftEnd ? formatDateDisplay(draftEnd) : 'Select date'}
+                    </span>
+                  </div>
+                  {selectingField === 'end' && (
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                  )}
+                </button>
+              </div>
+
+              {/* Range Duration & Max 30 Days indicator */}
+              <div className="flex items-center justify-between px-1 mt-2 text-[11px]">
+                <span className="text-slate-500 dark:text-[#829e92] font-semibold">
+                  {selectedDaysCount > 1 ? `${selectedDaysCount} days selected` : '1 day selected'}
+                </span>
+                <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 px-2 py-0.5 rounded-full border border-emerald-200/50 dark:border-emerald-800/40">
+                  Max 30 days
+                </span>
+              </div>
+            </div>
+          ) : (
+            <div className="px-2.5 py-1.5 rounded-xl bg-slate-50 dark:bg-[#12382e] border border-slate-200 dark:border-[#1e483c] mb-2.5 flex items-center justify-between">
+              <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 dark:text-[#829e92]">
+                SELECTED DATE
+              </span>
+              <span className="text-xs font-bold text-slate-800 dark:text-white">
+                {draftStart ? formatDateDisplay(draftStart) : 'Select date'}
+              </span>
+            </div>
+          )}
+
+          {/* Range Selection Notification Banner */}
+          {rangeNotice && (
+            <div className="text-[10px] font-semibold text-center py-1 px-2 mb-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/40">
+              {rangeNotice}
+            </div>
+          )}
+
+          {/* Header Controls (Month & Year) */}
+          <div className="flex items-center justify-between gap-1 mb-2.5">
             <button
               type="button"
               onClick={handlePrevMonth}
@@ -125,101 +406,219 @@ export const AttendanceDatePicker = ({ value, onChange, placeholder = 'dd-mm-yyy
               <ChevronLeft size={16} />
             </button>
 
-            <div className="flex items-center gap-1">
-              <select
-                value={month}
-                onChange={(e) => setViewDate(new Date(year, parseInt(e.target.value, 10), 1))}
-                className="bg-transparent text-xs font-bold text-slate-800 dark:text-white outline-none cursor-pointer hover:text-emerald-600 dark:text-white dark:hover:text-emerald-400 transition-colors py-0.5"
+            <div className="flex items-center gap-1.5 font-extrabold text-slate-800 dark:text-white text-xs">
+              <button
+                type="button"
+                onClick={() => setViewMode(viewMode === 'months' ? 'days' : 'months')}
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg transition-all cursor-pointer border ${
+                  viewMode === 'months'
+                    ? 'bg-emerald-500 text-white border-emerald-500 shadow-xs'
+                    : 'bg-slate-50 dark:bg-[#12382e] hover:bg-emerald-50 dark:hover:bg-[#174438] text-slate-800 dark:text-white border-slate-200 dark:border-[#1e483c]'
+                }`}
               >
-                {monthNames.map((mName, i) => (
-                  <option key={mName} value={i} className="bg-white dark:bg-[#0d2a22] text-slate-800 dark:text-white">
-                    {mName}
-                  </option>
-                ))}
-              </select>
+                <span>{monthNamesFull[month]}</span>
+                <ChevronDown size={12} className={`transition-transform duration-200 ${viewMode === 'months' ? 'rotate-180' : ''}`} />
+              </button>
 
-              <select
-                value={year}
-                onChange={(e) => setViewDate(new Date(parseInt(e.target.value, 10), month, 1))}
-                className="bg-transparent text-xs font-bold text-slate-800 dark:text-white outline-none cursor-pointer hover:text-emerald-600 dark:text-white dark:hover:text-emerald-400 transition-colors py-0.5"
+              <button
+                type="button"
+                onClick={() => setViewMode(viewMode === 'years' ? 'days' : 'years')}
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg transition-all cursor-pointer border ${
+                  viewMode === 'years'
+                    ? 'bg-emerald-500 text-white border-emerald-500 shadow-xs'
+                    : 'bg-slate-50 dark:bg-[#12382e] hover:bg-emerald-50 dark:hover:bg-[#174438] text-slate-800 dark:text-white border-slate-200 dark:border-[#1e483c]'
+                }`}
               >
-                {Array.from({ length: 20 }, (_, idx) => new Date().getFullYear() - 10 + idx).map((y) => (
-                  <option key={y} value={y} className="bg-white dark:bg-[#0d2a22] text-slate-800 dark:text-white">
-                    {y}
-                  </option>
-                ))}
-              </select>
+                <span>{year}</span>
+                <ChevronDown size={12} className={`transition-transform duration-200 ${viewMode === 'years' ? 'rotate-180' : ''}`} />
+              </button>
             </div>
 
             <button
               type="button"
+              disabled={isCurrentOrFutureMonth}
               onClick={handleNextMonth}
-              className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-[#133029] text-slate-600 dark:text-slate-300 transition-colors cursor-pointer"
+              className={`p-1.5 rounded-lg transition-colors ${
+                isCurrentOrFutureMonth
+                  ? 'opacity-25 cursor-not-allowed text-slate-300 dark:text-slate-600'
+                  : 'hover:bg-slate-100 dark:hover:bg-[#133029] text-slate-600 dark:text-slate-300 cursor-pointer'
+              }`}
             >
               <ChevronRight size={16} />
             </button>
           </div>
 
-          {/* Weekday Names Header */}
-          <div className="grid grid-cols-7 gap-1 text-center mb-1.5">
-            {['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'].map((dayName, idx) => (
-              <span
-                key={dayName}
-                className={`text-[10px] font-bold uppercase tracking-wider ${idx === 6 ? 'text-rose-500 dark:text-rose-400' : 'text-slate-400 dark:text-[#829e92]'
-                  }`}
-              >
-                {dayName}
-              </span>
-            ))}
-          </div>
+          {/* VIEW MODE: MONTHS GRID */}
+          {viewMode === 'months' && (
+            <div className="grid grid-cols-3 gap-2 py-2 animate-in fade-in duration-150">
+              {monthNamesShort.map((m, idx) => {
+                const isSelected = month === idx;
+                const isFutureMonth = disableFuture && year === currentYear && idx > currentMonthNumber;
+                return (
+                  <button
+                    key={m}
+                    type="button"
+                    disabled={isFutureMonth}
+                    onClick={() => {
+                      if (!isFutureMonth) {
+                        setViewDate(new Date(year, idx, 1));
+                        setViewMode('days');
+                      }
+                    }}
+                    className={`py-2 px-1 rounded-xl text-xs font-bold transition-all text-center ${
+                      isFutureMonth
+                        ? 'opacity-25 cursor-not-allowed text-slate-300 dark:text-slate-600 bg-slate-50/50 dark:bg-[#12382e]/50'
+                        : isSelected
+                        ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/20 scale-105 cursor-pointer'
+                        : 'bg-slate-50 dark:bg-[#12382e] hover:bg-emerald-50 dark:hover:bg-[#174438] text-slate-700 dark:text-slate-200 border border-slate-200/80 dark:border-[#1e483c] cursor-pointer'
+                    }`}
+                  >
+                    {m}
+                  </button>
+                );
+              })}
+            </div>
+          )}
 
-          {/* Days Grid */}
-          <div className="grid grid-cols-7 gap-1">
-            {Array.from({ length: startDay }).map((_, idx) => (
-              <div key={`empty-${idx}`} className="h-8 w-8" />
-            ))}
+          {/* VIEW MODE: YEARS GRID */}
+          {viewMode === 'years' && (
+            <div className="grid grid-cols-4 gap-1.5 py-2 max-h-48 overflow-y-auto pr-1 animate-in fade-in duration-150 custom-scrollbar">
+              {yearList.map((y) => {
+                const isSelected = year === y;
+                const isFutureYear = disableFuture && y > currentYear;
+                return (
+                  <button
+                    key={y}
+                    type="button"
+                    disabled={isFutureYear}
+                    onClick={() => {
+                      if (!isFutureYear) {
+                        setViewDate(new Date(y, month, 1));
+                        setViewMode('days');
+                      }
+                    }}
+                    className={`py-2 px-1 rounded-xl text-xs font-bold transition-all text-center ${
+                      isFutureYear
+                        ? 'opacity-25 cursor-not-allowed text-slate-300 dark:text-slate-600 bg-slate-50/50 dark:bg-[#12382e]/50'
+                        : isSelected
+                        ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/20 scale-105 cursor-pointer'
+                        : 'bg-slate-50 dark:bg-[#12382e] hover:bg-emerald-50 dark:hover:bg-[#174438] text-slate-700 dark:text-slate-200 border border-slate-200/80 dark:border-[#1e483c] cursor-pointer'
+                    }`}
+                  >
+                    {y}
+                  </button>
+                );
+              })}
+            </div>
+          )}
 
-            {Array.from({ length: totalDays }).map((_, idx) => {
-              const day = idx + 1;
-              const dateStr = `${year}-${pad(month + 1)}-${pad(day)}`;
-              const isSelected = value === dateStr;
-              const isToday = todayStr === dateStr;
+          {/* VIEW MODE: DAYS CALENDAR GRID */}
+          {viewMode === 'days' && (
+            <>
+              {/* Weekday Names Header */}
+              <div className="grid grid-cols-7 gap-1 text-center mb-1.5">
+                {['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'].map((dayName, idx) => (
+                  <span
+                    key={dayName}
+                    className={`text-[10px] font-bold uppercase tracking-wider ${
+                      idx === 6 ? 'text-rose-500 dark:text-rose-400' : 'text-slate-400 dark:text-[#829e92]'
+                    }`}
+                  >
+                    {dayName}
+                  </span>
+                ))}
+              </div>
 
-              return (
+              {/* Days Grid */}
+              <div className="grid grid-cols-7 gap-1 text-center">
+                {Array.from({ length: startDay }).map((_, idx) => (
+                  <span key={`blank-${idx}`} className="h-7 w-7" />
+                ))}
+
+                {Array.from({ length: totalDays }, (_, i) => i + 1).map((d) => {
+                  const dateStr = `${year}-${pad(month + 1)}-${pad(d)}`;
+                  const isToday = todayStr === dateStr;
+                  const isFuture = disableFuture && dateStr > todayStr;
+
+                  let isStart = draftStart === dateStr;
+                  let isEnd = draftEnd === dateStr;
+                  let isInRange = false;
+
+                  if (draftStart && draftEnd) {
+                    let s = draftStart;
+                    let e = draftEnd;
+                    if (s > e) [s, e] = [e, s];
+                    if (dateStr > s && dateStr < e) {
+                      isInRange = true;
+                    }
+                  }
+
+                  // Hover preview when selecting End date
+                  if (selectingField === 'end' && draftStart && hoverDate && !isFuture) {
+                    let s = draftStart;
+                    let h = hoverDate;
+                    if (s > h) [s, h] = [h, s];
+                    if (dateStr > s && dateStr <= h) {
+                      isInRange = true;
+                      if (dateStr === hoverDate) isEnd = true;
+                    }
+                  }
+
+                  return (
+                    <button
+                      type="button"
+                      key={d}
+                      disabled={isFuture}
+                      onClick={() => !isFuture && handleDateSelect(d)}
+                      onMouseEnter={() => !isFuture && selectingField === 'end' && setHoverDate(dateStr)}
+                      className={`h-7 w-7 text-xs font-bold flex items-center justify-center transition-all ${
+                        isFuture
+                          ? 'text-slate-300 dark:text-slate-600/40 cursor-not-allowed opacity-30 hover:bg-transparent select-none'
+                          : isStart || isEnd
+                          ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/30 scale-105 rounded-lg z-10 cursor-pointer'
+                          : isInRange
+                          ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-200 font-bold rounded-none cursor-pointer'
+                          : isToday
+                          ? 'border border-emerald-500 text-emerald-600 dark:text-emerald-400 font-extrabold bg-emerald-50/50 dark:bg-emerald-500/10 rounded-lg cursor-pointer'
+                          : 'text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-[#133029] rounded-lg cursor-pointer'
+                      }`}
+                    >
+                      {d}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Action Footer */}
+              <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-slate-100 dark:border-[#133029]">
                 <button
                   type="button"
-                  key={day}
-                  onClick={() => handleDateSelect(day)}
-                  className={`h-8 w-8 mx-auto flex items-center justify-center rounded-xl text-xs font-semibold transition-all cursor-pointer ${isSelected
-                    ? 'bg-gradient-to-br from-emerald-500 to-emerald-600 text-white shadow-md shadow-emerald-500/30 font-bold scale-105'
-                    : isToday
-                      ? 'border border-emerald-500/60 text-emerald-600 dark:text-emerald-400 font-bold hover:bg-emerald-50 dark:hover:bg-[#133029]'
-                      : 'text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-[#133029]'
-                    }`}
+                  onClick={handleClear}
+                  className="text-[11px] font-bold text-slate-400 hover:text-slate-600 dark:text-slate-400 dark:hover:text-slate-200 transition-colors cursor-pointer px-1 py-0.5"
                 >
-                  {day}
+                  Clear
                 </button>
-              );
-            })}
-          </div>
 
-          {/* Quick Action Footer */}
-          <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-[#e2eae7] dark:border-[#133029] text-xs">
-            <button
-              type="button"
-              onClick={handleClear}
-              className="px-2 py-1 text-[11px] font-bold text-slate-400 hover:text-red-500 transition-colors cursor-pointer"
-            >
-              Clear
-            </button>
-            <button
-              type="button"
-              onClick={handleSetToday}
-              className="px-3 py-1 text-[11px] font-bold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 rounded-lg hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors cursor-pointer"
-            >
-              Today
-            </button>
-          </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleSetToday}
+                    className="text-[11px] font-bold text-slate-600 dark:text-slate-300 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-slate-100 dark:hover:bg-[#133029] px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                  >
+                    Today
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleApply}
+                    className="text-[11px] font-extrabold text-white bg-emerald-500 hover:bg-emerald-600 px-3 py-1 rounded-lg shadow-xs transition-colors cursor-pointer"
+                  >
+                    Apply
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       )}
     </div>
@@ -566,11 +965,6 @@ const ChartTooltip = ({ active, payload, label, isDark }) => {
 };
 
 // ────────────────────────────── MAIN COMPONENT ──────────────────────────────
-const getLocalYYYYMMDD = (d) => {
-  const offset = d.getTimezoneOffset() * 60000;
-  return new Date(d.getTime() - offset).toISOString().split('T')[0];
-};
-
 const Attendance = () => {
   const [records, setRecords] = useState([]);
   const [weeklyChartData, setWeeklyChartData] = useState([]);
@@ -608,15 +1002,15 @@ const Attendance = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [hoveredSummaryIndex, setHoveredSummaryIndex] = useState(null);
   const [statusFilter, setStatusFilter] = useState('All');
-  const [dateFilter, setDateFilter] = useState('');
+  const [dateFilter, setDateFilter] = useState(() => getLocalYYYYMMDD(new Date()));
   const [appViewMode, setAppViewMode] = useState('attendance'); // 'attendance' | 'timeTracker'
-  const [viewMode, setViewMode] = useState('daily'); // daily | weekly | monthly
+  const [viewMode, setViewMode] = useState('all'); // all | daily | weekly | monthly
   const [sortField, setSortField] = useState('date');
   const [sortDir, setSortDir] = useState('desc');
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
-  const pageSize = viewMode === 'weekly' ? 7 : 10;
+  const pageSize = 10;
 
   // Calendar
   const [calendarMonth, setCalendarMonth] = useState(new Date());
@@ -1325,7 +1719,18 @@ const Attendance = () => {
       });
     }
     if (dateFilter) {
-      filtered = filtered.filter(r => r.date === dateFilter);
+      if (typeof dateFilter === 'string' && dateFilter.includes(':')) {
+        const [start, end] = dateFilter.split(':');
+        filtered = filtered.filter(r => {
+          const d = typeof r.date === 'string' ? r.date.split('T')[0] : getLocalYYYYMMDD(new Date(r.date));
+          return d >= start && d <= end;
+        });
+      } else if (typeof dateFilter === 'string') {
+        filtered = filtered.filter(r => {
+          const d = typeof r.date === 'string' ? r.date.split('T')[0] : getLocalYYYYMMDD(new Date(r.date));
+          return d === dateFilter;
+        });
+      }
     }
     filtered.sort((a, b) => {
       let cmp = 0;
@@ -1422,72 +1827,123 @@ const Attendance = () => {
     ].filter(d => d.value > 0);
   }, [summaryStats, periodStats, yearlyStats, viewContext]);
 
-  // Export CSV
-  const exportCSV = () => {
-    const headers = ['Date', 'Employee', 'Status', 'Clock In', 'Clock Out', 'Working Hours'];
+  // Export Modal State & Configuration
+  const [showExportModal, setShowExportModal] = useState(false);
 
-    const formatCsvCell = (val) => {
-      if (val === null || val === undefined) return '""';
-      const str = String(val).replace(/"/g, '""');
-      return `"${str}"`;
-    };
+  const baseAttendanceRecords = useMemo(() => {
+    let base = [...allCombinedRecords];
+    if (viewContext === 'employee') {
+      const currentUser = JSON.parse(sessionStorage.getItem('user') || '{}');
+      const currentUserId = currentUser._id || currentUser.id;
+      const currentUserName = (currentUser.name || '').toLowerCase().trim();
+      base = base.filter(r => {
+        const recUserId = r.user?._id || r.user?.id || r.user;
+        const recUserName = (r.user?.name || r.userName || '').toLowerCase().trim();
+        if (currentUserId && recUserId) return String(recUserId) === String(currentUserId);
+        if (currentUserName && recUserName) return recUserName === currentUserName;
+        return true;
+      });
+    }
+    return base;
+  }, [allCombinedRecords, viewContext]);
 
-    const formatDateForCsv = (rawDate) => {
-      if (!rawDate) return 'N/A';
-      try {
-        const cleanStr = typeof rawDate === 'string' ? rawDate.split('T')[0] : rawDate;
-        const parts = String(cleanStr).split('-');
-        if (parts.length === 3) {
-          const year = parts[0];
-          const monthIdx = parseInt(parts[1], 10) - 1;
-          const day = parts[2];
-          const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-          if (monthIdx >= 0 && monthIdx < 12) {
-            return `${day} ${monthNames[monthIdx]} ${year}`;
+  const attendanceExportColumns = [
+    { 
+      key: 'date', 
+      label: 'Date', 
+      defaultSelected: true, 
+      getValue: (r) => {
+        if (!r.date) return 'N/A';
+        try {
+          const cleanStr = typeof r.date === 'string' ? r.date.split('T')[0] : r.date;
+          const parts = String(cleanStr).split('-');
+          if (parts.length === 3) {
+            const year = parts[0];
+            const monthIdx = parseInt(parts[1], 10) - 1;
+            const day = parts[2];
+            const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            if (monthIdx >= 0 && monthIdx < 12) return `${day} ${monthNames[monthIdx]} ${year}`;
           }
-        }
-        const d = new Date(rawDate);
-        if (!isNaN(d.getTime())) {
-          return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-        }
-      } catch (e) { }
-      return String(rawDate);
-    };
+          const d = new Date(r.date);
+          if (!isNaN(d.getTime())) return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+        } catch (e) {}
+        return String(r.date);
+      }
+    },
+    { 
+      key: 'employee', 
+      label: 'Employee Name', 
+      defaultSelected: true, 
+      getValue: (r) => r.user?.name || r.userName || 'N/A' 
+    },
+    { 
+      key: 'email', 
+      label: 'Email Address', 
+      defaultSelected: true, 
+      getValue: (r) => r.user?.email || 'N/A' 
+    },
+    { 
+      key: 'department', 
+      label: 'Department', 
+      defaultSelected: true, 
+      getValue: (r) => r.department || r.user?.department || 'N/A' 
+    },
+    { 
+      key: 'status', 
+      label: 'Status', 
+      defaultSelected: true, 
+      getValue: (r) => r.status || 'N/A' 
+    },
+    { 
+      key: 'clockIn', 
+      label: 'Clock In', 
+      defaultSelected: true, 
+      getValue: (r) => {
+        const cInRaw = r.clockIn || r.clock_in || (r.checkInTime ? new Date(r.checkInTime).toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false }) : null);
+        return (cInRaw && cInRaw !== '--') ? formatTime12h(cInRaw) : 'N/A';
+      }
+    },
+    { 
+      key: 'clockOut', 
+      label: 'Clock Out', 
+      defaultSelected: true, 
+      getValue: (r) => {
+        const cOutRaw = r.clockOut || r.clock_out || (r.checkOutTime ? new Date(r.checkOutTime).toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false }) : null);
+        return (cOutRaw && cOutRaw !== '--') ? formatTime12h(cOutRaw) : 'N/A';
+      }
+    },
+    { 
+      key: 'workingHours', 
+      label: 'Working Hours', 
+      defaultSelected: true, 
+      getValue: (r) => {
+        const cInRaw = r.clockIn || r.clock_in || (r.checkInTime ? new Date(r.checkInTime).toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false }) : null);
+        const cOutRaw = r.clockOut || r.clock_out || (r.checkOutTime ? new Date(r.checkOutTime).toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false }) : null);
+        const workingHoursRaw = getWorkingHours(cInRaw, cOutRaw, r.totalHours, r);
+        return (!workingHoursRaw || workingHoursRaw === '--') ? 'N/A' : workingHoursRaw;
+      }
+    },
+    { 
+      key: 'inactiveTime', 
+      label: 'Break / Inactive Time', 
+      defaultSelected: false, 
+      getValue: (r) => r.inactiveTime || '--' 
+    }
+  ];
 
-    const rows = filteredRecords.map(r => {
-      const formattedDateText = formatDateForCsv(r.date);
-      const employeeName = r.user?.name || r.userName || 'N/A';
-      const status = r.status || 'N/A';
-
-      const cInRaw = r.clockIn || r.clock_in || (r.checkInTime ? new Date(r.checkInTime).toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false }) : null);
-      const cOutRaw = r.clockOut || r.clock_out || (r.checkOutTime ? new Date(r.checkOutTime).toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false }) : null);
-
-      const clockIn = (cInRaw && cInRaw !== '--') ? formatTime12h(cInRaw) : 'N/A';
-      const clockOut = (cOutRaw && cOutRaw !== '--') ? formatTime12h(cOutRaw) : 'N/A';
-      const workingHoursRaw = getWorkingHours(cInRaw, cOutRaw, r.totalHours, r);
-      const workingHours = (!workingHoursRaw || workingHoursRaw === '--') ? 'N/A' : workingHoursRaw;
-
-      return [
-        formatCsvCell(`="${formattedDateText}"`),
-        formatCsvCell(employeeName),
-        formatCsvCell(status),
-        formatCsvCell(clockIn),
-        formatCsvCell(clockOut),
-        formatCsvCell(workingHours)
-      ];
-    });
-
-    const csvString = '\uFEFF' + [headers.map(formatCsvCell).join(','), ...rows.map(row => row.join(','))].join('\r\n');
-    const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.setAttribute('href', url);
-    link.setAttribute('download', `attendance_${viewMode}_${getLocalYYYYMMDD(new Date())}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-  };
+  const attendanceExportFilters = [
+    {
+      key: 'status',
+      label: 'Status',
+      getItemValue: (r) => (r.status || '').toLowerCase(),
+      options: [
+        { label: 'Present', value: 'present' },
+        { label: 'Half Day', value: 'half day' },
+        { label: 'On Leave', value: 'leave' },
+        { label: 'Absent', value: 'absent' }
+      ]
+    }
+  ];
 
   const [overrideModalTarget, setOverrideModalTarget] = useState(null);
   const [isSubmittingOverride, setIsSubmittingOverride] = useState(false);
@@ -1542,7 +1998,7 @@ const Attendance = () => {
       {/* ── HEADER ── */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex flex-wrap items-center gap-4">
-          <h1 className="text-[26px] font-extrabold text-slate-900 dark:text-white tracking-tight shrink-0" style={{ fontFamily: 'Poppins, sans-serif' }}>
+          <h1 className="text-[26px] font-semibold text-slate-900 dark:text-white tracking-tight shrink-0" style={{ fontFamily: 'Poppins, sans-serif' }}>
             Attendance
           </h1>
           <div className="w-64">
@@ -1559,7 +2015,7 @@ const Attendance = () => {
             Refresh
           </button>
           <button
-            onClick={exportCSV}
+            onClick={() => setShowExportModal(true)}
             className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all shadow-sm cursor-pointer"
           >
             <Download size={14} />
@@ -2024,15 +2480,32 @@ const Attendance = () => {
                   else if (statusType === 'absent') textColor = 'text-red-600 dark:text-red-400 font-black scale-110';
                 }
 
+                let selectedRingClass = '';
+                const isDateMatchFilter = (dStr) => {
+                  if (!dateFilter) return false;
+                  if (typeof dateFilter === 'string' && dateFilter.includes(':')) {
+                    const [s, e] = dateFilter.split(':');
+                    return dStr >= s && dStr <= e;
+                  }
+                  return dateFilter === dStr;
+                };
+
+                if (isDateMatchFilter(day.dateStr)) {
+                  if (statusType === 'present') selectedRingClass = 'ring-2 ring-emerald-500 bg-emerald-50/60 dark:bg-emerald-950/40 font-bold';
+                  else if (statusType === 'late') selectedRingClass = 'ring-2 ring-amber-500 bg-amber-50/60 dark:bg-amber-950/40 font-bold';
+                  else if (statusType === 'halfDay') selectedRingClass = 'ring-2 ring-blue-500 bg-blue-50/60 dark:bg-blue-950/40 font-bold';
+                  else if (statusType === 'leave') selectedRingClass = 'ring-2 ring-purple-500 bg-purple-50/60 dark:bg-purple-950/40 font-bold';
+                  else if (statusType === 'absent') selectedRingClass = 'ring-2 ring-red-500 bg-rose-50/60 dark:bg-rose-950/40 font-bold';
+                  else selectedRingClass = 'ring-2 ring-emerald-500 bg-emerald-50/60 dark:bg-emerald-950/40 font-bold';
+                }
+
                 return (
                   <div
                     key={day.dateStr}
-                    onClick={() => setDateFilter(dateFilter === day.dateStr ? '' : day.dateStr)}
+                    onClick={() => setDateFilter(prev => prev === day.dateStr ? '' : day.dateStr)}
                     className={`group relative h-6 md:h-7 rounded-lg p-0.5 flex flex-col items-center justify-center transition-all cursor-pointer text-[10px] bg-transparent ${textColor} ${
                       isDimmed ? 'opacity-25' : 'opacity-100'
-                    } ${isToday ? 'ring-2 ring-emerald-500 shadow-xs font-bold' : ''} ${
-                      dateFilter === day.dateStr ? 'ring-2 ring-blue-500 font-bold' : ''
-                    }`}
+                    } ${isToday ? 'ring-2 ring-emerald-500 shadow-xs font-bold' : ''} ${selectedRingClass}`}
                   >
                     <span className="leading-none text-[11px] font-bold">{day.day}</span>
                     {dotColor && (
@@ -2041,39 +2514,6 @@ const Attendance = () => {
                         style={{ backgroundColor: dotColor }}
                       />
                     )}
-
-                    {/* Interactive Hover Popover Tooltip */}
-                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:flex flex-col z-50 w-44 bg-white dark:bg-[#181612] border border-slate-200 dark:border-[#38352e] rounded-xl p-2.5 shadow-xl text-left pointer-events-none transition-all">
-                      <p className="text-[11px] font-black text-slate-800 dark:text-white border-b border-slate-100 dark:border-[#282520] pb-1 mb-1.5">
-                        {new Date(day.dateStr).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' })}
-                      </p>
-                      <div className="space-y-1 text-[10px] font-bold">
-                        <div className="flex items-center justify-between text-emerald-600 dark:text-emerald-400">
-                          <span className="flex items-center gap-1">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Present
-                          </span>
-                          <span className="font-extrabold">{day.present}</span>
-                        </div>
-                        <div className="flex items-center justify-between text-blue-600 dark:text-blue-400">
-                          <span className="flex items-center gap-1">
-                            <span className="w-1.5 h-1.5 rounded-full bg-blue-500" /> Half Day
-                          </span>
-                          <span className="font-extrabold">{day.halfDay}</span>
-                        </div>
-                        <div className="flex items-center justify-between text-purple-600 dark:text-purple-400">
-                          <span className="flex items-center gap-1">
-                            <span className="w-1.5 h-1.5 rounded-full bg-purple-500" /> Leave
-                          </span>
-                          <span className="font-extrabold">{day.leave}</span>
-                        </div>
-                        <div className="flex items-center justify-between text-red-600 dark:text-red-400">
-                          <span className="flex items-center gap-1">
-                            <span className="w-1.5 h-1.5 rounded-full bg-red-500" /> Absent
-                          </span>
-                          <span className="font-extrabold">{day.absent}</span>
-                        </div>
-                      </div>
-                    </div>
                   </div>
                 );
               })}
@@ -2153,6 +2593,7 @@ const Attendance = () => {
                 value={dailyActivityDate}
                 onChange={setDailyActivityDate}
                 placeholder="dd-mm-yyyy"
+                allowRange={false}
               />
             </div>
           </div>
@@ -2214,6 +2655,7 @@ const Attendance = () => {
               value={dateFilter}
               onChange={setDateFilter}
               placeholder="dd-mm-yyyy"
+              allowRange={true}
             />
 
             {/* Clear Button */}
@@ -2225,22 +2667,6 @@ const Attendance = () => {
                 Clear
               </button>
             )}
-
-            {/* View Mode Tabs */}
-            <div className="flex items-center gap-1 bg-slate-100 dark:bg-[#133029] rounded-xl p-0.5 shadow-xs">
-              {['daily', 'weekly', 'monthly'].map(mode => (
-                <button
-                  key={mode}
-                  onClick={() => setViewMode(mode)}
-                  className={`px-2.5 py-0.5 text-xs font-bold rounded-lg capitalize transition-all cursor-pointer ${viewMode === mode
-                    ? 'bg-white dark:bg-[#0a1f1a] text-emerald-600 dark:text-emerald-400 shadow-sm'
-                    : 'text-slate-500 dark:text-[#829e92] hover:text-slate-700 dark:hover:text-white'
-                    }`}
-                >
-                  {mode}
-                </button>
-              ))}
-            </div>
           </div>
         </div>
 
@@ -2492,6 +2918,19 @@ const Attendance = () => {
         isOpen={!!selectedSessionRecord}
         onClose={() => setSelectedSessionRecord(null)}
         record={selectedSessionRecord}
+      />
+
+      {/* ── EXPORT FILTER MODAL ── */}
+      <ExportFilterModal
+        isOpen={showExportModal}
+        onClose={() => setShowExportModal(false)}
+        title={`Export Attendance Records (${viewContext === 'employee' ? 'My Attendance' : 'All Employees'})`}
+        subtitle="Filter attendance records and choose which columns to include in your export file."
+        allData={baseAttendanceRecords}
+        filteredData={filteredRecords}
+        columns={attendanceExportColumns}
+        customFilters={attendanceExportFilters}
+        defaultFilename={`attendance_${viewContext}_${viewMode}`}
       />
     </div>
   );

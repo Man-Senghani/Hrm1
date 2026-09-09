@@ -17,8 +17,13 @@ const ForgotPassword = () => {
     setError('');
     setSuccess('');
 
-    if (!email || !email.includes('@')) {
-      setError('Please enter a valid corporate email address.');
+    if (!email.trim()) {
+      setError('Please enter your email address.');
+      setLoading(false);
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      setError('Please enter a valid email address.');
       setLoading(false);
       return;
     }
@@ -83,27 +88,24 @@ const ForgotPassword = () => {
                     Forgot Password
                  </h1>
                  <p className="text-[13px] text-[#36342e] font-medium leading-relaxed">
-                    Enter your registered corporate email to receive a password reset link.
+                    Enter your registered email to receive a password reset link.
                  </p>
               </div>
 
-              <form onSubmit={handleSubmit} className="space-y-4">
+              <form onSubmit={handleSubmit} noValidate className="space-y-4">
                  <EntryInput 
-                    label="Corporate Email"
+                    label="Email"
                     type="email" 
-                    required
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    onChange={(e) => {
+                      setEmail(e.target.value);
+                      if (error) setError('');
+                    }}
                     placeholder="name@company.io"
                     icon={<Mail size={20} />}
+                    error={error}
                   />
 
-                 {error && (
-                   <div className="w-full bg-[#fff8f6] border border-[#d9381e] p-3 rounded-[4px] flex items-start gap-2.5 animate-fade-in">
-                     <AlertCircle size={18} className="text-[#d9381e] shrink-0 mt-0.5" />
-                     <span className="text-[13px] text-[#d9381e] font-semibold">{error}</span>
-                   </div>
-                 )}
                  {success && (
                    <div className="w-full bg-[#f6fff8] border border-[#24a148] p-3 rounded-[4px] flex items-start gap-2.5 animate-fade-in">
                      <CheckCircle size={18} className="text-[#24a148] shrink-0 mt-0.5" />

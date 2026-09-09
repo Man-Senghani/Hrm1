@@ -16,6 +16,7 @@ const employeeSchema = new mongoose.Schema({
   gender: { type: String, default: 'Male' },
   dob: Date,
   address: String,
+  localAddress: String,
   permanentAddress: String,
   joinDate: Date,
   employmentType: { type: String, default: 'Full-time' },
@@ -26,6 +27,7 @@ const employeeSchema = new mongoose.Schema({
   status: { type: String, default: 'active' },
   position: { type: String, default: 'Associate' },
   designation: { type: String, default: 'Employee' },
+  department: { type: String, default: '' },
   managerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   reportingManager: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
 }, { timestamps: true });

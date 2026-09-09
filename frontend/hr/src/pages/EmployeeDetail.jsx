@@ -51,6 +51,11 @@ const EmployeeDetail = () => {
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState(null);
   const [previewDoc, setPreviewDoc] = useState(null); // { title: string, url: string }
+  const [imgError, setImgError] = useState(false);
+
+  useEffect(() => {
+    setImgError(false);
+  }, [previewDoc]);
 
   useEffect(() => {
     const fetchEmployee = async () => {
@@ -134,14 +139,7 @@ const EmployeeDetail = () => {
             <span>Back</span>
           </button>
           <div>
-            <div className="flex items-center gap-2 mb-1">
-              {employee.employeeId && (
-                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-[#00a76b] dark:text-emerald-400 uppercase tracking-wider flex items-center gap-1">
-                  <Fingerprint size={12} className="text-[#00a76b]" /> Node ID: {employee.employeeId}
-                </span>
-              )}
-            </div>
-            <h1 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight">PROFILE TRACE</h1>
+            <h1 className="text-2xl sm:text-3xl font-semibold text-slate-900 dark:text-white tracking-tight">PROFILE TRACE</h1>
           </div>
         </div>
 
@@ -186,6 +184,14 @@ const EmployeeDetail = () => {
             <p className="text-xs font-semibold text-slate-400 dark:text-slate-400 capitalize mt-0.5">
               {employee.designation || employee.position || 'Staff Member'}
             </p>
+
+            {employee.employeeId && (
+              <div className="mt-2.5 flex items-center justify-center">
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-[#00a76b] dark:text-emerald-400 uppercase tracking-wider inline-flex items-center gap-1 font-mono">
+                  <Fingerprint size={12} className="text-[#00a76b]" /> Employee ID: {employee.employeeId}
+                </span>
+              </div>
+            )}
 
             {/* Live Card Details Summary */}
             <div className="w-full mt-5 pt-5 border-t border-slate-100 dark:border-[#28241e] space-y-3 text-left">
@@ -522,31 +528,69 @@ const EmployeeDetail = () => {
 
           {/* Modal Content Box */}
           <div
-            className="relative max-w-[90vw] max-h-[85vh] flex flex-col items-center justify-center bg-slate-900/95 dark:bg-[#181612]/95 border border-slate-700/80 dark:border-[#38352e] rounded-3xl p-4 sm:p-6 shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200"
+            className="relative w-full max-w-4xl h-[80vh] max-h-[640px] min-h-[480px] flex flex-col bg-slate-900/95 dark:bg-[#181612]/95 border border-slate-700/80 dark:border-[#38352e] rounded-3xl p-5 sm:p-6 shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 cursor-default"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="w-full flex items-center justify-between pb-3 mb-3 border-b border-slate-700/60 dark:border-[#38352e]">
               <h4 className="text-sm font-black text-white uppercase tracking-wider flex items-center gap-2">
                 <FileText size={16} className="text-[#00a76b]" /> {previewDoc.title}
               </h4>
-              <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest px-2.5 py-1 bg-white/10 rounded-full">
-                Document Trace
-              </span>
+              <div className="flex items-center gap-2">
+                <a
+                  href={previewDoc.url}
+                  download={previewDoc.title}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="p-1.5 px-3 rounded-lg bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white transition-colors flex items-center gap-1.5 text-xs font-semibold"
+                  title="Download / Open in new tab"
+                >
+                  <Download size={14} />
+                  <span className="hidden sm:inline">Download</span>
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setPreviewDoc(null)}
+                  className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white transition-colors cursor-pointer"
+                  title="Close"
+                >
+                  <X size={16} />
+                </button>
+              </div>
             </div>
 
-            <div className="flex-1 w-full flex items-center justify-center overflow-auto max-h-[75vh]">
+            <div className="flex-1 w-full flex items-center justify-center overflow-auto p-4 bg-black/40 rounded-2xl">
               {(previewDoc.url.toLowerCase().endsWith('.pdf') || previewDoc.url.startsWith('data:application/pdf')) ? (
                 <iframe
                   src={previewDoc.url}
                   title={previewDoc.title}
-                  className="w-[85vw] h-[75vh] max-w-4xl rounded-xl border border-slate-700"
+                  className="w-full h-full rounded-xl border border-slate-700"
                 />
-              ) : (
+              ) : !imgError ? (
                 <img
                   src={previewDoc.url}
                   alt={previewDoc.title}
-                  className="max-h-[75vh] max-w-[85vw] object-contain rounded-xl shadow-lg"
+                  onError={() => setImgError(true)}
+                  className="max-h-full max-w-full object-contain rounded-xl shadow-lg"
                 />
+              ) : (
+                <div className="flex flex-col items-center justify-center p-8 text-center">
+                  <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-slate-400 mb-4">
+                    <FileText size={32} className="text-amber-500" />
+                  </div>
+                  <h5 className="text-sm font-bold text-white mb-1.5">{previewDoc.title}</h5>
+                  <p className="text-xs text-slate-400 max-w-md mb-5 leading-relaxed">
+                    Preview could not be displayed directly. You can open or download the document below.
+                  </p>
+                  <a
+                    href={previewDoc.url}
+                    download={previewDoc.title}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="px-5 py-2.5 bg-[#00a76b] hover:bg-[#00915c] text-white font-bold text-xs rounded-xl transition-all flex items-center gap-2 shadow-md cursor-pointer"
+                  >
+                    <Download size={15} /> Open / Download File
+                  </a>
+                </div>
               )}
             </div>
           </div>

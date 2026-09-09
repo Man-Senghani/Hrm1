@@ -21,8 +21,11 @@ import {
   MessageSquare,
   Bell,
   User,
+  SlidersHorizontal,
   Settings as SettingsIcon
 } from 'lucide-react';
+
+const DepartmentsRoles = lazy(() => import('@shared/components/DepartmentsRoles'));
 
 // Route-level lazy-loaded pages
 const HRDashboard = lazy(() => import('./pages/HRDashboard'));
@@ -87,6 +90,7 @@ function App() {
     { label: 'Daily Report', icon: FileText, path: '/daily-report' },
     { label: 'Notifications', icon: Bell, path: '/notifications' },
     { label: 'Screenshots', icon: Camera, path: '/screenshots' },
+    { label: 'Dropdown Setup', icon: SlidersHorizontal, path: '/dropdown-settings' },
     { label: 'My Profile', icon: User, path: '/profile' },
   ];
 
@@ -219,6 +223,10 @@ function App() {
             <Route path="/hr/profile" element={<Profile />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/hr/settings" element={<Settings />} />
+            <Route path="/dropdown-settings" element={<DepartmentsRoles />} />
+            <Route path="/hr/dropdown-settings" element={<DepartmentsRoles />} />
+            <Route path="/departments-roles" element={<DepartmentsRoles />} />
+            <Route path="/hr/departments-roles" element={<DepartmentsRoles />} />
 
             {/* Fallback */}
             <Route path="*" element={<Navigate to="/" replace />} />

@@ -390,7 +390,7 @@ const RolesPermissions = () => {
           {/* Header */}
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end border-b border-[#e2eae7] dark:border-[#1a2d29] pb-8 gap-4">
             <div>
-              <h1 className="text-[28px] font-bold tracking-tight text-slate-900 dark:text-white leading-none">Roles & permissions</h1>
+              <h1 className="text-[28px] font-semibold tracking-tight text-slate-900 dark:text-white leading-none">Roles & permissions</h1>
               <p className="text-sm text-slate-500 dark:text-[#a3b3af] mt-2 font-medium">Define what each role can do.</p>
             </div>
             <div className="flex gap-3">

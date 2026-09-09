@@ -39,7 +39,8 @@ router.post('/:id/pan-card', protect, authorize('admin', 'hr', 'employee'), (req
   updateEmployeeDocument(req, res, 'panCard');
 });
 router.delete('/:id', protect, authorize('admin', 'hr'), deleteEmployee);
-router.patch('/:id/status', protect, authorize('admin', 'hr'), updateEmployeeStatus);
+router.patch('/:id/status', protect, authorize('admin', 'hr', 'manager'), updateEmployeeStatus);
+router.put('/:id/status', protect, authorize('admin', 'hr', 'manager'), updateEmployeeStatus);
 router.get('/manager/:managerId', protect, authorize('admin', 'hr', 'manager'), getEmployeesByManager);
 
 module.exports = router;

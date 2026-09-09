@@ -139,18 +139,15 @@ if (window.electronAPI?.onSystemIdleStatus) {
 
     // Case 1: Currently ACTIVE — check if user has gone idle (no activity for 60s)
     if (status === 'ACTIVE' && isSessionRunning) {
-      const sessionElapsed = Math.floor((Date.now() - lastStartOrResumeTime) / 1000);
-      if (sessionElapsed >= 60 && systemIsIdle && idleSeconds >= 60) {
+      if (systemIsIdle || idleSeconds >= 60) {
         if (!idleNotificationSent) {
-          const effectiveIdleSeconds = Math.min(idleSeconds, sessionElapsed);
-          triggerIdle(effectiveIdleSeconds);
+          triggerIdle(60);
         }
       } else if (idleSeconds < 5) {
         idleNotificationSent = false;
-        isIdle = false;
       }
     }
-    // 🛑 NO AUTO-RESUME: When paused by idle, timer remains paused until user explicitly clicks RESUME button
+    // 🛑 NO AUTO-RESUME: When idle, active timer remains stopped until user explicitly clicks the RESUME button!
   });
 }
 
@@ -181,9 +178,11 @@ async function loadSession() {
   }
 
   const savedServer = await window.electronAPI.getStoreValue('serverHost');
-  if (savedServer && !savedServer.includes('localhost') && !savedServer.includes('127.0.0.1') && !savedServer.includes('aupanishad.tech')) {
+  if (savedServer && (savedServer.includes('localhost') || savedServer.includes('127.0.0.1'))) {
     BACKEND_HOST = savedServer;
+    FRONTEND_HOST = savedServer;
   } else {
+    // Standalone direct application ALWAYS connects to Live Production!
     BACKEND_HOST = PRODUCTION_BACKEND_URL;
     FRONTEND_HOST = PRODUCTION_FRONTEND_URL;
     if (window.electronAPI?.setStoreValue) {
@@ -191,7 +190,7 @@ async function loadSession() {
     }
   }
   API_BASE = `${BACKEND_HOST}/api/time`;
-  console.log('🚀 Desktop Tracker Initialized with BACKEND_HOST:', BACKEND_HOST, 'API_BASE:', API_BASE);
+  console.log('🚀 Desktop Tracker Initialized with BACKEND_HOST:', BACKEND_HOST, 'FRONTEND_HOST:', FRONTEND_HOST);
 
   if (!authToken) {
     showAuthSection();
@@ -813,7 +812,11 @@ function hideAuthSection() {
 }
 
 function redirectToWebLogin() {
-  const loginUrl = `${FRONTEND_HOST}/login?desktop=true`;
+  const targetFrontend = (BACKEND_HOST && (BACKEND_HOST.includes('wljp') || BACKEND_HOST.includes('staging')))
+    ? 'https://hrm-staging.aupanishad.tech'
+    : (FRONTEND_HOST || PRODUCTION_FRONTEND_URL);
+  const loginUrl = `${targetFrontend}/login?desktop=true`;
+  console.log('🔗 Redirecting to Web Login:', loginUrl);
   if (window.electronAPI?.openExternal) {
     window.electronAPI.openExternal(loginUrl);
   } else {
@@ -830,6 +833,13 @@ if (window.electronAPI?.onDeepLinkServer) {
       }
       console.log('Server URL received via deep link:', cleanUrl);
       BACKEND_HOST = cleanUrl;
+      if (cleanUrl.includes('wljp') || cleanUrl.includes('staging')) {
+        FRONTEND_HOST = 'https://hrm-staging.aupanishad.tech';
+      } else if (cleanUrl.includes('localhost') || cleanUrl.includes('127.0.0.1')) {
+        FRONTEND_HOST = cleanUrl;
+      } else {
+        FRONTEND_HOST = PRODUCTION_FRONTEND_URL;
+      }
       API_BASE = `${BACKEND_HOST}/api/time`;
       await window.electronAPI.setStoreValue('serverHost', cleanUrl);
       initSocket();

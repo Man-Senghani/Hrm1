@@ -110,7 +110,7 @@ const TeamManagement = () => {
       {/* HEADER */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-8">
         <div>
-          <h1 className="text-4xl font-black text-[#1E2026] tracking-tight leading-none mb-3 uppercase">
+          <h1 className="text-3xl font-semibold text-[#1E2026] tracking-tight leading-none mb-3 uppercase">
             Team <span className="text-[#F0B90B]">Management</span>
           </h1>
           <p className="text-[#848E9C] font-bold text-[11px] uppercase tracking-[0.2em] flex items-center gap-3">

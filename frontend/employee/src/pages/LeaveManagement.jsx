@@ -544,7 +544,7 @@ const LeaveManagement = ({ isChild = false }) => {
       {/* 1. Header Section */}
       {!isChild && (
         <div className="flex justify-between items-center mb-4">
-          <h1 className="text-xl font-bold text-gray-900 dark:text-white">Leave Management</h1>
+          <h1 className="text-xl font-semibold text-gray-900 dark:text-white">Leave Management</h1>
           <div className="flex flex-wrap items-center gap-3">
             <button
               onClick={() => {

@@ -65,7 +65,7 @@ const Settings = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4 border-b border-[#e2eae7] dark:border-[#1a2d29] pb-6">
         <div>
-          <h1 className="text-[26px] font-extrabold tracking-tight text-slate-900 dark:text-white flex items-center gap-2.5">
+          <h1 className="text-[26px] font-semibold tracking-tight text-slate-900 dark:text-white flex items-center gap-2.5">
             <SettingsIcon className="text-[#00a76b]" size={26} />
             System & Preferences Settings
           </h1>
@@ -165,7 +165,7 @@ const Settings = () => {
             </div>
             <div className="flex justify-between items-center py-1">
               <span className="text-slate-500 dark:text-slate-400">Desktop Tracker Node</span>
-              <span className="font-bold text-slate-700 dark:text-slate-300">FluidHR Desktop Sync v1.2.8</span>
+              <span className="font-bold text-slate-700 dark:text-slate-300">FluidHR Desktop Sync v1.3.6</span>
             </div>
           </div>
         </div>

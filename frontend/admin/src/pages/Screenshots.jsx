@@ -288,7 +288,7 @@ const Screenshots = () => {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-200/80 dark:border-[#38352e] pb-5">
         <div>
           <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
+            <h1 className="text-2xl font-semibold text-slate-900 dark:text-white tracking-tight">
               Screenshots
             </h1>
             <span className="bg-emerald-50 dark:bg-emerald-950/60 text-[#00a76b] text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-900/40 flex items-center gap-1.5">

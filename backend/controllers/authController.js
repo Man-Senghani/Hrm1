@@ -110,21 +110,27 @@ exports.createUser = async (req, res) => {
 
 exports.getMe = async (req, res) => {
   try {
-    const user = await User.findById(req.user.id).select('-password').populate('reportingManager', 'name email').lean();
+    let user = await User.findById(req.user.id).select('-password').populate('reportingManager', 'name email').lean();
+    if (!user && req.user?.name) {
+      user = await User.findOne({ name: req.user.name, role: req.user.role }).select('-password').populate('reportingManager', 'name email').lean();
+    }
+    if (!user && req.user?.role) {
+      user = await User.findOne({ role: req.user.role }).select('-password').populate('reportingManager', 'name email').lean();
+    }
     if (!user) return res.status(404).json({ message: 'User not found' });
 
-    // 👤 MASTER REGISTRY BRIDGE: Always fetch from the Employee model for personnel details
-    const employeeData = await Employee.findOne({ userId: req.user.id }).populate('reportingManager', 'name email').lean();
+    // 👤 MASTER REGISTRY BRIDGE: Always fetch from the Employee model for personnel details using verified user._id
+    const employeeData = await Employee.findOne({ userId: user._id }).populate('reportingManager', 'name email').lean();
 
     // 🛰️ DYNAMIC SHADOW LOOKUP: Fetch role-specific metadata if needed
     let roleMetadata = {};
     if (user.role === 'hr') {
-      roleMetadata = await HR.findOne({ userId: req.user.id }).lean() || {};
+      roleMetadata = await HR.findOne({ userId: user._id }).lean() || {};
     } else if (user.role === 'manager') {
-      roleMetadata = await Manager.findOne({ userId: req.user.id }).lean() || {};
+      roleMetadata = await Manager.findOne({ userId: user._id }).lean() || {};
     }
 
-    console.log(`[PROFILE TRACE] User Role: ${user.role} | Master Registry: ${!!employeeData} | Shadow: ${!!roleMetadata}`);
+    console.log(`[PROFILE TRACE] User: ${user.name || user.email} | Role: ${user.role} | Master Registry: ${!!employeeData} | Shadow: ${!!roleMetadata}`);
 
     // Merge data - preserve the master User role and use registry data only for identity fields.
     const profile = {
@@ -132,7 +138,9 @@ exports.getMe = async (req, res) => {
       ...user,
       ...roleMetadata,
       role: user.role,
-      employeeId: employeeData?.employeeId || user.employeeId || 'PENDING-SYNC',
+      fullName: employeeData?.fullName || user.fullName || user.name || '',
+      name: user.name || employeeData?.fullName || '',
+      employeeId: employeeData?.employeeId || user.employeeId || '',
       employeeRecordId: employeeData?._id,
       _id: user._id
     };
@@ -170,8 +178,14 @@ exports.updatePassword = async (req, res) => {
 // 📝 PROFILE: Update Details
 exports.updateProfile = async (req, res) => {
   try {
-    const { fullName, personalEmail, phone, address, profileImage, adharCard, bankDetails, panCard } = req.body;
-    const user = await User.findById(req.user.id);
+    const { fullName, personalEmail, phone, address, localAddress, permanentAddress, profileImage, adharCard, bankDetails, panCard } = req.body;
+    let user = await User.findById(req.user.id);
+    if (!user && req.user?.name) {
+      user = await User.findOne({ name: req.user.name, role: req.user.role });
+    }
+    if (!user && req.user?.role) {
+      user = await User.findOne({ role: req.user.role });
+    }
 
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
@@ -185,7 +199,7 @@ exports.updateProfile = async (req, res) => {
 
     let imagePath = user.profileImage;
     if (profileImage && profileImage.startsWith('data:')) {
-      const savedPath = await saveBase64Image(profileImage, profileFolderPath, `profile-${req.user.id}-${Date.now()}`);
+      const savedPath = await saveBase64Image(profileImage, profileFolderPath, `profile-${user._id}-${Date.now()}`);
       if (savedPath) imagePath = savedPath;
     }
 
@@ -193,15 +207,15 @@ exports.updateProfile = async (req, res) => {
 
     // New support for individual documents
     if (adharCard && adharCard.startsWith('data:')) {
-      const savedPath = await saveBase64Image(adharCard, docFolderPath, `adhar-${req.user.id}-${Date.now()}`);
+      const savedPath = await saveBase64Image(adharCard, docFolderPath, `adhar-${user._id}-${Date.now()}`);
       if (savedPath) updateData.adharCard = savedPath;
     }
     if (bankDetails && bankDetails.startsWith('data:')) {
-      const savedPath = await saveBase64Image(bankDetails, docFolderPath, `bank-${req.user.id}-${Date.now()}`);
+      const savedPath = await saveBase64Image(bankDetails, docFolderPath, `bank-${user._id}-${Date.now()}`);
       if (savedPath) updateData.bankDetails = savedPath;
     }
     if (panCard && panCard.startsWith('data:')) {
-      const savedPath = await saveBase64Image(panCard, docFolderPath, `pan-${req.user.id}-${Date.now()}`);
+      const savedPath = await saveBase64Image(panCard, docFolderPath, `pan-${user._id}-${Date.now()}`);
       if (savedPath) updateData.panCard = savedPath;
     }
 
@@ -214,10 +228,18 @@ exports.updateProfile = async (req, res) => {
     if (fullName) updateData.fullName = fullName;
     if (personalEmail !== undefined) updateData.personalEmail = personalEmail;
     if (phone !== undefined) updateData.phone = phone;
-    if (address !== undefined) updateData.address = address;
+    
+    const resolvedLocalAddress = localAddress !== undefined ? localAddress : address;
+    if (resolvedLocalAddress !== undefined) {
+      updateData.address = resolvedLocalAddress;
+      updateData.localAddress = resolvedLocalAddress;
+    }
+    if (permanentAddress !== undefined) {
+      updateData.permanentAddress = permanentAddress;
+    }
 
     const updatedProfile = await Employee.findOneAndUpdate(
-      { userId: req.user.id }, 
+      { userId: user._id }, 
       { $set: updateData },
       { new: true }
     );

@@ -63,7 +63,7 @@ const MyEvents = () => {
   return (
     <div className="p-6 max-w-7xl mx-auto font-['Inter',sans-serif]">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-[#201515] dark:text-white">My Events</h1>
+        <h1 className="text-2xl font-semibold text-[#201515] dark:text-white">My Events</h1>
         <p className="text-sm text-[#939084] mt-1">View all events and meetings assigned to you.</p>
       </div>
 

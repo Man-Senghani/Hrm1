@@ -6,6 +6,7 @@ import {
   CheckCircle2, Search, Calendar, FileText, Download, ChevronDown, 
   ChevronUp, RefreshCw, AlertTriangle, ShieldCheck, X
 } from 'lucide-react';
+import ExportFilterModal from '@shared/components/ExportFilterModal';
 
 const MODULES = [
   'All', 'Auth', 'Dashboard', 'Employees', 'Attendance', 'Leave', 'Payroll', 
@@ -125,6 +126,7 @@ const AuditLogs = () => {
 
   // Expanded Log Details state
   const [expandedLogId, setExpandedLogId] = useState(null);
+  const [showExportModal, setShowExportModal] = useState(false);
 
   const getHeaders = () => {
     const token = sessionStorage.getItem('token');
@@ -185,35 +187,33 @@ const AuditLogs = () => {
     fetchAuditLogs();
   }, [fetchAuditLogs]);
 
-  // Export functions
-  const handleExportCSV = () => {
-    const headers = ['Timestamp', 'UserName', 'Role', 'Action', 'Module', 'Description', 'IP Address', 'Device', 'OS', 'Browser', 'Status'];
-    const rows = logs.map(l => [
-      new Date(l.timestamp).toLocaleString(),
-      l.userName,
-      l.userRole,
-      l.action,
-      l.module,
-      l.description,
-      l.ipAddress || '',
-      l.device || '',
-      l.os || '',
-      l.browser || '',
-      l.status
-    ]);
+  // Export column definitions and filters
+  const auditLogExportColumns = [
+    { key: 'timestamp', label: 'Timestamp', defaultSelected: true, getValue: (l) => new Date(l.timestamp).toLocaleString() },
+    { key: 'userName', label: 'User Name', defaultSelected: true, getValue: (l) => l.userName || 'N/A' },
+    { key: 'userRole', label: 'Role', defaultSelected: true, getValue: (l) => (l.userRole || 'N/A').toUpperCase() },
+    { key: 'action', label: 'Action', defaultSelected: true, getValue: (l) => l.action || 'N/A' },
+    { key: 'module', label: 'Module', defaultSelected: true, getValue: (l) => l.module || 'N/A' },
+    { key: 'description', label: 'Description', defaultSelected: true, getValue: (l) => l.description || 'N/A' },
+    { key: 'ipAddress', label: 'IP Address', defaultSelected: true, getValue: (l) => l.ipAddress || 'N/A' },
+    { key: 'device', label: 'Device', defaultSelected: false, getValue: (l) => l.device || 'N/A' },
+    { key: 'os', label: 'OS', defaultSelected: false, getValue: (l) => l.os || 'N/A' },
+    { key: 'browser', label: 'Browser', defaultSelected: false, getValue: (l) => l.browser || 'N/A' },
+    { key: 'status', label: 'Status', defaultSelected: true, getValue: (l) => (l.status || 'N/A').toUpperCase() }
+  ];
 
-    const csvContent = "data:text/csv;charset=utf-8," 
-      + [headers.join(','), ...rows.map(e => e.map(val => `"${val}"`).join(','))].join('\n');
-
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `audit_logs_${Date.now()}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    toast.success('Audit logs structure exported to CSV');
-  };
+  const auditLogExportFilters = [
+    {
+      key: 'status',
+      label: 'Status',
+      getItemValue: (l) => (l.status || '').toLowerCase(),
+      options: [
+        { label: 'Success', value: 'success' },
+        { label: 'Failed', value: 'failed' },
+        { label: 'Warning', value: 'warning' }
+      ]
+    }
+  ];
 
   const handleResetFilters = () => {
     setSearchQuery('');
@@ -235,12 +235,12 @@ const AuditLogs = () => {
       {/* 1. Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end border-b border-[#e2eae7] dark:border-[#1a2d29] pb-8 gap-4">
         <div>
-          <h1 className="text-[28px] font-bold tracking-tight text-slate-900 dark:text-white leading-none">System Audit Logs</h1>
+          <h1 className="text-[28px] font-semibold tracking-tight text-slate-900 dark:text-white leading-none">System Audit Logs</h1>
           <p className="text-sm text-slate-500 dark:text-[#a3b3af] mt-2 font-medium">Read-only historical trace of all system actions, integrity reports, and events.</p>
         </div>
         <div className="flex gap-3">
           <button 
-            onClick={handleExportCSV}
+            onClick={() => setShowExportModal(true)}
             className="px-4 py-2 bg-[#00a76b] hover:bg-[#00915c] text-white font-bold text-xs rounded-full cursor-pointer transition-all flex items-center gap-1.5 shadow-sm border-none"
           >
             <Download size={14} />
@@ -475,6 +475,19 @@ const AuditLogs = () => {
           </table>
         </div>
       </div>
+
+      {/* Export Filter Modal */}
+      <ExportFilterModal
+        isOpen={showExportModal}
+        onClose={() => setShowExportModal(false)}
+        title="Export Audit Logs"
+        subtitle="Filter and customize which audit log fields to include in the export."
+        allData={logs}
+        filteredData={logs}
+        columns={auditLogExportColumns}
+        customFilters={auditLogExportFilters}
+        defaultFilename="system_audit_logs"
+      />
     </div>
   );
 };

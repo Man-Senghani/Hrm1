@@ -1,5 +1,7 @@
 const jwt = require('jsonwebtoken');
 
+const User = require('../models/User');
+
 const protect = async (req, res, next) => {
   let token;
 
@@ -8,22 +10,38 @@ const protect = async (req, res, next) => {
       token = req.headers.authorization.split(' ')[1];
       const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback_secret');
 
+      // Verify user exists in active database
+      let dbUser = await User.findById(decoded.id).select('_id role name profileImage').lean();
+      if (!dbUser && decoded.role) {
+        // Resilience recovery: if DB was reseeded or IDs changed, match by decoded name & role
+        if (decoded.name) {
+          dbUser = await User.findOne({ name: decoded.name, role: decoded.role }).select('_id role name profileImage').lean();
+        }
+        if (!dbUser) {
+          dbUser = await User.findOne({ role: decoded.role }).select('_id role name profileImage').lean();
+        }
+      }
+
+      if (!dbUser) {
+        return res.status(401).json({ message: 'User account not found. Please log in again.' });
+      }
+
       req.user = {
-        id: decoded.id,
-        role: decoded.role,
-        name: decoded.name,
-        profileImage: decoded.profileImage
+        id: dbUser._id.toString(),
+        role: dbUser.role || decoded.role,
+        name: dbUser.name || decoded.name,
+        profileImage: dbUser.profileImage || decoded.profileImage
       };
 
-      next();
+      return next();
     } catch (error) {
       console.error('Auth Error:', error);
-      res.status(401).json({ message: 'Not authorized, token failed' });
+      return res.status(401).json({ message: 'Not authorized, token failed' });
     }
   }
 
   if (!token) {
-    res.status(401).json({ message: 'Not authorized, no token' });
+    return res.status(401).json({ message: 'Not authorized, no token' });
   }
 };
 

@@ -254,7 +254,7 @@ const Leaves = () => {
 
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4">
         <div>
-          <h1 className="text-2xl font-black text-[#1e293b] dark:text-white tracking-tight leading-none">
+          <h1 className="text-2xl font-semibold text-[#1e293b] dark:text-white tracking-tight leading-none">
             Leave Management
           </h1>
         </div>

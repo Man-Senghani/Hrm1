@@ -27,10 +27,11 @@ import Login from '@shared/pages/Login';
 import ForgotPassword from '@shared/pages/ForgotPassword';
 import ResetPassword from '@shared/pages/ResetPassword';
 import MainLayout from '@shared/layouts/MainLayout';
-import { Users, Calendar, Bell, Camera, User, FileText } from 'lucide-react';
+import { Users, Calendar, Bell, Camera, User, FileText, SlidersHorizontal } from 'lucide-react';
 
 // Route-level pages are lazy-loaded so a role only downloads the code for
 // the pages it actually visits, instead of every page in the app upfront.
+const DepartmentsRoles = lazy(() => import('@shared/components/DepartmentsRoles'));
 const AdminDashboard = lazy(() => import('./pages/admin/AdminDashboard'));
 const HRDashboard = lazy(() => import('./pages/hr/HRDashboard'));
 const ManagerDashboard = lazy(() => import('./pages/manager/ManagerDashboard'));
@@ -185,6 +186,7 @@ const App = () => {
     { label: 'Attendance', icon: Calendar, path: '/attendance' },
     { label: 'Daily Report', icon: FileText, path: '/daily-report' },
     { label: 'Screenshots', icon: Camera, path: '/screenshots' },
+    { label: 'Dropdown Setup', icon: SlidersHorizontal, path: '/dropdown-settings' },
     { label: 'My Profile', icon: User, path: '/profile' },
   ];
 
@@ -285,6 +287,8 @@ const App = () => {
             <Route path="integrations" element={<Integrations />} />
             <Route path="departments" element={<Departments />} />
             <Route path="designations" element={<Designations />} />
+            <Route path="dropdown-settings" element={<DepartmentsRoles />} />
+            <Route path="departments-roles" element={<DepartmentsRoles />} />
 
             {/* Sub-routes with /admin prefix */}
             <Route path="admin" element={<AdminDashboard />} />
@@ -319,6 +323,8 @@ const App = () => {
             <Route path="admin/integrations" element={<Integrations />} />
             <Route path="admin/departments" element={<Departments />} />
             <Route path="admin/designations" element={<Designations />} />
+            <Route path="admin/dropdown-settings" element={<DepartmentsRoles />} />
+            <Route path="admin/departments-roles" element={<DepartmentsRoles />} />
           </Route>
 
           {/* Root Redirects */}
@@ -366,6 +372,8 @@ const App = () => {
             <Route path="integrations" element={<Integrations />} />
             <Route path="departments" element={<Departments />} />
             <Route path="designations" element={<Designations />} />
+            <Route path="dropdown-settings" element={<DepartmentsRoles />} />
+            <Route path="departments-roles" element={<DepartmentsRoles />} />
           </Route>
 
           {/* EMPLOYEE MODULE */}

@@ -72,20 +72,19 @@ export const startDesktopTracker = async (token) => {
     const serverHost = API_BASE_URL || window.location.origin;
     const protocolUrl = `fluidhr-tracker://start?token=${encodeURIComponent(token || '')}&server=${encodeURIComponent(serverHost)}`;
     
-    // Create invisible iframe or navigation
-    const iframe = document.createElement('iframe');
-    iframe.style.display = 'none';
-    iframe.src = protocolUrl;
-    document.body.appendChild(iframe);
-
-    // Also fallback to direct location after microtask if iframe fails in some browsers
-    setTimeout(() => {
-      try {
-        if (iframe && iframe.parentNode) {
-          iframe.parentNode.removeChild(iframe);
-        }
-      } catch (_) {}
-    }, 2000);
+    // Modern browsers require window.location or top-level navigation for custom protocols
+    try {
+      window.location.assign(protocolUrl);
+    } catch (_) {
+      const a = document.createElement('a');
+      a.href = protocolUrl;
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => {
+        if (a.parentNode) a.parentNode.removeChild(a);
+      }, 1000);
+    }
 
     // Poll local bridge for up to 3.5 seconds to see if app launched and responded
     let attempts = 0;
@@ -121,16 +120,31 @@ export const startDesktopTracker = async (token) => {
 };
 
 /**
- * Signals the desktop tracker application to stop tracking.
+ * Signals the desktop tracker application to open the checkout confirmation dialog and stop tracking.
+ * @returns {Promise<{ success: boolean, method?: string, message?: string }>}
  */
 export const stopDesktopTracker = async () => {
+  // 1. Try local HTTP bridge if running
+  const isRunning = await pingDesktopTracker(600);
+  if (isRunning) {
+    try {
+      const res = await fetch(`${LOCAL_BRIDGE_URL}/stop`, {
+        method: 'GET',
+        headers: { 'Accept': 'application/json' }
+      });
+      if (res.ok) {
+        return { success: true, method: 'local_bridge' };
+      }
+    } catch (_) {}
+  }
+
+  // 2. Fallback to deep link protocol to focus and prompt confirmation in Desktop App
   try {
-    await fetch(`${LOCAL_BRIDGE_URL}/stop`, {
-      method: 'GET',
-      headers: { 'Accept': 'application/json' }
-    });
-    return true;
-  } catch (_) {
-    return false;
+    const serverHost = API_BASE_URL || window.location.origin;
+    const protocolUrl = `fluidhr-tracker://stop?action=stop&server=${encodeURIComponent(serverHost)}`;
+    window.location.assign(protocolUrl);
+    return { success: true, method: 'deep_link' };
+  } catch (err) {
+    return { success: false, error: err.message, message: 'Could not open Desktop Application.' };
   }
 };

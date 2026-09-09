@@ -4,13 +4,21 @@ import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { Search, UserPlus, Trash2, Edit3, User, Eye, CheckCircle, CheckCircle2, XCircle, RefreshCw, Download, SlidersHorizontal, MoreHorizontal, Plus, AlertTriangle } from 'lucide-react';
 import { API_BASE_URL, getImageUrl } from '@shared/services/api';
+import ExportFilterModal from '@shared/components/ExportFilterModal';
 
 const HREmployees = () => {
   const [dbEmployees, setDbEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState(() => sessionStorage.getItem('hr_searchTerm') || '');
   const [filterRole, setFilterRole] = useState(() => {
-    try { return JSON.parse(sessionStorage.getItem('hr_filterRole')) || []; } catch { return []; }
+    try {
+      const stored = sessionStorage.getItem('hr_filterRole');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+      return ['all'];
+    } catch { return ['all']; }
   });
   const [filterStatus, setFilterStatus] = useState(() => {
     try { 
@@ -19,11 +27,11 @@ const HREmployees = () => {
         const parsed = JSON.parse(stored);
         if (Array.isArray(parsed) && parsed.length > 0) return parsed;
       }
-      return []; 
-    } catch { return []; }
+      return ['active']; 
+    } catch { return ['active']; }
   });
-  const [tempFilterRole, setTempFilterRole] = useState([]);
-  const [tempFilterStatus, setTempFilterStatus] = useState([]);
+  const [tempFilterRole, setTempFilterRole] = useState(['all']);
+  const [tempFilterStatus, setTempFilterStatus] = useState(['active']);
   const [showFiltersPanel, setShowFiltersPanel] = useState(false);
   const filtersRef = useRef(null);
   const navigate = useNavigate();
@@ -33,6 +41,7 @@ const HREmployees = () => {
   const [statusModal, setStatusModal] = useState({ isOpen: false, employee: null, targetStatus: '' });
   const [statusUpdating, setStatusUpdating] = useState(false);
   const [feedbackModal, setFeedbackModal] = useState({ isOpen: false, type: 'error', title: '', message: '' });
+  const [showExportModal, setShowExportModal] = useState(false);
 
   const fetchEmployees = async () => {
     try {
@@ -69,11 +78,23 @@ const HREmployees = () => {
     sessionStorage.setItem('hr_filterStatus', JSON.stringify(filterStatus));
   }, [searchTerm, filterRole, filterStatus]);
 
-  const uniqueEmployees = Array.from(new Map(dbEmployees.map(emp => [emp._id, emp])).values());
-  const filteredEmployees = uniqueEmployees.filter(emp => {
-    const empRole = (emp.role || emp.userId?.role || '').toLowerCase();
-    if (empRole === 'admin') return false;
+  const uniqueEmployees = Array.from(new Map(dbEmployees.map(emp => [emp._id, emp])).values())
+    .filter(emp => {
+      const empRole = (emp.role || emp.userId?.role || '').toLowerCase();
+      if (empRole === 'admin' || empRole === 'hr') return false;
+      return true;
+    });
 
+  // Base scope for this page (respecting active status scope)
+  const baseEmployees = uniqueEmployees.filter(emp => {
+    const empStatus = emp.status?.toLowerCase() || emp.userId?.status?.toLowerCase() || 'active';
+    if (filterStatus.length > 0) {
+      return filterStatus.includes('all') ? true : filterStatus.includes(empStatus);
+    }
+    return empStatus === 'active';
+  });
+
+  const filteredEmployees = baseEmployees.filter(emp => {
     const fullName = emp.fullName?.toLowerCase() || emp.userId?.name?.toLowerCase() || '';
     const email = emp.email?.toLowerCase() || emp.userId?.email?.toLowerCase() || '';
     const empId = emp.employeeId?.toLowerCase() || '';
@@ -88,10 +109,8 @@ const HREmployees = () => {
       empId.includes(search);
 
     const matchesRole = filterRole.length > 0 && !filterRole.includes('all') ? (filterRole.includes(emp.role) || filterRole.includes(emp.userId?.role)) : true;
-    const empStatus = emp.status?.toLowerCase() || emp.userId?.status?.toLowerCase() || 'active';
-    const matchesStatus = filterStatus.length === 0 ? empStatus === 'active' : (filterStatus.includes('all') ? true : filterStatus.includes(empStatus));
 
-    return matchesSearch && matchesRole && matchesStatus;
+    return matchesSearch && matchesRole;
   });
 
   const itemsPerPage = 10;
@@ -109,28 +128,29 @@ const HREmployees = () => {
     navigate(`/employees/view/${id}`);
   };
 
-  const handleExportCSV = () => {
-    const headers = ['Employee Name', 'Email', 'Department', 'Designation', 'Join Date', 'Status'];
-    const rows = filteredEmployees.map(emp => [
-      emp.fullName || emp.userId?.name || 'Anonymous',
-      emp.email || emp.userId?.email || 'N/A',
-      typeof emp.department === 'object' ? emp.department?.name : (emp.department || 'N/A'),
-      typeof emp.designation === 'object' ? emp.designation?.name : (emp.designation || 'N/A'),
-      formatDate(emp.joinDate),
-      emp.status || 'N/A'
-    ]);
+  const employeeExportColumns = [
+    { key: 'employeeId', label: 'Employee ID', defaultSelected: true, getValue: (emp) => emp.employeeId || emp.userId?.employeeId || 'EMP-UNDEF' },
+    { key: 'fullName', label: 'Employee Name', defaultSelected: true, getValue: (emp) => emp.fullName || emp.userId?.name || 'Anonymous' },
+    { key: 'email', label: 'Email Address', defaultSelected: true, getValue: (emp) => emp.email || emp.userId?.email || 'N/A' },
+    { key: 'role', label: 'Role', defaultSelected: true, getValue: (emp) => (emp.role || emp.userId?.role || 'employee').toUpperCase() },
+    { key: 'department', label: 'Department', defaultSelected: true, getValue: (emp) => typeof emp.department === 'object' ? emp.department?.name : (emp.department || 'N/A') },
+    { key: 'designation', label: 'Designation', defaultSelected: true, getValue: (emp) => typeof emp.designation === 'object' ? emp.designation?.name : (emp.designation || 'N/A') },
+    { key: 'joinDate', label: 'Joining Date', defaultSelected: true, getValue: (emp) => formatDate(emp.joinDate) },
+    { key: 'status', label: 'Status', defaultSelected: true, getValue: (emp) => (emp.status || emp.userId?.status || 'active').toUpperCase() },
+    { key: 'phone', label: 'Contact Phone', defaultSelected: false, getValue: (emp) => emp.phone || emp.mobile || emp.contactNumber || emp.personalDetails?.phone || 'N/A' }
+  ];
 
-    const csvContent = "data:text/csv;charset=utf-8,"
-      + [headers.join(','), ...rows.map(e => e.map(val => `"${String(val || '').replace(/"/g, '""')}"`).join(','))].join('\n');
-
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `employees_directory_${new Date().toISOString().split('T')[0]}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
+  const employeeExportFilters = [
+    {
+      key: 'status',
+      label: 'Status',
+      getItemValue: (emp) => (emp.status || emp.userId?.status || 'active').toLowerCase(),
+      options: [
+        { label: 'Active', value: 'active' },
+        { label: 'Inactive', value: 'inactive' }
+      ]
+    }
+  ];
 
   const getInitials = (name) => {
     if (!name) return '??';
@@ -178,11 +198,32 @@ const HREmployees = () => {
         return;
       }
 
-      const token = sessionStorage.getItem('token');
+      const token = sessionStorage.getItem('token') || localStorage.getItem('token');
       await axios.patch(`/api/employees/${empId}/status`, { status: newStatus }, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      setDbEmployees(prev => prev.map(e => (e._id === emp._id || e._id === empId || e.userId?._id === empId) ? { ...e, status: newStatus } : e));
+
+      setDbEmployees(prev => prev.map(e => {
+        const isMatch = (e._id === emp._id || e._id === empId || e.userId?._id === empId || e.id === empId);
+        if (!isMatch) return e;
+        return {
+          ...e,
+          status: newStatus,
+          userId: typeof e.userId === 'object' && e.userId !== null
+            ? { ...e.userId, status: newStatus }
+            : e.userId
+        };
+      }));
+
+      // Re-fetch to ensure full database synchronization
+      fetchEmployees();
+
+      setFeedbackModal({
+        isOpen: true,
+        type: 'success',
+        title: 'Status Updated',
+        message: `Employee status has been updated to ${newStatus.toUpperCase()} successfully.`
+      });
     } catch (err) {
       console.error('Failed to update status:', err);
       setFeedbackModal({
@@ -201,7 +242,10 @@ const HREmployees = () => {
     const status = (emp.status || emp.userId?.status || 'active').toLowerCase();
     const isActive = status === 'active';
     return (
-      <div className="flex items-center gap-2.5">
+      <div 
+        className="flex items-center gap-2.5 cursor-pointer select-none"
+        onClick={(e) => { e.stopPropagation(); handleToggleClick(emp); }}
+      >
         <button
           type="button"
           onClick={(e) => { e.stopPropagation(); handleToggleClick(emp); }}
@@ -224,15 +268,33 @@ const HREmployees = () => {
   };
 
   const handleRoleToggle = (role) => {
-    setTempFilterRole(prev =>
-      prev.includes(role) ? prev.filter(r => r !== role) : [...prev, role]
-    );
+    setTempFilterRole(prev => {
+      if (role === 'all') {
+        return prev.includes('all') ? [] : ['all'];
+      }
+      const withoutAll = prev.filter(r => r !== 'all');
+      if (withoutAll.includes(role)) {
+        const next = withoutAll.filter(r => r !== role);
+        return next.length === 0 ? ['all'] : next;
+      } else {
+        return [...withoutAll, role];
+      }
+    });
   };
 
   const handleStatusToggle = (status) => {
-    setTempFilterStatus(prev =>
-      prev.includes(status) ? prev.filter(s => s !== status) : [...prev, status]
-    );
+    setTempFilterStatus(prev => {
+      if (status === 'all') {
+        return prev.includes('all') ? [] : ['all'];
+      }
+      const withoutAll = prev.filter(s => s !== 'all');
+      if (withoutAll.includes(status)) {
+        const next = withoutAll.filter(s => s !== status);
+        return next.length === 0 ? ['active'] : next;
+      } else {
+        return [...withoutAll, status];
+      }
+    });
   };
 
   const handleApplyFilters = (e) => {
@@ -240,8 +302,8 @@ const HREmployees = () => {
       e.preventDefault();
       e.stopPropagation();
     }
-    setFilterRole(tempFilterRole);
-    setFilterStatus(tempFilterStatus);
+    setFilterRole(tempFilterRole.length > 0 ? tempFilterRole : ['all']);
+    setFilterStatus(tempFilterStatus.length > 0 ? tempFilterStatus : ['active']);
     setShowFiltersPanel(false);
   };
 
@@ -250,26 +312,27 @@ const HREmployees = () => {
       e.preventDefault();
       e.stopPropagation();
     }
-    setTempFilterRole([]);
-    setTempFilterStatus([]);
-    setFilterRole([]);
-    setFilterStatus([]);
+    setTempFilterRole(['all']);
+    setTempFilterStatus(['active']);
+    setFilterRole(['all']);
+    setFilterStatus(['active']);
     setShowFiltersPanel(false);
   };
 
-  const activeFiltersCount = filterRole.length + filterStatus.length;
+  const activeFiltersCount = (filterRole.length > 0 && !filterRole.includes('all') ? filterRole.length : 0) +
+    (filterStatus.length > 0 && !(filterStatus.length === 1 && filterStatus[0] === 'active') ? filterStatus.length : 0);
 
   return (
     <div className="animate-fade-in w-full pb-12">
       {/* 1. Page Title & Action Buttons Section */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
         <div>
-          <h1 className="text-[32px] font-bold tracking-tight text-gray-900 dark:text-white leading-none">My Team</h1>
+          <h1 className="text-[32px] font-semibold tracking-tight text-gray-900 dark:text-white leading-none">My Team</h1>
           <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mt-2">Directory of your assigned direct reports.</p>
         </div>
         <div className="flex items-center gap-3">
           <button
-            onClick={handleExportCSV}
+            onClick={() => setShowExportModal(true)}
             className="verdant-btn-outline h-10 px-5 flex items-center gap-2 text-sm font-semibold rounded-full border border-gray-200 dark:border-[#1a2d29] bg-white dark:bg-[#111c18] hover:bg-gray-50 dark:hover:bg-[#162722] text-[#374151] dark:text-[#cbd5e1] transition-all shadow-sm cursor-pointer"
           >
             <Download size={15} />
@@ -296,8 +359,8 @@ const HREmployees = () => {
               onClick={(e) => {
                 e.stopPropagation();
                 if (!showFiltersPanel) {
-                  setTempFilterRole(filterRole);
-                  setTempFilterStatus(filterStatus);
+                  setTempFilterRole(filterRole.length > 0 ? filterRole : ['all']);
+                  setTempFilterStatus(filterStatus.length > 0 ? filterStatus : ['active']);
                 }
                 setShowFiltersPanel(!showFiltersPanel);
               }}
@@ -367,7 +430,7 @@ const HREmployees = () => {
         {loading ? (
           <div className="text-center py-20 bg-white dark:bg-[#111c18]">
             <RefreshCw size={24} className="text-[#00a76b] animate-spin mx-auto mb-3" />
-            <p className="text-sm text-gray-500 dark:text-gray-400 font-semibold uppercase tracking-wider">Syncing Employee Registry...</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400 font-semibold uppercase tracking-wider">Loading Employees...</p>
           </div>
         ) : filteredEmployees.length === 0 ? (
           <div className="text-center py-20 bg-white dark:bg-[#111c18]">
@@ -582,6 +645,18 @@ const HREmployees = () => {
         </div>,
         document.body
       )}
+      {/* Export Filter Modal */}
+      <ExportFilterModal
+        isOpen={showExportModal}
+        onClose={() => setShowExportModal(false)}
+        title="Export Team Directory"
+        subtitle="Filter employee records and select columns to download."
+        allData={baseEmployees}
+        filteredData={filteredEmployees}
+        columns={employeeExportColumns}
+        customFilters={employeeExportFilters}
+        defaultFilename="team_directory"
+      />
     </div>
     </div>
   );

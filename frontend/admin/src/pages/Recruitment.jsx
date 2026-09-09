@@ -26,6 +26,7 @@ import {
   ChevronRight,
   RefreshCw
 } from 'lucide-react';
+import ExportFilterModal from '@shared/components/ExportFilterModal';
 
 const PIPELINE_STAGES = [
   { label: 'Sourced', count: 84, progress: 84 },
@@ -128,6 +129,7 @@ const Recruitment = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [deptFilter, setDeptFilter] = useState('All');
   const [statusFilter, setStatusFilter] = useState('All');
+  const [showExportModal, setShowExportModal] = useState(false);
   const [sortBy, setSortBy] = useState('datePosted');
   const [sortOrder, setSortOrder] = useState('desc');
 
@@ -391,43 +393,43 @@ const Recruitment = () => {
     setCurrentPage(1);
   }, [searchQuery, deptFilter, statusFilter]);
 
-  const handleExport = () => {
-    const headers = ['Job Title', 'Department', 'Type', 'Location', 'Applicants', 'Hiring Manager', 'Status', 'Deadline'];
-    const rows = processedJobs.map(j => [
-      j.title,
-      j.department,
-      j.type,
-      j.location,
-      j.applicants,
-      j.hiringManager,
-      j.status,
-      j.deadline
-    ]);
+  // Export configuration
+  const recruitmentExportColumns = [
+    { key: 'title', label: 'Job Title', defaultSelected: true, getValue: (j) => j.title || 'N/A' },
+    { key: 'department', label: 'Department', defaultSelected: true, getValue: (j) => j.department || 'N/A' },
+    { key: 'type', label: 'Type', defaultSelected: true, getValue: (j) => j.type || 'N/A' },
+    { key: 'location', label: 'Location', defaultSelected: true, getValue: (j) => j.location || 'N/A' },
+    { key: 'applicants', label: 'Applicants', defaultSelected: true, getValue: (j) => j.applicants ?? 0 },
+    { key: 'hiringManager', label: 'Hiring Manager', defaultSelected: true, getValue: (j) => j.hiringManager || 'N/A' },
+    { key: 'salaryRange', label: 'Salary Range', defaultSelected: false, getValue: (j) => j.salaryRange || 'N/A' },
+    { key: 'status', label: 'Status', defaultSelected: true, getValue: (j) => j.status || 'Open' },
+    { key: 'deadline', label: 'Deadline', defaultSelected: true, getValue: (j) => j.deadline || 'N/A' }
+  ];
 
-    const csvContent = "data:text/csv;charset=utf-8,"
-      + [headers.join(','), ...rows.map(e => e.map(val => `"${val}"`).join(','))].join('\n');
-
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", "recruitment_open_positions.csv");
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    toast.success('Recruitment data exported successfully');
-  };
+  const recruitmentExportFilters = [
+    {
+      key: 'status',
+      label: 'Status',
+      getItemValue: (j) => (j.status || '').toLowerCase(),
+      options: [
+        { label: 'Open', value: 'open' },
+        { label: 'Closed', value: 'closed' },
+        { label: 'On Hold', value: 'on hold' }
+      ]
+    }
+  ];
 
   return (
     <div className="animate-fade-in max-w-[1440px] mx-auto space-y-8 pb-32">
       {/* 1. Header Section */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end border-b border-[#e2eae7] dark:border-[#1a2d29] pb-8 gap-4">
         <div>
-          <h1 className="text-[28px] font-bold tracking-tight text-slate-900 dark:text-white leading-none">Recruitment</h1>
+          <h1 className="text-[28px] font-semibold tracking-tight text-slate-900 dark:text-white leading-none">Recruitment</h1>
           <p className="text-sm text-slate-500 dark:text-[#a3b3af] mt-2 font-medium">Pipeline, openings and candidates.</p>
         </div>
         <div className="flex gap-3">
           <button
-            onClick={handleExport}
+            onClick={() => setShowExportModal(true)}
             className="px-4 py-2 border border-[#dcdbd3] dark:border-[#1a2d29] bg-white dark:bg-[#111c18] hover:bg-[#eceae3]/50 dark:hover:bg-slate-800/50 text-[#5c5f5d] dark:text-[#cbd5e1] font-bold text-xs rounded-full cursor-pointer transition-all flex items-center gap-1.5"
           >
             <Download size={14} />
@@ -1052,6 +1054,18 @@ const Recruitment = () => {
           </div>
         </div>
       )}
+      {/* Export Filter Modal */}
+      <ExportFilterModal
+        isOpen={showExportModal}
+        onClose={() => setShowExportModal(false)}
+        title="Export Recruitment Data"
+        subtitle="Filter job openings and choose which fields to include in the export file."
+        allData={jobs}
+        filteredData={processedJobs}
+        columns={recruitmentExportColumns}
+        customFilters={recruitmentExportFilters}
+        defaultFilename="recruitment_open_positions"
+      />
     </div>
   );
 };

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Bell, Calendar, ArrowLeft } from 'lucide-react';
+import { Bell, Calendar, ArrowLeft, X, ExternalLink } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 const TYPE_COLORS = {
@@ -15,10 +15,51 @@ const TYPE_COLORS = {
 const AllNotifications = () => {
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [selectedNotif, setSelectedNotif] = useState(null);
   const navigate = useNavigate();
 
   const token = sessionStorage.getItem('token');
-  const pathRole = window.location.pathname.split('/')[1];
+  const pathRole = window.location.pathname.split('/')[1] || sessionStorage.getItem('role') || 'hr';
+
+  const handleNotificationClick = (notif) => {
+    const type = (notif?.type || '').toLowerCase();
+    const text = (notif?.message || '').toLowerCase();
+
+    if (type.includes('leave') || text.includes('leave') || text.includes('vacation') || text.includes('time off')) {
+      navigate(`/${pathRole}/leave`);
+      return;
+    }
+
+    if (
+      type.includes('attendance') ||
+      type.includes('timer') ||
+      text.includes('attendance') ||
+      text.includes('timer') ||
+      text.includes('time track') ||
+      text.includes('tracker') ||
+      text.includes('check-in') ||
+      text.includes('checked in') ||
+      text.includes('check in') ||
+      text.includes('check-out') ||
+      text.includes('checked out') ||
+      text.includes('check out') ||
+      text.includes('clock in') ||
+      text.includes('clock out') ||
+      text.includes('overtime') ||
+      text.includes('late mark') ||
+      text.includes('half day')
+    ) {
+      navigate(`/${pathRole}/attendance`);
+      return;
+    }
+
+    if (type.includes('task') || text.includes('task') || text.includes('assigned to you')) {
+      navigate(`/${pathRole}/tasks`);
+      return;
+    }
+
+    setSelectedNotif(notif);
+  };
 
   useEffect(() => {
     const fetchNotifications = async () => {
@@ -80,8 +121,8 @@ const AllNotifications = () => {
           <ArrowLeft size={18} />
         </button>
         <div>
-          <h1 className="text-[28px] font-black text-[#201515] tracking-tight">
-            Notification <span className="text-[#ff4f00]">History</span>
+          <h1 className="text-[28px] font-semibold text-[#201515] tracking-tight">
+            Announcement <span className="text-[#ff4f00]">History</span>
           </h1>
           <p className="text-[13px] font-medium text-[#939084] mt-1">
             All your received alerts and announcements
@@ -119,20 +160,26 @@ const AllNotifications = () => {
                       <th className="py-3 px-6 border-r border-[#eceae3]">Notification / Message</th>
                       <th className="py-3 px-4 border-r border-[#eceae3]">Type</th>
                       <th className="py-3 px-4 border-r border-[#eceae3]">Sent By</th>
-                      <th className="py-3 px-6 text-right">Time</th>
+                      <th className="py-3 px-6 text-right border-r border-[#eceae3]">Time</th>
+                      <th className="py-3 px-4 text-right">Action</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#eceae3]">
                     {notifs.map((notif) => {
                       const colorClass = TYPE_COLORS[notif.type] || TYPE_COLORS.default;
                       return (
-                        <tr key={notif._id} className="hover:bg-[#fffdf9] transition-colors">
+                        <tr 
+                          key={notif._id} 
+                          onClick={() => handleNotificationClick(notif)}
+                          className="hover:bg-[#fffdf9] transition-colors cursor-pointer group"
+                          title="Click to open related section or view details"
+                        >
                           <td className="py-3.5 px-6 border-r border-[#eceae3]">
                             <div className="flex items-center gap-3">
                               <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${colorClass}`}>
                                 <Bell size={15} />
                               </div>
-                              <span className="text-[13px] font-bold text-[#201515] leading-snug">
+                              <span className="text-[13px] font-bold text-[#201515] leading-snug group-hover:text-[#ff4f00] transition-colors">
                                 {notif.message}
                               </span>
                             </div>
@@ -153,10 +200,16 @@ const AllNotifications = () => {
                               )}
                             </span>
                           </td>
-                          <td className="py-3.5 px-6 text-right whitespace-nowrap text-[11px] font-bold text-[#939084]">
+                          <td className="py-3.5 px-6 text-right whitespace-nowrap text-[11px] font-bold text-[#939084] border-r border-[#eceae3]">
                             {new Date(notif.createdAt).toLocaleTimeString('en-US', {
                               hour: '2-digit', minute: '2-digit'
                             })}
+                          </td>
+                          <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                            <div className="flex items-center justify-end gap-1 text-slate-400 group-hover:text-[#ff4f00] transition-colors">
+                              <span className="text-[11px] font-bold opacity-0 group-hover:opacity-100 transition-opacity">Open</span>
+                              <ExternalLink size={13} className="opacity-40 group-hover:opacity-100" />
+                            </div>
                           </td>
                         </tr>
                       );
@@ -166,6 +219,58 @@ const AllNotifications = () => {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* ── NOTIFICATION PREVIEW MODAL ── */}
+      {selectedNotif && (
+        <div 
+          className="fixed inset-0 z-[150] flex items-center justify-center bg-black/50 backdrop-blur-xs p-4 animate-in fade-in duration-200"
+          onClick={() => setSelectedNotif(null)}
+        >
+          <div 
+            className="bg-white rounded-[20px] border border-[#eceae3] shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-5 border-b border-[#eceae3] flex items-center justify-between bg-[#fffdf9]">
+              <div className="flex items-center gap-3">
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${TYPE_COLORS[selectedNotif.type] || TYPE_COLORS.default}`}>
+                  <Bell size={18} />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-[#201515] capitalize">
+                    {selectedNotif.type || 'Notification'}
+                  </h3>
+                  <p className="text-xs font-semibold text-[#939084]">
+                    From {selectedNotif.senderName || selectedNotif.senderId?.name || 'HR / Management'} {selectedNotif.senderRole ? `(${selectedNotif.senderRole})` : ''}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedNotif(null)}
+                className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 transition-colors cursor-pointer border-none"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="bg-slate-50 rounded-xl p-4 border border-[#eceae3] text-[14px] leading-relaxed text-slate-800 font-medium whitespace-pre-wrap">
+                {selectedNotif.message}
+              </div>
+              <div className="flex items-center justify-between text-xs text-[#939084]">
+                <span>Type: <strong className="text-[#201515] uppercase">{selectedNotif.type || 'General'}</strong></span>
+                <span>{new Date(selectedNotif.createdAt).toLocaleString()}</span>
+              </div>
+            </div>
+            <div className="p-4 border-t border-[#eceae3] flex justify-end">
+              <button
+                onClick={() => setSelectedNotif(null)}
+                className="px-5 py-2.5 bg-[#00a76b] hover:bg-[#00915c] text-white rounded-[10px] font-bold text-xs transition-all cursor-pointer border-none shadow-sm"
+              >
+                Close
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

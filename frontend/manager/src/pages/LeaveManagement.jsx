@@ -72,7 +72,7 @@ const LeaveManagement = () => {
   return (
     <div className="min-h-screen bg-[#F8FAFC] dark:bg-[#0b1120] text-[#1e293b] dark:text-[#cbd5e1] font-['Inter',sans-serif] px-4 pb-8 pt-2 transition-colors duration-300">
       <div className="mb-4 flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Leave Management Dashboard</h1>
+        <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">Leave Management Dashboard</h1>
       </div>
 
       {/* VIEW MODE TOGGLE & ACTIONS */}

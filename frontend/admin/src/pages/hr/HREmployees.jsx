@@ -1,16 +1,24 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { Search, UserPlus, Trash2, Edit3, User, Eye, CheckCircle, CheckCircle2, XCircle, RefreshCw, Download, SlidersHorizontal, MoreHorizontal, Plus, AlertTriangle } from 'lucide-react';
 import { API_BASE_URL, getImageUrl } from '@shared/services/api';
+import ExportFilterModal from '@shared/components/ExportFilterModal';
 
 const HREmployees = () => {
   const [dbEmployees, setDbEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState(() => sessionStorage.getItem('hr_searchTerm') || '');
   const [filterRole, setFilterRole] = useState(() => {
-    try { return JSON.parse(sessionStorage.getItem('hr_filterRole')) || []; } catch { return []; }
+    try {
+      const stored = sessionStorage.getItem('hr_filterRole');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+      return ['all'];
+    } catch { return ['all']; }
   });
   const [filterStatus, setFilterStatus] = useState(() => {
     try { 
@@ -19,11 +27,11 @@ const HREmployees = () => {
         const parsed = JSON.parse(stored);
         if (Array.isArray(parsed) && parsed.length > 0) return parsed;
       }
-      return []; 
-    } catch { return []; }
+      return ['active']; 
+    } catch { return ['active']; }
   });
-  const [tempFilterRole, setTempFilterRole] = useState([]);
-  const [tempFilterStatus, setTempFilterStatus] = useState([]);
+  const [tempFilterRole, setTempFilterRole] = useState(['admin', 'hr', 'manager', 'employee']);
+  const [tempFilterStatus, setTempFilterStatus] = useState(['active']);
   const [showFiltersPanel, setShowFiltersPanel] = useState(false);
   const filtersRef = useRef(null);
   const navigate = useNavigate();
@@ -37,6 +45,7 @@ const HREmployees = () => {
   const [statusUpdating, setStatusUpdating] = useState(false);
   const [deleteModal, setDeleteModal] = useState({ isOpen: false, employee: null, isDeleting: false });
   const [feedbackModal, setFeedbackModal] = useState({ isOpen: false, type: 'error', title: '', message: '' });
+  const [showExportModal, setShowExportModal] = useState(false);
 
   const fetchEmployees = async () => {
     try {
@@ -73,11 +82,22 @@ const HREmployees = () => {
     sessionStorage.setItem('hr_filterStatus', JSON.stringify(filterStatus));
   }, [searchTerm, filterRole, filterStatus]);
 
-  const uniqueEmployees = Array.from(new Map(dbEmployees.map(emp => [emp._id, emp])).values());
-  const filteredEmployees = uniqueEmployees.filter(emp => {
-    const empRole = (emp.role || emp.userId?.role || '').toLowerCase();
-    if (empRole === 'admin') return false;
+  const uniqueEmployees = Array.from(new Map(dbEmployees.map(emp => [emp._id, emp])).values())
+    .filter(emp => {
+      const empRole = (emp.role || emp.userId?.role || '').toLowerCase();
+      if (currentRole !== 'admin' && empRole === 'admin') return false;
+      return true;
+    });
 
+  // Base scope for this page (respecting active status scope)
+  const baseEmployees = uniqueEmployees.filter(emp => {
+    const empStatus = (emp.status || emp.userId?.status || 'active').toLowerCase();
+    if (filterStatus.includes('all')) return true;
+    if (filterStatus.length === 0) return false;
+    return filterStatus.includes(empStatus);
+  });
+
+  const filteredEmployees = baseEmployees.filter(emp => {
     const fullName = emp.fullName?.toLowerCase() || emp.userId?.name?.toLowerCase() || '';
     const email = emp.email?.toLowerCase() || emp.userId?.email?.toLowerCase() || '';
     const empId = emp.employeeId?.toLowerCase() || '';
@@ -91,11 +111,14 @@ const HREmployees = () => {
       desig.includes(search) ||
       empId.includes(search);
 
-    const matchesRole = filterRole.length > 0 && !filterRole.includes('all') ? (filterRole.includes(emp.role) || filterRole.includes(emp.userId?.role)) : true;
-    const empStatus = emp.status?.toLowerCase() || emp.userId?.status?.toLowerCase() || 'active';
-    const matchesStatus = filterStatus.length === 0 ? empStatus === 'active' : (filterStatus.includes('all') ? true : filterStatus.includes(empStatus));
+    const empRole = (emp.role || emp.userId?.role || '').toLowerCase();
+    const matchesRole = filterRole.includes('all')
+      ? true
+      : filterRole.length === 0
+        ? false
+        : filterRole.includes(empRole);
 
-    return matchesSearch && matchesRole && matchesStatus;
+    return matchesSearch && matchesRole;
   });
 
   const itemsPerPage = 10;
@@ -151,28 +174,40 @@ const HREmployees = () => {
     navigate(`${targetPrefix}/employees/view/${id}`);
   };
 
-  const handleExportCSV = () => {
-    const headers = ['Employee Name', 'Email', 'Department', 'Designation', 'Join Date', 'Status'];
-    const rows = filteredEmployees.map(emp => [
-      emp.fullName || emp.userId?.name || 'Anonymous',
-      emp.email || emp.userId?.email || 'N/A',
-      typeof emp.department === 'object' ? emp.department?.name : (emp.department || 'N/A'),
-      typeof emp.designation === 'object' ? emp.designation?.name : (emp.designation || 'N/A'),
-      formatDate(emp.joinDate),
-      emp.status || 'N/A'
-    ]);
+  const employeeExportColumns = [
+    { key: 'employeeId', label: 'Employee ID', defaultSelected: true, getValue: (emp) => emp.employeeId || emp.userId?.employeeId || ((emp.role === 'admin' || emp.userId?.role === 'admin') ? 'ADMIN' : 'EMP-UNDEF') },
+    { key: 'fullName', label: 'Employee Name', defaultSelected: true, getValue: (emp) => emp.fullName || emp.userId?.name || 'Anonymous' },
+    { key: 'email', label: 'Email Address', defaultSelected: true, getValue: (emp) => emp.email || emp.userId?.email || 'N/A' },
+    { key: 'role', label: 'Role', defaultSelected: true, getValue: (emp) => (emp.role || emp.userId?.role || 'employee').toUpperCase() },
+    { key: 'department', label: 'Department', defaultSelected: true, getValue: (emp) => typeof emp.department === 'object' ? emp.department?.name : (emp.department || 'N/A') },
+    { key: 'designation', label: 'Designation', defaultSelected: true, getValue: (emp) => typeof emp.designation === 'object' ? emp.designation?.name : (emp.designation || 'N/A') },
+    { key: 'joinDate', label: 'Joining Date', defaultSelected: true, getValue: (emp) => formatDate(emp.joinDate) },
+    { key: 'status', label: 'Status', defaultSelected: true, getValue: (emp) => (emp.status || emp.userId?.status || 'active').toUpperCase() },
+    { key: 'phone', label: 'Contact Phone', defaultSelected: false, getValue: (emp) => emp.phone || emp.mobile || emp.contactNumber || emp.personalDetails?.phone || 'N/A' }
+  ];
 
-    const csvContent = "data:text/csv;charset=utf-8,"
-      + [headers.join(','), ...rows.map(e => e.map(val => `"${String(val || '').replace(/"/g, '""')}"`).join(','))].join('\n');
-
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `employees_directory_${new Date().toISOString().split('T')[0]}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
+  const employeeExportFilters = [
+    {
+      key: 'status',
+      label: 'Status',
+      getItemValue: (emp) => (emp.status || emp.userId?.status || 'active').toLowerCase(),
+      options: [
+        { label: 'Active', value: 'active' },
+        { label: 'Inactive', value: 'inactive' }
+      ]
+    },
+    {
+      key: 'role',
+      label: 'Role',
+      getItemValue: (emp) => (emp.role || emp.userId?.role || 'employee').toLowerCase(),
+      options: [
+        { label: 'Admin', value: 'admin' },
+        { label: 'HR', value: 'hr' },
+        { label: 'Manager', value: 'manager' },
+        { label: 'Employee', value: 'employee' }
+      ]
+    }
+  ];
 
   const getInitials = (name) => {
     if (!name) return '??';
@@ -220,11 +255,39 @@ const HREmployees = () => {
         return;
       }
 
-      const token = sessionStorage.getItem('token');
-      await axios.patch(`/api/employees/${empId}/status`, { status: newStatus }, {
-        headers: { Authorization: `Bearer ${token}` }
+      const token = sessionStorage.getItem('token') || localStorage.getItem('token');
+      try {
+        await axios.patch(`/api/employees/${empId}/status`, { status: newStatus }, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+      } catch (patchErr) {
+        // Fallback to PUT in case reverse proxy or server environment restricts PATCH
+        await axios.put(`/api/employees/${empId}/status`, { status: newStatus }, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+      }
+
+      setDbEmployees(prev => prev.map(e => {
+        const isMatch = (e._id === emp._id || e._id === empId || e.userId?._id === empId || e.id === empId);
+        if (!isMatch) return e;
+        return {
+          ...e,
+          status: newStatus,
+          userId: typeof e.userId === 'object' && e.userId !== null
+            ? { ...e.userId, status: newStatus }
+            : e.userId
+        };
+      }));
+
+      // Re-fetch to ensure full database synchronization
+      fetchEmployees();
+
+      setFeedbackModal({
+        isOpen: true,
+        type: 'success',
+        title: 'Status Updated',
+        message: `Employee status has been updated to ${newStatus.toUpperCase()} successfully.`
       });
-      setDbEmployees(prev => prev.map(e => (e._id === emp._id || e._id === empId || e.userId?._id === empId) ? { ...e, status: newStatus } : e));
     } catch (err) {
       console.error('Failed to update status:', err);
       setFeedbackModal({
@@ -243,7 +306,10 @@ const HREmployees = () => {
     const status = (emp.status || emp.userId?.status || 'active').toLowerCase();
     const isActive = status === 'active';
     return (
-      <div className="flex items-center gap-2.5">
+      <div 
+        className="flex items-center gap-2.5 cursor-pointer select-none"
+        onClick={(e) => { e.stopPropagation(); handleToggleClick(emp); }}
+      >
         <button
           type="button"
           onClick={(e) => { e.stopPropagation(); handleToggleClick(emp); }}
@@ -265,13 +331,51 @@ const HREmployees = () => {
     );
   };
 
+  const availableRoles = useMemo(() => {
+    if (currentRole === 'admin') return ['admin', 'hr', 'manager', 'employee'];
+    if (currentRole === 'hr') return ['hr', 'manager', 'employee'];
+    return ['manager', 'employee'];
+  }, [currentRole]);
+
+  const availableStatuses = useMemo(() => ['active', 'inactive'], []);
+
+  const isAllRolesChecked = useMemo(() => {
+    return availableRoles.length > 0 && availableRoles.every(r => tempFilterRole.includes(r));
+  }, [tempFilterRole, availableRoles]);
+
+  const isAllStatusesChecked = useMemo(() => {
+    return availableStatuses.length > 0 && availableStatuses.every(s => tempFilterStatus.includes(s));
+  }, [tempFilterStatus, availableStatuses]);
+
+  const isRoleChecked = (role) => tempFilterRole.includes(role);
+
+  const isStatusChecked = (status) => tempFilterStatus.includes(status);
+
   const handleRoleToggle = (role) => {
+    if (role === 'all') {
+      if (isAllRolesChecked) {
+        setTempFilterRole([]);
+      } else {
+        setTempFilterRole([...availableRoles]);
+      }
+      return;
+    }
+
     setTempFilterRole(prev =>
       prev.includes(role) ? prev.filter(r => r !== role) : [...prev, role]
     );
   };
 
   const handleStatusToggle = (status) => {
+    if (status === 'all') {
+      if (isAllStatusesChecked) {
+        setTempFilterStatus([]);
+      } else {
+        setTempFilterStatus([...availableStatuses]);
+      }
+      return;
+    }
+
     setTempFilterStatus(prev =>
       prev.includes(status) ? prev.filter(s => s !== status) : [...prev, status]
     );
@@ -282,8 +386,10 @@ const HREmployees = () => {
       e.preventDefault();
       e.stopPropagation();
     }
-    setFilterRole(tempFilterRole);
-    setFilterStatus(tempFilterStatus);
+    const finalRole = isAllRolesChecked ? ['all'] : [...tempFilterRole];
+    const finalStatus = isAllStatusesChecked ? ['all'] : [...tempFilterStatus];
+    setFilterRole(finalRole);
+    setFilterStatus(finalStatus);
     setShowFiltersPanel(false);
   };
 
@@ -292,14 +398,15 @@ const HREmployees = () => {
       e.preventDefault();
       e.stopPropagation();
     }
-    setTempFilterRole([]);
-    setTempFilterStatus([]);
-    setFilterRole([]);
-    setFilterStatus([]);
+    setTempFilterRole([...availableRoles]);
+    setTempFilterStatus(['active']);
+    setFilterRole(['all']);
+    setFilterStatus(['active']);
     setShowFiltersPanel(false);
   };
 
-  const activeFiltersCount = filterRole.length + filterStatus.length;
+  const activeFiltersCount = (filterRole.length > 0 && !filterRole.includes('all') ? filterRole.length : 0) +
+    (filterStatus.length > 0 && !(filterStatus.length === 1 && filterStatus[0] === 'active') ? filterStatus.length : 0);
 
   return (
     <div className="p-4 md:p-8 space-y-6 max-w-[1600px] mx-auto animate-fade-in pb-16 text-slate-800 dark:text-slate-100 font-sans">
@@ -311,13 +418,13 @@ const HREmployees = () => {
             <span>/</span>
             <span className="text-[#00a76b] dark:text-[#00a76b]">Employees</span>
           </div>
-          <h1 className="text-2xl md:text-3xl font-extrabold text-gray-900 dark:text-white tracking-tight">
+          <h1 className="text-2xl md:text-3xl font-semibold text-gray-900 dark:text-white tracking-tight">
             Employee Directory
           </h1>
         </div>
         <div className="flex items-center gap-3">
           <button
-            onClick={handleExportCSV}
+            onClick={() => setShowExportModal(true)}
             className="verdant-btn-outline h-10 px-5 flex items-center gap-2 text-sm font-semibold rounded-full border border-gray-200 dark:border-[#1a2d29] bg-white dark:bg-[#111c18] hover:bg-gray-50 dark:hover:bg-[#162722] text-[#374151] dark:text-[#cbd5e1] transition-all shadow-sm cursor-pointer"
           >
             <Download size={15} />
@@ -351,8 +458,8 @@ const HREmployees = () => {
               onClick={(e) => {
                 e.stopPropagation();
                 if (!showFiltersPanel) {
-                  setTempFilterRole(filterRole);
-                  setTempFilterStatus(filterStatus);
+                  setTempFilterRole(filterRole.includes('all') ? [...availableRoles] : [...filterRole]);
+                  setTempFilterStatus(filterStatus.includes('all') ? [...availableStatuses] : [...filterStatus]);
                 }
                 setShowFiltersPanel(!showFiltersPanel);
               }}
@@ -372,27 +479,27 @@ const HREmployees = () => {
                     <h4 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-2">Roles</h4>
                     <div className="flex flex-col gap-2">
                       <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-700 dark:text-gray-200">
-                        <input type="checkbox" checked={tempFilterRole.includes('all')} onChange={() => handleRoleToggle('all')} className="accent-[#00a76b] cursor-pointer" />
+                        <input type="checkbox" checked={isAllRolesChecked} onChange={() => handleRoleToggle('all')} className="accent-[#00a76b] cursor-pointer" />
                         All Roles
                       </label>
                       {currentRole === 'admin' && (
                         <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-700 dark:text-gray-200">
-                          <input type="checkbox" checked={tempFilterRole.includes('admin')} onChange={() => handleRoleToggle('admin')} className="accent-[#00a76b] cursor-pointer" />
+                          <input type="checkbox" checked={isRoleChecked('admin')} onChange={() => handleRoleToggle('admin')} className="accent-[#00a76b] cursor-pointer" />
                           Admins
                         </label>
                       )}
                       {(currentRole === 'admin' || currentRole === 'hr') && (
                         <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-700 dark:text-gray-200">
-                          <input type="checkbox" checked={tempFilterRole.includes('hr')} onChange={() => handleRoleToggle('hr')} className="accent-[#00a76b] cursor-pointer" />
+                          <input type="checkbox" checked={isRoleChecked('hr')} onChange={() => handleRoleToggle('hr')} className="accent-[#00a76b] cursor-pointer" />
                           HR Officers
                         </label>
                       )}
                       <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-700 dark:text-gray-200">
-                        <input type="checkbox" checked={tempFilterRole.includes('manager')} onChange={() => handleRoleToggle('manager')} className="accent-[#00a76b] cursor-pointer" />
+                        <input type="checkbox" checked={isRoleChecked('manager')} onChange={() => handleRoleToggle('manager')} className="accent-[#00a76b] cursor-pointer" />
                         Managers
                       </label>
                       <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-700 dark:text-gray-200">
-                        <input type="checkbox" checked={tempFilterRole.includes('employee')} onChange={() => handleRoleToggle('employee')} className="accent-[#00a76b] cursor-pointer" />
+                        <input type="checkbox" checked={isRoleChecked('employee')} onChange={() => handleRoleToggle('employee')} className="accent-[#00a76b] cursor-pointer" />
                         Employees
                       </label>
                     </div>
@@ -404,15 +511,15 @@ const HREmployees = () => {
                     <h4 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-2">Status</h4>
                     <div className="flex flex-col gap-2">
                       <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-700 dark:text-gray-200">
-                        <input type="checkbox" checked={tempFilterStatus.includes('all')} onChange={() => handleStatusToggle('all')} className="accent-[#00a76b] cursor-pointer" />
+                        <input type="checkbox" checked={isAllStatusesChecked} onChange={() => handleStatusToggle('all')} className="accent-[#00a76b] cursor-pointer" />
                         All Statuses
                       </label>
                       <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-700 dark:text-gray-200">
-                        <input type="checkbox" checked={tempFilterStatus.includes('active')} onChange={() => handleStatusToggle('active')} className="accent-[#00a76b] cursor-pointer" />
+                        <input type="checkbox" checked={isStatusChecked('active')} onChange={() => handleStatusToggle('active')} className="accent-[#00a76b] cursor-pointer" />
                         Active
                       </label>
                       <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-700 dark:text-gray-200">
-                        <input type="checkbox" checked={tempFilterStatus.includes('inactive')} onChange={() => handleStatusToggle('inactive')} className="accent-[#00a76b] cursor-pointer" />
+                        <input type="checkbox" checked={isStatusChecked('inactive')} onChange={() => handleStatusToggle('inactive')} className="accent-[#00a76b] cursor-pointer" />
                         Inactive
                       </label>
                     </div>
@@ -453,14 +560,13 @@ const HREmployees = () => {
                   <th className="py-2.5 px-4 text-[10px] font-bold text-slate-500 dark:text-[#829e92] uppercase tracking-wider border-r border-slate-200 dark:border-[#1e3b32] w-[240px] max-w-[240px]">EMPLOYEE</th>
                   <th className="py-2.5 px-4 text-[10px] font-bold text-slate-500 dark:text-[#829e92] uppercase tracking-wider border-r border-slate-200 dark:border-[#1e3b32]">DESIGNATION</th>
                   <th className="py-2.5 px-4 text-[10px] font-bold text-slate-500 dark:text-[#829e92] uppercase tracking-wider border-r border-slate-200 dark:border-[#1e3b32]">JOIN DATE</th>
-                  <th className="py-2.5 px-4 text-[10px] font-bold text-slate-500 dark:text-[#829e92] uppercase tracking-wider border-r border-slate-200 dark:border-[#1e3b32]">STATUS</th>
-                  <th className="py-2.5 px-4 text-[10px] font-bold text-slate-500 dark:text-[#829e92] uppercase tracking-wider text-right">ACTION</th>
+                  <th className="py-2.5 px-4 text-[10px] font-bold text-slate-500 dark:text-[#829e92] uppercase tracking-wider">STATUS</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 dark:divide-[#1e3b32]">
                 {paginatedEmployees.length === 0 ? (
                 <tr>
-                  <td colSpan="6" className="text-center py-16 text-slate-400 dark:text-[#829e92] font-semibold text-xs">
+                  <td colSpan="5" className="text-center py-16 text-slate-400 dark:text-[#829e92] font-semibold text-xs">
                     No active personnel nodes matching filter.
                   </td>
                 </tr>
@@ -475,7 +581,7 @@ const HREmployees = () => {
                       className="hover:bg-slate-50/80 dark:hover:bg-[#0d2a22]/70 transition-colors group cursor-pointer"
                     >
                       <td className="py-3 px-4 border-r border-slate-200 dark:border-[#1e3b32] w-[130px] max-w-[130px]">
-                        <span className="font-bold text-slate-800 dark:text-gray-200 text-xs font-mono">{emp.employeeId || 'NODE-UNDEF'}</span>
+                        <span className="font-bold text-slate-800 dark:text-gray-200 text-xs font-mono">{emp.employeeId || emp.userId?.employeeId || ((emp.role === 'admin' || emp.userId?.role === 'admin') ? 'ADMIN' : 'EMP-UNDEF')}</span>
                       </td>
                       <td className="py-3 px-4 border-r border-slate-200 dark:border-[#1e3b32] w-[240px] max-w-[240px]">
                         <div className="flex items-center gap-2.5">
@@ -488,33 +594,21 @@ const HREmployees = () => {
                           </div>
                           <div className="min-w-0 flex-1">
                             <p className="text-xs font-bold text-slate-900 dark:text-white group-hover:text-[#00a76b] transition-colors leading-tight truncate">{empName}</p>
-                            <p className="text-[10px] font-medium text-slate-400 dark:text-slate-400 leading-tight truncate mt-0.5">{emp.role || emp.designation || emp.email || emp.userId?.email}</p>
+                            <p className="text-[10px] font-medium text-slate-400 dark:text-slate-400 leading-tight truncate mt-0.5">{((emp.role || emp.userId?.role) === 'admin' ? 'Administrator • ' : '') + (emp.email || emp.userId?.email || emp.designation || '')}</p>
                           </div>
                         </div>
                       </td>
                       {/* Designation */}
                       <td className="py-3 px-4 text-xs font-medium text-slate-700 dark:text-gray-300 border-r border-slate-200 dark:border-[#1e3b32]">
-                        {emp.designation || 'N/A'}
+                        {emp.designation || ((emp.role === 'admin' || emp.userId?.role === 'admin') ? 'System Administrator' : 'N/A')}
                       </td>
                       {/* Join Date */}
                       <td className="py-3 px-4 text-xs font-medium text-slate-600 dark:text-gray-400 border-r border-slate-200 dark:border-[#1e3b32]">
                         {formatDate(emp.joinDate)}
                       </td>
                       {/* Status badge */}
-                      <td className="py-3 px-4 border-r border-slate-200 dark:border-[#1e3b32]" onClick={(e) => e.stopPropagation()}>
+                      <td className="py-3 px-4" onClick={(e) => e.stopPropagation()}>
                         {renderStatusSwitch(emp)}
-                      </td>
-                      {/* Row-level action options */}
-                      <td className="py-3 px-4 text-right relative" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex items-center justify-end gap-2">
-                          <button
-                            onClick={(e) => { e.stopPropagation(); handleDeleteClick(emp); }}
-                            className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 border border-transparent hover:border-red-200 dark:hover:border-red-800/50 transition-all cursor-pointer"
-                            title="Delete Employee"
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        </div>
                       </td>
                     </tr>
                   );
@@ -573,14 +667,8 @@ const HREmployees = () => {
             className="bg-white dark:bg-[#162722] border border-gray-200 dark:border-[#1a2d29] rounded-2xl p-6 max-w-md w-full shadow-2xl animate-in zoom-in-95 duration-200 relative z-[10000] cursor-default"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center gap-3 text-amber-500 mb-4">
-              <div className="w-10 h-10 rounded-full bg-amber-50 dark:bg-amber-950/40 flex items-center justify-center">
-                <SlidersHorizontal size={20} className="text-amber-600 dark:text-amber-400" />
-              </div>
-              <div>
-                <h3 className="text-lg font-bold text-gray-900 dark:text-white">Confirm Status Change</h3>
-                <p className="text-xs text-gray-500 dark:text-gray-400">Employee Account Control</p>
-              </div>
+            <div className="mb-4">
+              <h3 className="text-lg font-bold text-gray-900 dark:text-white">Confirm Status Change</h3>
             </div>
             <p className="text-sm text-gray-700 dark:text-gray-300 mb-6 leading-relaxed">
               Are you sure you want to make <span className="font-bold text-gray-900 dark:text-white">{statusModal.employee.fullName || statusModal.employee.userId?.name || 'this employee'}</span> <span className={`font-bold uppercase ${statusModal.targetStatus === 'active' ? 'text-[#00a76b]' : 'text-red-500'}`}>{statusModal.targetStatus}</span>?
@@ -692,6 +780,18 @@ const HREmployees = () => {
         </div>,
         document.body
       )}
+      {/* Export Filter Modal */}
+      <ExportFilterModal
+        isOpen={showExportModal}
+        onClose={() => setShowExportModal(false)}
+        title="Export Employee Directory"
+        subtitle="Filter records and choose which columns to include in your export file."
+        allData={baseEmployees}
+        filteredData={filteredEmployees}
+        columns={employeeExportColumns}
+        customFilters={employeeExportFilters}
+        defaultFilename="employee_directory"
+      />
     </div>
     </div>
   );

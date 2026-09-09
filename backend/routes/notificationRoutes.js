@@ -3,6 +3,7 @@ const router = express.Router();
 const { protect } = require('../middleware/authMiddleware');
 const {
   getNotifications,
+  getTeamMembers,
   markAsRead,
   markAllRead,
   createNotification,
@@ -10,6 +11,7 @@ const {
   deleteNotification
 } = require('../controllers/notificationController');
 
+router.get('/team-members', protect, getTeamMembers);
 router.get('/', protect, getNotifications);
 router.post('/', protect, createNotification);
 router.put('/:id/read', protect, markAsRead);

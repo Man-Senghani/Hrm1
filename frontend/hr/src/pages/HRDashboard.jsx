@@ -385,7 +385,7 @@ const HRDashboard = () => {
       {/* 1. Header Section */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h1 className="text-3xl md:text-4xl font-bold text-gray-900 dark:text-white tracking-tight flex items-center gap-2" style={{ fontFamily: 'Playfair Display, serif' }}>
+          <h1 className="text-3xl md:text-4xl font-semibold text-gray-900 dark:text-white tracking-tight flex items-center gap-2" style={{ fontFamily: 'Playfair Display, serif' }}>
             <span>{getGreeting()}, {firstName}!</span>
             <span className="inline-flex items-center">👋</span>
           </h1>

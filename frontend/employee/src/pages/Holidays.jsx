@@ -38,7 +38,7 @@ const Holidays = () => {
   return (
     <div className="space-y-4 pb-10 font-['Inter',sans-serif] animate-slide-up" style={{ color: 'var(--zap-charcoal)' }}>
       <div>
-        <h1 className="text-2xl font-bold text-[#201515] dark:text-white" style={{ fontFamily: 'Playfair Display, serif' }}>
+        <h1 className="text-2xl font-semibold text-[#201515] dark:text-white" style={{ fontFamily: 'Playfair Display, serif' }}>
           Holidays 2026
         </h1>
         <p className="text-xs text-[#939084] mt-0.5">View all national and regional holidays for the year.</p>

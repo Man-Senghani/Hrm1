@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
-import { Bell, Send, Loader2, Users, Briefcase, UserCheck, ChevronDown, Trash2, Edit2, RefreshCw, X, Plus } from 'lucide-react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { Bell, Send, Loader2, Users, Briefcase, UserCheck, ChevronDown, Trash2, Edit2, RefreshCw, X, Plus, ExternalLink } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const TYPE_COLORS = {
@@ -13,11 +14,74 @@ const TYPE_COLORS = {
 };
 
 const Notifications = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading]             = useState(true);
   const [sending, setSending]             = useState(false);
 
   const [employees, setEmployees]         = useState([]);
+  const [selectedNotif, setSelectedNotif] = useState(null);
+
+  const token   = sessionStorage.getItem('token');
+  const role    = sessionStorage.getItem('role') || 'hr';
+  const headers = { Authorization: `Bearer ${token}` };
+  const currentUserId = (() => { try { return JSON.parse(atob(token.split('.')[1]))?.id; } catch { return null; } })();
+
+  useEffect(() => {
+    if (location.state?.notification) {
+      setSelectedNotif(location.state.notification);
+    }
+  }, [location.state]);
+
+  const handleNotificationClick = (notif) => {
+    const type = (notif?.type || '').toLowerCase();
+    const text = (notif?.message || '').toLowerCase();
+
+    // 1. Leave requests -> Leave page
+    if (
+      type.includes('leave') ||
+      text.includes('leave') ||
+      text.includes('vacation') ||
+      text.includes('time off')
+    ) {
+      navigate(`/${role}/leave`);
+      return;
+    }
+
+    // 2. Timer / Attendance -> Attendance page
+    if (
+      type.includes('attendance') ||
+      type.includes('timer') ||
+      text.includes('attendance') ||
+      text.includes('timer') ||
+      text.includes('time track') ||
+      text.includes('tracker') ||
+      text.includes('check-in') ||
+      text.includes('checked in') ||
+      text.includes('check in') ||
+      text.includes('check-out') ||
+      text.includes('checked out') ||
+      text.includes('check out') ||
+      text.includes('clock in') ||
+      text.includes('clock out') ||
+      text.includes('overtime') ||
+      text.includes('late mark') ||
+      text.includes('half day')
+    ) {
+      navigate(`/${role}/attendance`);
+      return;
+    }
+
+    // 3. Tasks -> Tasks page
+    if (type.includes('task') || text.includes('task') || text.includes('assigned to you')) {
+      navigate(`/${role}/tasks`);
+      return;
+    }
+
+    // 4. Announcements and personal notifications -> open detail modal
+    setSelectedNotif(notif);
+  };
 
   // form state
   const [form, setForm] = useState({ 
@@ -38,11 +102,6 @@ const Notifications = () => {
   const targetRoleRef = useRef(null);
   const roleFilterRef = useRef(null);
   const empSelectRef  = useRef(null);
-
-  const token   = sessionStorage.getItem('token');
-  const role    = sessionStorage.getItem('role') || 'admin';
-  const headers = { Authorization: `Bearer ${token}` };
-  const currentUserId = (() => { try { return JSON.parse(atob(token.split('.')[1]))?.id; } catch { return null; } })();
 
   // Click outside handler for custom dropdowns
   useEffect(() => {
@@ -169,8 +228,8 @@ const Notifications = () => {
     <div className="px-3 md:px-5 pb-20 pt-0 w-full">
       {/* Header */}
       <div className="mb-8 flex items-center justify-between gap-4 w-full">
-        <h1 className="text-[28px] font-black text-[#201515] dark:text-white tracking-tight">
-          Notification
+        <h1 className="text-[28px] font-semibold text-[#201515] dark:text-white tracking-tight">
+          Announcement
         </h1>
         <div className="flex items-center gap-3">
           <button 
@@ -470,13 +529,18 @@ const Notifications = () => {
                             const senderRole = notif.senderRole || notif.senderId?.role || notif.sender?.role || '';
 
                             return (
-                              <tr key={notif._id} className="hover:bg-slate-50/80 dark:hover:bg-[#111c18] transition-colors group">
+                              <tr 
+                                key={notif._id} 
+                                onClick={() => handleNotificationClick(notif)}
+                                className="hover:bg-slate-50/80 dark:hover:bg-[#111c18] transition-colors group cursor-pointer"
+                                title="Click to view details or go to related section"
+                              >
                                 <td className="py-3.5 px-5 border-r border-[#e2eae7] dark:border-[#13221e]">
                                   <div className="flex items-center gap-3">
                                     <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${colorClass}`}>
                                       <Bell size={15} />
                                     </div>
-                                    <span className="text-[13px] font-medium text-slate-800 dark:text-white leading-snug">
+                                    <span className="text-[13px] font-medium text-slate-800 dark:text-white leading-snug group-hover:text-[#00a76b] transition-colors">
                                       {notif.message}
                                     </span>
                                   </div>
@@ -516,14 +580,14 @@ const Notifications = () => {
                                   {isCreator ? (
                                     <div className="flex items-center justify-end gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
                                       <button 
-                                        onClick={() => handleEdit(notif)}
+                                        onClick={(e) => { e.stopPropagation(); handleEdit(notif); }}
                                         className="p-1.5 text-slate-400 hover:text-[#00a76b] hover:bg-emerald-50 dark:hover:bg-emerald-950/30 rounded-lg transition-colors cursor-pointer"
                                         title="Edit"
                                       >
                                         <Edit2 size={14} />
                                       </button>
                                       <button 
-                                        onClick={() => handleDelete(notif._id)}
+                                        onClick={(e) => { e.stopPropagation(); handleDelete(notif._id); }}
                                         className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-lg transition-colors cursor-pointer"
                                         title="Delete"
                                       >
@@ -531,7 +595,10 @@ const Notifications = () => {
                                       </button>
                                     </div>
                                   ) : (
-                                    <span className="text-slate-400 dark:text-slate-600 text-[11px]">-</span>
+                                    <div className="flex items-center justify-end gap-1 text-slate-400 group-hover:text-[#00a76b] transition-colors">
+                                      <span className="text-[11px] font-bold opacity-0 group-hover:opacity-100 transition-opacity">Open</span>
+                                      <ExternalLink size={13} className="opacity-40 group-hover:opacity-100" />
+                                    </div>
                                   )}
                                 </td>
                               </tr>
@@ -601,6 +668,58 @@ const Notifications = () => {
         </div>
 
       </div>
+
+      {/* ── ANNOUNCEMENT / PERSONAL NOTIFICATION DETAIL MODAL ── */}
+      {selectedNotif && (
+        <div 
+          className="fixed inset-0 z-[150] flex items-center justify-center bg-black/50 backdrop-blur-xs p-4 animate-in fade-in duration-200"
+          onClick={() => setSelectedNotif(null)}
+        >
+          <div 
+            className="bg-white dark:bg-[#111c18] border border-[#eceae3] dark:border-[#1a2d29] rounded-[20px] shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-5 border-b border-[#eceae3] dark:border-[#1a2d29] flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${TYPE_COLORS[selectedNotif.type] || TYPE_COLORS.default}`}>
+                  <Bell size={18} />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-[#201515] dark:text-white capitalize">
+                    {selectedNotif.type || 'Announcement'}
+                  </h3>
+                  <p className="text-xs font-semibold text-slate-500 dark:text-[#829e92]">
+                    By {selectedNotif.senderName || selectedNotif.senderId?.name || 'HR / Management'} {selectedNotif.senderRole ? `(${selectedNotif.senderRole})` : ''}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedNotif(null)}
+                className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 hover:bg-slate-200 dark:bg-[#1a2d29] dark:hover:bg-[#223b35] text-slate-600 dark:text-slate-300 transition-colors cursor-pointer border-none"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="bg-slate-50 dark:bg-[#162722]/60 rounded-xl p-4 border border-[#e2eae7] dark:border-[#1a2d29] text-[14px] leading-relaxed text-slate-800 dark:text-slate-100 font-medium whitespace-pre-wrap">
+                {selectedNotif.message}
+              </div>
+              <div className="flex items-center justify-between text-xs text-slate-400 dark:text-[#829e92]">
+                <span>Target: <strong className="text-slate-700 dark:text-slate-200">{selectedNotif.targetLabel || 'All'}</strong></span>
+                <span>{new Date(selectedNotif.createdAt).toLocaleString()}</span>
+              </div>
+            </div>
+            <div className="p-4 border-t border-[#eceae3] dark:border-[#1a2d29] flex justify-end">
+              <button
+                onClick={() => setSelectedNotif(null)}
+                className="px-5 py-2.5 bg-[#00a76b] hover:bg-[#00915c] text-white rounded-[10px] font-bold text-xs transition-all cursor-pointer border-none shadow-sm"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

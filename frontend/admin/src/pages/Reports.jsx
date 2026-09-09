@@ -10,6 +10,7 @@ import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, Legend
 } from 'recharts';
+import ExportFilterModal from '@shared/components/ExportFilterModal';
 
 // ────────────────────────────── Fallback / Sample Data ──────────────────────────────
 const MOCK_EMPLOYEES = [
@@ -66,6 +67,7 @@ const Reports = () => {
   const [selectedDept, setSelectedDept] = useState('All');
   const [selectedStatus, setSelectedStatus] = useState('All');
   const [selectedType, setSelectedType] = useState('All');
+  const [showExportModal, setShowExportModal] = useState(false);
 
   // Sync theme status reactively
   useEffect(() => {
@@ -233,21 +235,39 @@ const Reports = () => {
     }));
   }, [employees, searchQuery, selectedStatus, selectedType]);
 
-  const handleExport = () => {
-    const headers = ['Metric', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'];
-    const row = ['Headcount', ...headcountTrendData.map(d => d.count)];
-    const csvContent = "data:text/csv;charset=utf-8," 
-      + [headers.join(','), row.join(',')].join('\n');
+  // Export configuration
+  const reportExportColumns = [
+    { key: 'fullName', label: 'Employee Name', defaultSelected: true, getValue: (e) => e.fullName || e.name || 'Anonymous' },
+    { key: 'department', label: 'Department', defaultSelected: true, getValue: (e) => typeof e.department === 'object' ? e.department?.name : (e.department || 'N/A') },
+    { key: 'employmentType', label: 'Employment Type', defaultSelected: true, getValue: (e) => e.employmentType || 'Full-time' },
+    { key: 'status', label: 'Status', defaultSelected: true, getValue: (e) => (e.status || 'active').toUpperCase() },
+    { key: 'joinDate', label: 'Join Date', defaultSelected: true, getValue: (e) => e.joinDate || 'N/A' }
+  ];
 
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", "headcount_analytics_report.csv");
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    toast.success('Reports data exported successfully');
-  };
+  const reportExportFilters = [
+    {
+      key: 'department',
+      label: 'Department',
+      getItemValue: (e) => typeof e.department === 'object' ? e.department?.name : (e.department || 'All'),
+      options: [
+        { label: 'Engineering', value: 'Engineering' },
+        { label: 'Sales', value: 'Sales' },
+        { label: 'Design', value: 'Design' },
+        { label: 'Marketing', value: 'Marketing' },
+        { label: 'Finance', value: 'Finance' },
+        { label: 'HR', value: 'HR' }
+      ]
+    },
+    {
+      key: 'status',
+      label: 'Status',
+      getItemValue: (e) => (e.status || 'active').toLowerCase(),
+      options: [
+        { label: 'Active', value: 'active' },
+        { label: 'Inactive', value: 'inactive' }
+      ]
+    }
+  ];
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500 pb-20 max-w-[1440px] mx-auto">
@@ -255,12 +275,12 @@ const Reports = () => {
       {/* 1. Header Section */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end border-b border-[#e2eae7] dark:border-[#1a2d29] pb-8 gap-4">
         <div>
-          <h1 className="text-[28px] font-bold tracking-tight text-slate-900 dark:text-white leading-none">Reports</h1>
+          <h1 className="text-[28px] font-semibold tracking-tight text-slate-900 dark:text-white leading-none">Reports</h1>
           <p className="text-sm text-slate-500 dark:text-[#a3b3af] mt-2 font-medium">HR analytics across the company.</p>
         </div>
         <div className="flex gap-3">
           <button 
-            onClick={handleExport}
+            onClick={() => setShowExportModal(true)}
             className="px-4 py-2 border border-[#dcdbd3] dark:border-[#1a2d29] bg-white dark:bg-[#111c18] hover:bg-[#eceae3]/50 dark:hover:bg-slate-800/50 text-[#5c5f5d] dark:text-[#cbd5e1] font-bold text-xs rounded-full cursor-pointer transition-all flex items-center gap-1.5"
           >
             <Download size={14} />
@@ -688,6 +708,18 @@ const Reports = () => {
           </div>
         </div>
       )}
+      {/* Export Filter Modal */}
+      <ExportFilterModal
+        isOpen={showExportModal}
+        onClose={() => setShowExportModal(false)}
+        title="Export Reports & Analytics"
+        subtitle="Select dataset filters and columns to download."
+        allData={employees.length > 0 ? employees : MOCK_EMPLOYEES}
+        filteredData={employees.length > 0 ? employees : MOCK_EMPLOYEES}
+        columns={reportExportColumns}
+        customFilters={reportExportFilters}
+        defaultFilename="company_reports_analytics"
+      />
     </div>
   );
 };

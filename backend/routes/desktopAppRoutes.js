@@ -20,7 +20,7 @@ const getLocalPackageInfo = () => {
   } catch (err) {
     console.error('Error reading desktop-tracker package.json:', err);
   }
-  return { version: '1.2.8', name: 'fluidhr-desktop-tracker', description: 'FluidHR Desktop Tracker' };
+  return { version: '1.3.6', name: 'fluidhr-desktop-tracker', description: 'FluidHR Desktop Tracker' };
 };
 
 // Fetch latest release info from GitHub repository

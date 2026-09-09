@@ -4,10 +4,11 @@ import { toast } from 'react-hot-toast';
 import { createPortal } from 'react-dom';
 import {
   FileText, CheckCircle2, Clock, AlertCircle, PauseCircle,
-  Search, Filter, RefreshCw, Download, Eye, X, User, Building, Briefcase, Calendar, ChevronRight, Plus, Sparkles, Send
+  Search, Filter, RefreshCw, Download, Eye, Pencil, X, User, Building, Briefcase, Calendar, ChevronRight, Plus, Sparkles, Send
 } from 'lucide-react';
 import CustomDatePicker from '@shared/components/CustomDatePicker';
 import CustomSelect from '@shared/components/CustomSelect';
+import MultiProjectSelect from '@shared/components/MultiProjectSelect';
 
 const STATUS_ICONS = {
   'Completed': <CheckCircle2 size={15} className="text-emerald-500 shrink-0" />,
@@ -34,6 +35,15 @@ const getTodayStr = () => {
   return `${yyyy}-${mm}-${dd}`;
 };
 
+const getMinAllowedDate = () => {
+  const d = new Date();
+  d.setDate(d.getDate() - 7);
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+};
+
 const getUser = () => {
   try {
     const s = sessionStorage.getItem('user') || localStorage.getItem('user');
@@ -42,89 +52,6 @@ const getUser = () => {
     return null;
   }
 };
-
-const MOCK_DAILY_REPORTS = [
-  {
-    _id: 'mock-1',
-    reportDate: getTodayStr(),
-    projectName: 'HRMS',
-    workDescription: 'Integrated CustomSelect dropdown popovers, CustomDatePicker, and responsive single-line metric cards layout.',
-    hoursSpent: 8,
-    status: 'Completed',
-    department: 'Engineering',
-    user: {
-      name: 'Aarya Patel',
-      email: 'aarya.patel@fluidhr.io',
-      employeeId: 'EMP-1001'
-    },
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
-  },
-  {
-    _id: 'mock-2',
-    reportDate: getTodayStr(),
-    projectName: 'Client side work',
-    workDescription: 'Configured dynamic API resolution for local dev ports and updated database connection parameters.',
-    hoursSpent: 7.5,
-    status: 'In Progress',
-    department: 'Software Development',
-    user: {
-      name: 'Kalpesh Patel',
-      email: 'kalpesh.patel@fluidhr.io',
-      employeeId: 'EMP-1002'
-    },
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
-  },
-  {
-    _id: 'mock-3',
-    reportDate: '2026-08-31',
-    projectName: 'MTK',
-    workDescription: 'Reviewed team leave applications, verified attendance logs, and generated monthly department reports.',
-    hoursSpent: 8,
-    status: 'Completed',
-    department: 'Human Resources',
-    user: {
-      name: 'Dhruv Mehta',
-      email: 'dhruv.mehta@fluidhr.io',
-      employeeId: 'EMP-1003'
-    },
-    createdAt: new Date(Date.now() - 86400000).toISOString(),
-    updatedAt: new Date(Date.now() - 86400000).toISOString()
-  },
-  {
-    _id: 'mock-4',
-    reportDate: '2026-08-31',
-    projectName: 'Aupan ishad',
-    workDescription: 'Implemented real-time desktop tracker service integration and automated screenshot upload pipeline.',
-    hoursSpent: 6.5,
-    status: 'Pending',
-    department: 'IT Infrastructure',
-    user: {
-      name: 'Rohan Sharma',
-      email: 'rohan.sharma@fluidhr.io',
-      employeeId: 'EMP-1004'
-    },
-    createdAt: new Date(Date.now() - 86400000).toISOString(),
-    updatedAt: new Date(Date.now() - 86400000).toISOString()
-  },
-  {
-    _id: 'mock-5',
-    reportDate: '2026-08-30',
-    projectName: 'Management kinda thing',
-    workDescription: 'Sprint planning meeting with product managers and architectural review of upcoming HR metrics dashboard.',
-    hoursSpent: 5,
-    status: 'On Hold',
-    department: 'Management',
-    user: {
-      name: 'Priya Verma',
-      email: 'priya.verma@fluidhr.io',
-      employeeId: 'EMP-1005'
-    },
-    createdAt: new Date(Date.now() - 172800000).toISOString(),
-    updatedAt: new Date(Date.now() - 172800000).toISOString()
-  }
-];
 
 const formatShortWork = (text) => {
   if (!text) return 'N/A';
@@ -135,6 +62,10 @@ const formatShortWork = (text) => {
 
 const DailyReportHR = () => {
   const [currentUser, setCurrentUser] = useState(getUser);
+
+  // Editing State (for personal reports in My Daily Reports)
+  const [editingReport, setEditingReport] = useState(null);
+  const [formErrors, setFormErrors] = useState({});
 
   // Tab View Mode: 'my' | 'team'
   const [viewTab, setViewTab] = useState('team');
@@ -160,8 +91,7 @@ const DailyReportHR = () => {
   // Form Drawer State
   const [isFormDrawerOpen, setIsFormDrawerOpen] = useState(false);
   const [formData, setFormData] = useState({
-    projectName: 'HRMS',
-    customProject: '',
+    selectedProjects: [],
     workDescription: '',
     hoursSpent: '',
     reportDate: getTodayStr(),
@@ -183,6 +113,7 @@ const DailyReportHR = () => {
   const [period, setPeriod] = useState('all');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [showFilterModal, setShowFilterModal] = useState(false);
 
   // Filters for My Reports
   const [mySearch, setMySearch] = useState('');
@@ -244,83 +175,32 @@ const DailyReportHR = () => {
       const res = await api.get('/daily-reports', { params });
       const fetchedReports = res.data?.reports || [];
 
-      if (fetchedReports.length === 0) {
-        // Filter sample mock data dynamically by search & filter dropdowns
-        const filteredMock = MOCK_DAILY_REPORTS.filter(rep => {
-          if (search.trim()) {
-            const q = search.trim().toLowerCase();
-            const empName = (rep.user?.name || rep.employee?.fullName || '').toLowerCase();
-            const empEmail = (rep.user?.email || rep.employee?.email || '').toLowerCase();
-            const proj = (rep.projectName || '').toLowerCase();
-            const desc = (rep.workDescription || '').toLowerCase();
-            if (!empName.includes(q) && !empEmail.includes(q) && !proj.includes(q) && !desc.includes(q)) {
-              return false;
-            }
-          }
-          if (department !== 'all' && (rep.department || '').toLowerCase() !== department.toLowerCase()) {
-            return false;
-          }
-          if (project !== 'all' && (rep.projectName || '').toLowerCase() !== project.toLowerCase()) {
-            return false;
-          }
-          if (status !== 'all' && (rep.status || '').toLowerCase() !== status.toLowerCase()) {
-            return false;
-          }
-          if (period !== 'all') {
-            const repDateStr = rep.reportDate;
-            const todayStr = getTodayStr();
-            if (period === 'today' && repDateStr !== todayStr) return false;
-            if (period === 'yesterday') {
-              const d = new Date();
-              d.setDate(d.getDate() - 1);
-              const yestStr = d.toISOString().split('T')[0];
-              if (repDateStr !== yestStr) return false;
-            }
-          }
-          return true;
-        });
-
-        setReports(filteredMock);
-        setSummary({
-          totalReports: filteredMock.length,
-          completedCount: filteredMock.filter(r => r.status === 'Completed').length,
-          inProgressCount: filteredMock.filter(r => r.status === 'In Progress').length,
-          pendingCount: filteredMock.filter(r => r.status === 'Pending').length,
-          onHoldCount: filteredMock.filter(r => r.status === 'On Hold').length,
-          totalHours: filteredMock.reduce((acc, c) => acc + (c.hoursSpent || 0), 0)
-        });
+      setReports(fetchedReports);
+      if (res.data?.summary) {
+        setSummary(res.data.summary);
       } else {
-        setReports(fetchedReports);
-        if (res.data.summary) {
-          setSummary(res.data.summary);
-        }
+        setSummary({
+          totalReports: fetchedReports.length,
+          completedCount: fetchedReports.filter(r => r.status === 'Completed').length,
+          inProgressCount: fetchedReports.filter(r => r.status === 'In Progress').length,
+          pendingCount: fetchedReports.filter(r => r.status === 'Pending').length,
+          onHoldCount: fetchedReports.filter(r => r.status === 'On Hold').length,
+          totalHours: fetchedReports.reduce((acc, c) => acc + (c.hoursSpent || 0), 0)
+        });
       }
       setTotalPages(res.data?.totalPages || 1);
     } catch (err) {
       console.error('Error fetching higher authority daily reports:', err);
-      // Fallback to filtered mock data on backend error
-      const filteredMock = MOCK_DAILY_REPORTS.filter(rep => {
-        if (search.trim()) {
-          const q = search.trim().toLowerCase();
-          const empName = (rep.user?.name || rep.employee?.fullName || '').toLowerCase();
-          const empEmail = (rep.user?.email || rep.employee?.email || '').toLowerCase();
-          const proj = (rep.projectName || '').toLowerCase();
-          const desc = (rep.workDescription || '').toLowerCase();
-          if (!empName.includes(q) && !empEmail.includes(q) && !proj.includes(q) && !desc.includes(q)) {
-            return false;
-          }
-        }
-        return true;
-      });
-      setReports(filteredMock);
+      setReports([]);
       setSummary({
-        totalReports: filteredMock.length,
-        completedCount: filteredMock.filter(r => r.status === 'Completed').length,
-        inProgressCount: filteredMock.filter(r => r.status === 'In Progress').length,
-        pendingCount: filteredMock.filter(r => r.status === 'Pending').length,
-        onHoldCount: filteredMock.filter(r => r.status === 'On Hold').length,
-        totalHours: filteredMock.reduce((acc, c) => acc + (c.hoursSpent || 0), 0)
+        totalReports: 0,
+        completedCount: 0,
+        inProgressCount: 0,
+        pendingCount: 0,
+        onHoldCount: 0,
+        totalHours: 0
       });
+      setTotalPages(1);
     } finally {
       setLoading(false);
     }
@@ -341,33 +221,10 @@ const DailyReportHR = () => {
 
       const res = await api.get('/daily-reports/me', { params });
       const fetchedMy = res.data?.reports || [];
-
-      if (fetchedMy.length === 0) {
-        const filteredMy = MOCK_DAILY_REPORTS.filter(rep => {
-          if (mySearch.trim()) {
-            const q = mySearch.trim().toLowerCase();
-            const proj = (rep.projectName || '').toLowerCase();
-            const desc = (rep.workDescription || '').toLowerCase();
-            if (!proj.includes(q) && !desc.includes(q)) return false;
-          }
-          if (myProjectFilter !== 'all' && (rep.projectName || '').toLowerCase() !== myProjectFilter.toLowerCase()) {
-            return false;
-          }
-          if (myStatusFilter !== 'all' && (rep.status || '').toLowerCase() !== myStatusFilter.toLowerCase()) {
-            return false;
-          }
-          if (myDateFilter && rep.reportDate !== myDateFilter) {
-            return false;
-          }
-          return true;
-        });
-        setMyReports(filteredMy);
-      } else {
-        setMyReports(fetchedMy);
-      }
+      setMyReports(fetchedMy);
     } catch (err) {
       console.error('Error fetching my daily reports:', err);
-      setMyReports(MOCK_DAILY_REPORTS.slice(0, 2));
+      setMyReports([]);
     } finally {
       setLoadingMyReports(false);
     }
@@ -386,51 +243,115 @@ const DailyReportHR = () => {
     }
   }, [viewTab, fetchDailyReports, fetchMyReports]);
 
+  // Handle Open Edit Drawer
+  const handleOpenEdit = (rep) => {
+    setEditingReport(rep);
+    setFormErrors({});
+    const projects = rep.projectName
+      ? rep.projectName.split(',').map(p => p.trim()).filter(Boolean)
+      : [];
+    setFormData({
+      selectedProjects: projects,
+      workDescription: rep.workDescription || '',
+      hoursSpent: rep.hoursSpent !== undefined ? String(rep.hoursSpent) : '',
+      reportDate: rep.reportDate || getTodayStr(),
+      status: rep.status || 'Completed'
+    });
+    setIsFormDrawerOpen(true);
+  };
+
   // Handle Submit inside drawer
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const selectedProj = formData.projectName === 'Other' ? formData.customProject.trim() : formData.projectName;
+
+    const errors = {};
+    let selectedProj = '';
+    if (Array.isArray(formData.selectedProjects) && formData.selectedProjects.length > 0) {
+      selectedProj = formData.selectedProjects.join(', ');
+    } else if (formData.projectName && formData.projectName !== 'Other') {
+      selectedProj = formData.projectName;
+    } else if (formData.customProject?.trim()) {
+      selectedProj = formData.customProject.trim();
+    }
 
     if (!selectedProj) {
-      toast.error('Please select or specify a Project Name');
+      errors.projects = 'Please select or specify at least one Project Name';
+    }
+
+    if (!formData.hoursSpent || String(formData.hoursSpent).trim() === '') {
+      errors.hoursSpent = 'Please enter hours spent';
+    } else {
+      const hours = parseFloat(formData.hoursSpent);
+      if (isNaN(hours) || hours <= 0) {
+        errors.hoursSpent = 'Please enter a valid positive number for hours spent';
+      } else if (hours > 24) {
+        errors.hoursSpent = 'Hours spent cannot exceed 24 hours in a single day';
+      }
+    }
+
+    if (!formData.workDescription || !formData.workDescription.trim()) {
+      errors.workDescription = "Please describe 'Work That You've Done'";
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setFormErrors(errors);
+      toast.error(Object.values(errors)[0]);
       return;
     }
-    if (!formData.workDescription.trim()) {
-      toast.error("Please describe 'Work That You've Done'");
-      return;
-    }
+
+    setFormErrors({});
     const hours = parseFloat(formData.hoursSpent);
-    if (isNaN(hours) || hours <= 0) {
-      toast.error('Please enter a valid positive number for Hours Spent');
-      return;
-    }
+    const reportDate = formData.reportDate || getTodayStr();
 
     setIsSubmitting(true);
     try {
-      await api.post('/daily-reports', {
-        projectName: selectedProj,
-        workDescription: formData.workDescription.trim(),
-        hoursSpent: hours,
-        reportDate: formData.reportDate || getTodayStr(),
-        status: formData.status
-      });
+      if (editingReport) {
+        const res = await api.put(`/daily-reports/${editingReport._id}`, {
+          projectName: selectedProj,
+          workDescription: formData.workDescription.trim(),
+          hoursSpent: hours,
+          reportDate: reportDate,
+          status: formData.status
+        });
+        const updatedRep = res.data;
 
-      toast.success('Daily Work Report submitted successfully!');
-      
-      setFormData({
-        projectName: 'HRMS',
-        customProject: '',
-        workDescription: '',
-        hoursSpent: '',
-        reportDate: getTodayStr(),
-        status: 'Completed'
-      });
-      setIsFormDrawerOpen(false);
-      
-      if (viewTab === 'team') {
+        toast.success('Daily report updated successfully!');
+
+        setReports(prev => prev.map(r => r._id === editingReport._id ? { ...r, ...updatedRep } : r));
+        setMyReports(prev => prev.map(r => r._id === editingReport._id ? { ...r, ...updatedRep } : r));
+        setSelectedReport(prev => (prev?._id === editingReport._id ? { ...prev, ...updatedRep } : prev));
+
         fetchDailyReports();
-      } else {
         fetchMyReports();
+
+        setIsFormDrawerOpen(false);
+        setEditingReport(null);
+      } else {
+        await api.post('/daily-reports', {
+          projectName: selectedProj,
+          workDescription: formData.workDescription.trim(),
+          hoursSpent: hours,
+          reportDate: reportDate,
+          status: formData.status
+        });
+
+        toast.success('Daily Work Report submitted successfully!');
+        
+        setFormData({
+          selectedProjects: [],
+          workDescription: '',
+          hoursSpent: '',
+          reportDate: getTodayStr(),
+          status: 'Completed'
+        });
+        setIsFormDrawerOpen(false);
+        setEditingReport(null);
+        
+        if (viewTab === 'team') {
+          fetchDailyReports();
+        } else {
+          fetchMyReports();
+        }
       }
     } catch (err) {
       console.error('Submit report error:', err);
@@ -508,7 +429,7 @@ const DailyReportHR = () => {
         const desc = (rep.workDescription || '').toLowerCase();
         if (!proj.includes(q) && !desc.includes(q)) return false;
       }
-      if (myProjectFilter !== 'all' && (rep.projectName || '').toLowerCase() !== myProjectFilter.toLowerCase()) {
+      if (myProjectFilter !== 'all' && !(rep.projectName || '').toLowerCase().includes(myProjectFilter.toLowerCase())) {
         return false;
       }
       if (myStatusFilter !== 'all' && (rep.status || '').toLowerCase() !== myStatusFilter.toLowerCase()) {
@@ -533,7 +454,7 @@ const DailyReportHR = () => {
       {/* ── HEADER WITH ADD REPORT BUTTON & CONTEXT SWITCHER ── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight flex items-center gap-3">
+          <h1 className="text-2xl sm:text-3xl font-semibold text-slate-900 dark:text-white tracking-tight flex items-center gap-3">
             <FileText className="text-emerald-600 dark:text-emerald-400" size={28} />
             Daily Report Registry
           </h1>
@@ -546,7 +467,18 @@ const DailyReportHR = () => {
           {/* Clean Solid Green Pill Button matching Attendance page tabs */}
           <button
             type="button"
-            onClick={() => setIsFormDrawerOpen(true)}
+            onClick={() => {
+              setEditingReport(null);
+              setFormErrors({});
+              setFormData({
+                selectedProjects: [],
+                workDescription: '',
+                hoursSpent: '',
+                reportDate: getTodayStr(),
+                status: 'Completed'
+              });
+              setIsFormDrawerOpen(true);
+            }}
             className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-[#00a76b] hover:bg-[#00925e] active:scale-95 text-white font-bold text-xs shadow-sm transition-all cursor-pointer border-none"
           >
             <Plus size={16} strokeWidth={2.5} />
@@ -735,9 +667,16 @@ const DailyReportHR = () => {
                           {rep.reportDate}
                         </td>
                         <td className="py-4 px-4 whitespace-nowrap">
-                          <span className="px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 font-bold border border-emerald-200 dark:border-emerald-900/50">
-                            {rep.projectName}
-                          </span>
+                          <div className="flex flex-wrap gap-1 items-center">
+                            {(rep.projectName || '').split(',').map((p, pIdx) => (
+                              <span
+                                key={pIdx}
+                                className="px-2.5 py-0.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 font-bold text-xs border border-emerald-200 dark:border-emerald-900/50"
+                              >
+                                {p.trim()}
+                              </span>
+                            ))}
+                          </div>
                         </td>
                         <td className="py-4 px-4 max-w-xs sm:max-w-md truncate" title="Click to view full description">
                           {formatShortWork(rep.workDescription)}
@@ -753,13 +692,30 @@ const DailyReportHR = () => {
                           </span>
                         </td>
                         <td className="py-4 px-4 text-right whitespace-nowrap">
-                          <button
-                            onClick={() => setSelectedReport(rep)}
-                            className="p-2 rounded-xl bg-slate-100 dark:bg-[#111c18] hover:bg-emerald-50 dark:hover:bg-emerald-950/50 text-slate-600 dark:text-slate-300 hover:text-emerald-600 transition-colors cursor-pointer"
-                            title="View Complete Report Details"
-                          >
-                            <Eye size={16} />
-                          </button>
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenEdit(rep);
+                              }}
+                              className="p-2 rounded-xl bg-slate-100 dark:bg-[#111c18] hover:bg-emerald-50 dark:hover:bg-emerald-950/50 text-slate-600 dark:text-slate-300 hover:text-emerald-600 transition-colors cursor-pointer"
+                              title="Edit Daily Report"
+                            >
+                              <Pencil size={15} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedReport(rep);
+                              }}
+                              className="p-2 rounded-xl bg-slate-100 dark:bg-[#111c18] hover:bg-emerald-50 dark:hover:bg-emerald-950/50 text-slate-600 dark:text-slate-300 hover:text-emerald-600 transition-colors cursor-pointer"
+                              title="View Complete Report Details"
+                            >
+                              <Eye size={16} />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -827,74 +783,184 @@ const DailyReportHR = () => {
             </div>
           </div>
 
-          {/* Filter Controls */}
-          <div className="bg-white dark:bg-[#162722] border border-slate-200 dark:border-[#1a2d29] p-4 rounded-2xl shadow-sm space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider">
-                <Filter size={16} className="text-emerald-600 dark:text-emerald-400" />
-                Filter Reports
-              </div>
-              <button
-                onClick={handleResetFilters}
-                className="text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer"
-              >
-                Clear All Filters
-              </button>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-              <div className="relative lg:col-span-2">
-                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={16} />
-                <input
-                  type="text"
-                  placeholder="Search employee, work description..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-[#111c18] border border-slate-200 dark:border-[#1a2d29] text-xs text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
-                />
-              </div>
-
-              <CustomSelect
-                options={[
-                  { label: 'All Departments', value: 'all' },
-                  ...departmentOptions.map(d => ({ label: d, value: d }))
-                ]}
-                value={department}
-                onChange={(val) => setDepartment(val)}
-              />
-
-              <CustomSelect
-                options={[
-                  { label: 'All Projects', value: 'all' },
-                  ...projectOptions.map(p => ({ label: p, value: p }))
-                ]}
-                value={project}
-                onChange={(val) => setProject(val)}
-              />
-
-              <CustomSelect
-                options={[
-                  { label: 'All Statuses', value: 'all' },
-                  ...STATUS_OPTIONS.map(st => ({ label: st, value: st }))
-                ]}
-                value={status}
-                onChange={(val) => setStatus(val)}
-                iconMap={STATUS_ICONS}
-              />
-
-              <CustomSelect
-                options={[
-                  { label: 'All Dates', value: 'all' },
-                  { label: 'Today', value: 'today' },
-                  { label: 'Yesterday', value: 'yesterday' },
-                  { label: 'This Week', value: 'this_week' },
-                  { label: 'This Month', value: 'this_month' }
-                ]}
-                value={period}
-                onChange={(val) => setPeriod(val)}
-              />
-            </div>
+          {/* Filter Button */}
+          <div className="flex items-center justify-between">
+            <div />
+            <button
+              onClick={() => setShowFilterModal(true)}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+                (search || department !== 'all' || project !== 'all' || status !== 'all' || period !== 'all' || startDate || endDate)
+                  ? 'bg-emerald-500 text-white border-emerald-500 shadow-sm shadow-emerald-200 dark:shadow-emerald-900/30'
+                  : 'bg-white dark:bg-[#162722] border-slate-200 dark:border-[#1a2d29] text-slate-700 dark:text-slate-200 hover:border-emerald-400'
+              }`}
+            >
+              <Filter size={14} />
+              Filter
+              {(search || department !== 'all' || project !== 'all' || status !== 'all' || period !== 'all' || startDate || endDate) && (
+                <span className="w-1.5 h-1.5 rounded-full bg-white/80 ml-0.5" />
+              )}
+            </button>
           </div>
+
+          {/* ── FILTER SIDE DRAWER ── */}
+          {showFilterModal && createPortal(
+            <div
+              className="fixed inset-0 z-[99999] flex justify-end"
+              style={{ background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(3px)' }}
+              onClick={() => setShowFilterModal(false)}
+            >
+              <div
+                className="relative flex flex-col bg-white dark:bg-[#162722] border-l border-slate-200 dark:border-[#1a2d29] shadow-2xl w-full max-w-sm h-full"
+                style={{ animation: 'slideInFromRight 0.22s cubic-bezier(0.16,1,0.3,1)' }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <style>{`@keyframes slideInFromRight { from { transform: translateX(100%); opacity: 0.6; } to { transform: translateX(0); opacity: 1; } }`}</style>
+
+                {/* Drawer Header */}
+                <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-[#1a2d29] shrink-0">
+                  <div className="flex items-center gap-2">
+                    <Filter size={15} className="text-emerald-600 dark:text-emerald-400" />
+                    <span className="text-sm font-extrabold text-slate-900 dark:text-white">Filter Reports</span>
+                  </div>
+                  <button
+                    onClick={() => setShowFilterModal(false)}
+                    className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-[#111c18] text-slate-400 hover:text-slate-600 dark:hover:text-white transition-colors cursor-pointer"
+                  >
+                    <X size={15} />
+                  </button>
+                </div>
+
+                {/* Drawer Body */}
+                <div className="flex-1 overflow-y-auto p-5 space-y-5">
+
+                  {/* Search */}
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Search</label>
+                    <div className="relative">
+                      <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={14} />
+                      <input
+                        type="text"
+                        placeholder="Search employee, work description..."
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-[#111c18] border border-slate-200 dark:border-[#1a2d29] text-xs text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500 transition-colors"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Department */}
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Department</label>
+                    <CustomSelect
+                      options={[
+                        { label: 'All Departments', value: 'all' },
+                        ...departmentOptions.map(d => ({ label: d, value: d }))
+                      ]}
+                      value={department}
+                      onChange={(val) => setDepartment(val)}
+                    />
+                  </div>
+
+                  {/* Project */}
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Project</label>
+                    <CustomSelect
+                      options={[
+                        { label: 'All Projects', value: 'all' },
+                        ...projectOptions.map(p => ({ label: p, value: p }))
+                      ]}
+                      value={project}
+                      onChange={(val) => setProject(val)}
+                    />
+                  </div>
+
+                  {/* Status */}
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Status</label>
+                    <CustomSelect
+                      options={[
+                        { label: 'All Statuses', value: 'all' },
+                        ...STATUS_OPTIONS.map(st => ({ label: st, value: st }))
+                      ]}
+                      value={status}
+                      onChange={(val) => setStatus(val)}
+                      iconMap={STATUS_ICONS}
+                    />
+                  </div>
+
+                  {/* Date Range */}
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Date Range</label>
+                    <div className="space-y-2.5">
+                      <div>
+                        <label className="block text-[10px] font-semibold text-slate-400 dark:text-slate-500 mb-1">Start Date</label>
+                        <CustomDatePicker
+                          name="filterStartDate"
+                          value={startDate}
+                          onChange={(e) => { setStartDate(e.target.value); setPeriod('all'); }}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-semibold text-slate-400 dark:text-slate-500 mb-1">End Date</label>
+                        <CustomDatePicker
+                          name="filterEndDate"
+                          value={endDate}
+                          onChange={(e) => { setEndDate(e.target.value); setPeriod('all'); }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Quick Period */}
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Quick Period</label>
+                    <div className="flex flex-wrap gap-2">
+                      {[
+                        { label: 'All Dates', value: 'all' },
+                        { label: 'Today', value: 'today' },
+                        { label: 'Yesterday', value: 'yesterday' },
+                        { label: 'This Week', value: 'this_week' },
+                        { label: 'This Month', value: 'this_month' }
+                      ].map(opt => (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => { setPeriod(opt.value); setStartDate(''); setEndDate(''); }}
+                          className={`px-3 py-1.5 rounded-lg text-[11px] font-bold border transition-all cursor-pointer ${
+                            period === opt.value
+                              ? 'bg-emerald-500 text-white border-emerald-500'
+                              : 'bg-slate-50 dark:bg-[#111c18] text-slate-600 dark:text-slate-300 border-slate-200 dark:border-[#1a2d29] hover:border-emerald-400'
+                          }`}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                </div>
+
+                {/* Drawer Footer */}
+                <div className="flex items-center justify-between px-5 py-4 border-t border-slate-100 dark:border-[#1a2d29] bg-slate-50/60 dark:bg-[#111c18]/40 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => { handleResetFilters(); }}
+                    className="text-xs font-bold text-rose-500 hover:text-rose-600 transition-colors cursor-pointer"
+                  >
+                    Clear All
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowFilterModal(false)}
+                    className="px-5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold transition-colors cursor-pointer"
+                  >
+                    Apply Filters
+                  </button>
+                </div>
+              </div>
+            </div>,
+            document.body
+          )}
 
           {/* Higher Authority Reports Table */}
           <div className="bg-white dark:bg-[#162722] border border-slate-200 dark:border-[#1a2d29] rounded-2xl p-4 sm:p-5 shadow-sm">
@@ -955,9 +1021,16 @@ const DailyReportHR = () => {
                             {rep.reportDate}
                           </td>
                           <td className="py-4 px-4 whitespace-nowrap">
-                            <span className="px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 font-bold border border-emerald-200 dark:border-emerald-900/50">
-                              {rep.projectName}
-                            </span>
+                            <div className="flex flex-wrap gap-1 items-center">
+                              {(rep.projectName || '').split(',').map((p, pIdx) => (
+                                <span
+                                  key={pIdx}
+                                  className="px-2.5 py-0.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 font-bold text-xs border border-emerald-200 dark:border-emerald-900/50"
+                                >
+                                  {p.trim()}
+                                </span>
+                              ))}
+                            </div>
                           </td>
                           <td className="py-4 px-4 max-w-xs sm:max-w-sm truncate" title="Click to view full report popup">
                             {formatShortWork(rep.workDescription)}
@@ -974,7 +1047,11 @@ const DailyReportHR = () => {
                           </td>
                           <td className="py-4 px-4 text-right whitespace-nowrap">
                             <button
-                              onClick={() => setSelectedReport(rep)}
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedReport(rep);
+                              }}
                               className="p-2 rounded-xl bg-slate-100 dark:bg-[#111c18] hover:bg-emerald-50 dark:hover:bg-emerald-950/50 text-slate-600 dark:text-slate-300 hover:text-emerald-600 transition-colors cursor-pointer"
                               title="View Full Report Details"
                             >
@@ -1030,16 +1107,23 @@ const DailyReportHR = () => {
             <div className="flex items-center justify-between p-5 border-b border-slate-100 dark:border-[#1a2d29] shrink-0 bg-slate-50/50 dark:bg-[#111c18]/50">
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
-                  <Sparkles size={18} />
+                  {editingReport ? <Pencil size={18} /> : <Sparkles size={18} />}
                 </div>
                 <div>
-                  <h3 className="text-base font-extrabold text-slate-900 dark:text-white">Daily Work Update</h3>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400">Task progress & working hours for today.</p>
+                  <h3 className="text-base font-extrabold text-slate-900 dark:text-white">
+                    {editingReport ? 'Edit Daily Work Update' : 'Daily Work Update'}
+                  </h3>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    {editingReport ? 'Modify task progress, hours, or status.' : 'Task progress & working hours for today.'}
+                  </p>
                 </div>
               </div>
               <button
                 type="button"
-                onClick={() => setIsFormDrawerOpen(false)}
+                onClick={() => {
+                  setIsFormDrawerOpen(false);
+                  setEditingReport(null);
+                }}
                 className="p-1.5 rounded-xl hover:bg-slate-200 dark:hover:bg-[#1a2d29] text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors cursor-pointer"
               >
                 <X size={18} />
@@ -1048,60 +1132,147 @@ const DailyReportHR = () => {
 
             {/* Drawer Body */}
             <div className="flex-1 overflow-y-auto p-5 space-y-4">
-              <form id="dailyReportHRDrawerForm" onSubmit={handleSubmit} className="space-y-4">
+              <form id="dailyReportHRDrawerForm" onSubmit={handleSubmit} noValidate className="space-y-4">
+                {/* 1. Project Name */}
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-200 mb-1.5 uppercase tracking-wider">
-                    Project Name <span className="text-red-500">*</span>
-                  </label>
-                  <CustomSelect
-                    options={[
-                      ...projectOptions.map(p => ({ label: p, value: p })),
-                      { label: 'Other / Custom Project...', value: 'Other' }
-                    ]}
-                    value={formData.projectName}
-                    onChange={(val) => setFormData({ ...formData, projectName: val })}
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider">
+                      Project Name <span className="text-red-500">*</span>
+                    </label>
+                    <span className="text-[10px] text-slate-400 dark:text-slate-500">
+                      Multi-select enabled
+                    </span>
+                  </div>
+                  <MultiProjectSelect
+                    options={projectOptions}
+                    value={formData.selectedProjects || []}
+                    onChange={(newVal) => {
+                      setFormData({ ...formData, selectedProjects: newVal });
+                      if (formErrors.projects) setFormErrors(prev => ({ ...prev, projects: '' }));
+                    }}
+                    placeholder="Select or type project(s)..."
                   />
-
-                  {formData.projectName === 'Other' && (
-                    <input
-                      type="text"
-                      placeholder="Type custom project name..."
-                      value={formData.customProject}
-                      onChange={(e) => setFormData({ ...formData, customProject: e.target.value })}
-                      className="mt-2.5 w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-[#111c18] border border-slate-200 dark:border-[#1a2d29] text-xs text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500 transition-colors"
-                      required
-                    />
+                  {formErrors.projects && (
+                    <p className="text-[11px] font-semibold text-rose-500 flex items-center gap-1 mt-1.5 animate-in fade-in">
+                      <AlertCircle size={13} className="shrink-0" />
+                      <span>{formErrors.projects}</span>
+                    </p>
                   )}
                 </div>
 
+                {/* 2. Date */}
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-200 mb-1.5 uppercase tracking-wider">
-                    Date <span className="text-red-500">*</span>
-                  </label>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider">
+                      Date <span className="text-red-500">*</span>
+                    </label>
+                    <span className="text-[10px] text-slate-400 dark:text-slate-500">Past 7 days only</span>
+                  </div>
                   <CustomDatePicker
                     name="reportDate"
                     value={formData.reportDate}
                     onChange={(e) => setFormData({ ...formData, reportDate: e.target.value })}
+                    minDate={getMinAllowedDate()}
+                    maxDate={getTodayStr()}
                   />
                 </div>
 
+                {/* 3. Hours Spent */}
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-200 mb-1.5 uppercase tracking-wider">
-                    Hours Spent <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    step="0.25"
-                    min="0.1"
-                    max="24"
-                    placeholder="e.g. 8 or 7.5"
-                    value={formData.hoursSpent}
-                    onChange={(e) => setFormData({ ...formData, hoursSpent: e.target.value })}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-[#111c18] border border-slate-200 dark:border-[#1a2d29] text-xs text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500 transition-colors"
-                    required
-                  />
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider">
+                      Hours Spent <span className="text-red-500">*</span>
+                    </label>
+                    <span className="text-[10px] text-slate-400 dark:text-slate-500">e.g. 8 or 8.5</span>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <div className="relative flex-1">
+                      <div className="absolute top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 pointer-events-none" style={{ left: '16px' }}>
+                        <Clock size={14} />
+                      </div>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        placeholder="e.g. 8 or 8.5"
+                        value={formData.hoursSpent}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (val === '' || /^\d*(\.\d{0,2})?$/.test(val)) {
+                            setFormData({ ...formData, hoursSpent: val });
+                            if (formErrors.hoursSpent) setFormErrors(prev => ({ ...prev, hoursSpent: '' }));
+                          }
+                        }}
+                        className={`w-full pr-3 py-2.5 rounded-xl bg-slate-50 dark:bg-[#111c18] border text-xs font-bold text-slate-900 dark:text-white focus:outline-none transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
+                          formErrors.hoursSpent
+                            ? 'border-rose-500 ring-2 ring-rose-500/20'
+                            : 'border-slate-200 dark:border-[#1a2d29] focus:border-emerald-500'
+                        }`}
+                        style={{ paddingLeft: '48px' }}
+                      />
+                    </div>
+
+                    {/* − / + stepper buttons */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const cur = parseFloat(formData.hoursSpent) || 0;
+                        const next = Math.max(0.5, Math.round((cur - 0.5) * 2) / 2);
+                        setFormData({ ...formData, hoursSpent: String(next) });
+                        if (formErrors.hoursSpent) setFormErrors(prev => ({ ...prev, hoursSpent: '' }));
+                      }}
+                      className="w-9 h-9 shrink-0 rounded-xl bg-slate-100 dark:bg-[#1a2d29] hover:bg-slate-200 dark:hover:bg-[#253f3a] text-slate-700 dark:text-slate-200 flex items-center justify-center font-bold text-base transition-colors cursor-pointer border border-slate-200 dark:border-[#253f3a]"
+                      title="Decrease 0.5 hours"
+                    >
+                      −
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const cur = parseFloat(formData.hoursSpent) || 0;
+                        const next = Math.min(24, Math.round((cur + 0.5) * 2) / 2 || 0.5);
+                        setFormData({ ...formData, hoursSpent: String(next) });
+                        if (formErrors.hoursSpent) setFormErrors(prev => ({ ...prev, hoursSpent: '' }));
+                      }}
+                      className="w-9 h-9 shrink-0 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white flex items-center justify-center font-bold text-base transition-colors cursor-pointer shadow-sm shadow-emerald-500/30"
+                      title="Increase 0.5 hours"
+                    >
+                      +
+                    </button>
+                  </div>
+
+                  {/* Inline Error Message */}
+                  {formErrors.hoursSpent && (
+                    <p className="text-[11px] font-semibold text-rose-500 flex items-center gap-1 mt-1.5 animate-in fade-in">
+                      <AlertCircle size={13} className="shrink-0" />
+                      <span>{formErrors.hoursSpent}</span>
+                    </p>
+                  )}
+
+                  {/* Quick Preset Chips */}
+                  <div className="flex items-center gap-1.5 flex-wrap" style={{ paddingTop: '10px' }}>
+                    <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Quick:</span>
+                    {['4', '6', '7.5', '8', '8.5', '9'].map(hrs => (
+                      <button
+                        key={hrs}
+                        type="button"
+                        onClick={() => {
+                          setFormData({ ...formData, hoursSpent: hrs });
+                          if (formErrors.hoursSpent) setFormErrors(prev => ({ ...prev, hoursSpent: '' }));
+                        }}
+                        className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                          formData.hoursSpent === hrs
+                            ? 'bg-emerald-500 text-white shadow-sm'
+                            : 'bg-slate-100 dark:bg-[#13231f] hover:bg-emerald-50 dark:hover:bg-emerald-950/60 text-slate-600 dark:text-slate-300 border border-slate-200/60 dark:border-[#1a2d29]'
+                        }`}
+                      >
+                        {hrs}h
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
+                {/* 4. Status */}
                 <div>
                   <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-200 mb-1.5 uppercase tracking-wider">
                     Status <span className="text-red-500">*</span>
@@ -1114,6 +1285,7 @@ const DailyReportHR = () => {
                   />
                 </div>
 
+                {/* 5. Work Done */}
                 <div>
                   <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-200 mb-1.5 uppercase tracking-wider">
                     Work That You've Done <span className="text-red-500">*</span>
@@ -1122,10 +1294,22 @@ const DailyReportHR = () => {
                     rows={4}
                     placeholder="Describe the tasks, bug fixes, or progress completed during this session..."
                     value={formData.workDescription}
-                    onChange={(e) => setFormData({ ...formData, workDescription: e.target.value })}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-[#111c18] border border-slate-200 dark:border-[#1a2d29] text-xs text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500 transition-colors"
-                    required
+                    onChange={(e) => {
+                      setFormData({ ...formData, workDescription: e.target.value });
+                      if (formErrors.workDescription) setFormErrors(prev => ({ ...prev, workDescription: '' }));
+                    }}
+                    className={`w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-[#111c18] border text-xs text-slate-900 dark:text-white focus:outline-none transition-colors ${
+                      formErrors.workDescription
+                        ? 'border-rose-500 ring-2 ring-rose-500/20'
+                        : 'border-slate-200 dark:border-[#1a2d29] focus:border-emerald-500'
+                    }`}
                   />
+                  {formErrors.workDescription && (
+                    <p className="text-[11px] font-semibold text-rose-500 flex items-center gap-1 mt-1.5 animate-in fade-in">
+                      <AlertCircle size={13} className="shrink-0" />
+                      <span>{formErrors.workDescription}</span>
+                    </p>
+                  )}
                 </div>
               </form>
             </div>
@@ -1134,7 +1318,10 @@ const DailyReportHR = () => {
             <div className="p-5 border-t border-slate-100 dark:border-[#1a2d29] bg-slate-50/50 dark:bg-[#111c18]/50 flex items-center justify-end gap-3 shrink-0">
               <button
                 type="button"
-                onClick={() => setIsFormDrawerOpen(false)}
+                onClick={() => {
+                  setIsFormDrawerOpen(false);
+                  setEditingReport(null);
+                }}
                 className="px-5 py-2.5 rounded-xl border border-slate-200 dark:border-[#1a2d29] text-slate-600 dark:text-slate-300 font-bold text-xs hover:bg-slate-100 dark:hover:bg-[#1a2d29] transition-colors cursor-pointer"
               >
                 Cancel
@@ -1146,7 +1333,7 @@ const DailyReportHR = () => {
                 className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs uppercase tracking-wider transition-all shadow-md shadow-emerald-600/20 disabled:opacity-50 cursor-pointer"
               >
                 <Send size={15} />
-                {isSubmitting ? 'Submitting...' : 'Submit Report'}
+                {isSubmitting ? (editingReport ? 'Saving...' : 'Submitting...') : (editingReport ? 'Save Changes' : 'Submit Report')}
               </button>
             </div>
           </div>
@@ -1250,7 +1437,21 @@ const DailyReportHR = () => {
             </div>
 
             {/* Drawer Footer */}
-            <div className="p-5 border-t border-slate-100 dark:border-[#1a2d29] bg-slate-50/50 dark:bg-[#111c18]/50 flex items-center justify-end shrink-0">
+            <div className="p-5 border-t border-slate-100 dark:border-[#1a2d29] bg-slate-50/50 dark:bg-[#111c18]/50 flex items-center justify-between shrink-0">
+              {viewTab === 'my' ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const repToEdit = selectedReport;
+                    setSelectedReport(null);
+                    handleOpenEdit(repToEdit);
+                  }}
+                  className="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold transition-colors cursor-pointer flex items-center gap-2"
+                >
+                  <Pencil size={14} />
+                  <span>Edit Report</span>
+                </button>
+              ) : <div />}
               <button
                 type="button"
                 onClick={() => setSelectedReport(null)}

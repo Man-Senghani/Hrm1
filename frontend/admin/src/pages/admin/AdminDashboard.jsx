@@ -352,7 +352,7 @@ const AdminDashboard = () => {
       {/* 1. Header Section */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h1 className="text-3xl md:text-4xl font-bold text-gray-900 dark:text-white tracking-tight" style={{ fontFamily: 'Playfair Display, serif' }}>{getGreeting()}, {firstName}! 👋</h1>
+          <h1 className="text-3xl md:text-4xl font-semibold text-gray-900 dark:text-white tracking-tight" style={{ fontFamily: 'Playfair Display, serif' }}>{getGreeting()}, {firstName}! 👋</h1>
           <p className="text-[#939084] dark:text-[#a3a094] mt-1 text-sm font-medium">Have a productive day at work.</p>
         </div>
         <div className="flex items-center gap-2.5 mt-4 md:mt-0">

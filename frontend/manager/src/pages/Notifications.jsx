@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
-import { Bell, Send, Loader2, Users, Briefcase, UserCheck, ChevronDown, Trash2, Edit2, RefreshCw, X, Plus } from 'lucide-react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { Bell, Send, Loader2, Users, Briefcase, UserCheck, ChevronDown, Trash2, Edit2, RefreshCw, X, Plus, ExternalLink } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const TYPE_COLORS = {
@@ -12,18 +13,93 @@ const TYPE_COLORS = {
   default:      'bg-gray-100 text-gray-600',
 };
 
+const TARGET_ROLE_LABELS = {
+  all: 'All Employees',
+  employee: 'Employees Only',
+  manager: 'Managers Only',
+  hr: 'HR Only',
+  admin: 'Admins Only',
+  specific: 'Specific Person'
+};
+
 const Notifications = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading]             = useState(true);
   const [sending, setSending]             = useState(false);
 
   const [employees, setEmployees]         = useState([]);
+  const [teamMembers, setTeamMembers]     = useState([]);
+
+  const token   = sessionStorage.getItem('token');
+  const role    = sessionStorage.getItem('role') || 'manager';
+  const isManager = role === 'manager';
+  const headers = { Authorization: `Bearer ${token}` };
+  const currentUserId = (() => { try { return JSON.parse(atob(token.split('.')[1]))?.id; } catch { return null; } })();
+
+  const [selectedNotif, setSelectedNotif] = useState(null);
+
+  useEffect(() => {
+    if (location.state?.notification) {
+      setSelectedNotif(location.state.notification);
+    }
+  }, [location.state]);
+
+  const handleNotificationClick = (notif) => {
+    const type = (notif?.type || '').toLowerCase();
+    const text = (notif?.message || '').toLowerCase();
+
+    // 1. Leave requests -> Leave page
+    if (
+      type.includes('leave') ||
+      text.includes('leave') ||
+      text.includes('vacation') ||
+      text.includes('time off')
+    ) {
+      navigate(`/${role}/leave`);
+      return;
+    }
+
+    // 2. Timer / Attendance -> Attendance page
+    if (
+      type.includes('attendance') ||
+      type.includes('timer') ||
+      text.includes('attendance') ||
+      text.includes('timer') ||
+      text.includes('time track') ||
+      text.includes('tracker') ||
+      text.includes('check-in') ||
+      text.includes('checked in') ||
+      text.includes('check in') ||
+      text.includes('check-out') ||
+      text.includes('checked out') ||
+      text.includes('check out') ||
+      text.includes('clock in') ||
+      text.includes('clock out') ||
+      text.includes('overtime') ||
+      text.includes('late mark') ||
+      text.includes('half day')
+    ) {
+      navigate(`/${role}/attendance`);
+      return;
+    }
+
+    // 3. Tasks -> Tasks page
+    if (type.includes('task') || text.includes('task') || text.includes('assigned to you')) {
+      navigate(`/${role}/tasks`);
+      return;
+    }
+
+    // 4. Announcements and personal notifications -> open detail modal
+    setSelectedNotif(notif);
+  };
 
   // form state
   const [form, setForm] = useState({ 
     message: '', 
     type: 'announcement', 
-    targetRole: 'all', 
+    targetRole: isManager ? 'team' : 'all', 
     targetUserId: '',
     specificRoleFilter: 'all',
     _targetRoleOpen: false,
@@ -38,11 +114,6 @@ const Notifications = () => {
   const targetRoleRef = useRef(null);
   const roleFilterRef = useRef(null);
   const empSelectRef  = useRef(null);
-
-  const token   = sessionStorage.getItem('token');
-  const role    = sessionStorage.getItem('role') || 'admin';
-  const headers = { Authorization: `Bearer ${token}` };
-  const currentUserId = (() => { try { return JSON.parse(atob(token.split('.')[1]))?.id; } catch { return null; } })();
 
   // Click outside handler for custom dropdowns
   useEffect(() => {
@@ -78,15 +149,24 @@ const Notifications = () => {
 
   useEffect(() => { 
     fetchNotifications(); 
-    const fetchEmployees = async () => {
+    const fetchTeamMembers = async () => {
       try {
-        const res = await axios.get('/api/employees', { headers });
-        setEmployees(Array.isArray(res.data) ? res.data : []);
+        const res = await axios.get('/api/notifications/team-members', { headers });
+        const data = Array.isArray(res.data) ? res.data : [];
+        setTeamMembers(data);
+        setEmployees(data);
       } catch (err) {
-        console.error('Fetch employees error:', err);
+        try {
+          const fallback = await axios.get('/api/employees', { headers });
+          const data = Array.isArray(fallback.data) ? fallback.data : [];
+          setEmployees(data);
+          setTeamMembers(data.map(e => e.userId || e).filter(Boolean));
+        } catch (e) {
+          console.error('Fetch team members error:', e);
+        }
       }
     };
-    fetchEmployees();
+    fetchTeamMembers();
   }, []);
 
   /* ── BACKGROUND REFRESH ── */
@@ -138,25 +218,31 @@ const Notifications = () => {
         const res = await axios.put(`/api/notifications/${editingId}`, { message: form.message }, { headers });
         toast.success(res.data?.message || 'Announcement updated!');
         setEditingId(null);
-        setForm({ message: '', type: 'announcement', targetRole: 'all', targetUserId: '', specificRoleFilter: 'all' });
+        setForm({ message: '', type: 'announcement', targetRole: isManager ? 'team' : 'all', targetUserId: '', specificRoleFilter: 'all' });
         backgroundRefresh();
       } else {
-        let targetLabel = 'All Employees';
+        let targetLabel = isManager ? 'All Team Members' : 'All Employees';
         if (form.targetRole === 'specific') {
-          const emp = employees.find(e => e.userId && e.userId._id === form.targetUserId);
-          targetLabel = emp ? emp.userId.name : 'Specific Person';
+          const mem = teamMembers.find(m => (m._id || m.id) === form.targetUserId) || employees.find(e => (e.userId?._id || e._id) === form.targetUserId);
+          targetLabel = mem ? (mem.name || mem.userId?.name) : 'Specific Team Member';
+        } else if (isManager) {
+          targetLabel = 'My Team Members';
         } else if (form.targetRole === 'employee') targetLabel = 'Employees Only';
         else if (form.targetRole === 'manager') targetLabel = 'Managers Only';
         else if (form.targetRole === 'hr') targetLabel = 'HR Only';
         else if (form.targetRole === 'admin') targetLabel = 'Admins Only';
 
-        const payload = { ...form, targetLabel };
+        const payload = {
+          ...form,
+          targetRole: isManager ? (form.targetRole === 'specific' ? 'specific' : 'team') : form.targetRole,
+          targetLabel
+        };
 
         const res = await axios.post('/api/notifications', payload, { headers });
         toast.success(res.data?.message || 'Announcement sent!');
-        setForm({ message: '', type: 'announcement', targetRole: 'all', targetUserId: '', specificRoleFilter: 'all' });
+        setForm({ message: '', type: 'announcement', targetRole: isManager ? 'team' : 'all', targetUserId: '', specificRoleFilter: 'all' });
         setIsModalOpen(false);
-        backgroundRefresh(); // Use backgroundRefresh for new sends as well to be consistent
+        backgroundRefresh();
       }
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to process request');
@@ -169,8 +255,8 @@ const Notifications = () => {
     <div className="px-3 md:px-5 pb-20 pt-0 w-full">
       {/* Header */}
       <div className="mb-8 flex items-center justify-between gap-4 w-full">
-        <h1 className="text-[28px] font-black text-[#201515] dark:text-white tracking-tight">
-          Notification
+        <h1 className="text-[28px] font-semibold text-[#201515] dark:text-white tracking-tight">
+          Announcement
         </h1>
         <div className="flex items-center gap-3">
           <button 
@@ -229,36 +315,47 @@ const Notifications = () => {
                     className={`w-full bg-white border ${form._targetRoleOpen ? 'border-[#00a76b]' : 'border-[#eceae3]'} rounded-[12px] px-4 py-3 text-[13px] font-bold text-[#201515] cursor-pointer flex justify-between items-center transition-colors`}
                   >
                     <span>
-                      {{
-                        'all': 'All Employees',
-                        'employee': 'Employees Only',
-                        'manager': 'Managers Only',
-                        'hr': 'HR Only',
-                        'admin': 'Admins Only',
-                        'specific': 'Specific Person'
-                      }[form.targetRole]}
+                      {isManager 
+                        ? (form.targetRole === 'specific' ? '👤 Specific Team Member' : '👥 All Team Members')
+                        : (TARGET_ROLE_LABELS[form.targetRole] || 'All Employees')
+                      }
                     </span>
                     <ChevronDown size={14} className={`text-[#939084] transition-transform ${form._targetRoleOpen ? 'rotate-180' : ''}`} />
                   </div>
                   
                   {form._targetRoleOpen && (
                     <div className="absolute top-full left-0 w-full mt-1 bg-white border border-[#eceae3] rounded-[12px] shadow-lg overflow-hidden z-20">
-                      {[
-                        {v: 'all', l: 'All Employees'},
-                        {v: 'employee', l: 'Employees Only'},
-                        {v: 'manager', l: 'Managers Only'},
-                        ...(role !== 'manager' ? [{v: 'hr', l: 'HR Only'}] : []),
-                        ...(role === 'admin' ? [{v: 'admin', l: 'Admins Only'}] : []),
-                        {v: 'specific', l: 'Specific Person'}
-                      ].map(opt => (
-                        <div 
-                          key={opt.v}
-                          onClick={() => setForm(f => ({ ...f, targetRole: opt.v, targetUserId: '', _targetRoleOpen: false }))}
-                          className={`px-4 py-2.5 text-[13px] font-bold cursor-pointer transition-colors ${form.targetRole === opt.v ? 'bg-[#00a76b]/10 text-[#00a76b]' : 'text-[#201515] hover:bg-slate-50'}`}
-                        >
-                          {opt.l}
-                        </div>
-                      ))}
+                      {isManager ? (
+                        [
+                          { v: 'team', l: '👥 All Team Members' },
+                          { v: 'specific', l: '👤 Specific Team Member' }
+                        ].map(opt => (
+                          <div 
+                            key={opt.v}
+                            onClick={() => setForm(f => ({ ...f, targetRole: opt.v, targetUserId: '', _targetRoleOpen: false }))}
+                            className={`px-4 py-2.5 text-[13px] font-bold cursor-pointer transition-colors ${form.targetRole === opt.v ? 'bg-[#00a76b]/10 text-[#00a76b]' : 'text-[#201515] hover:bg-slate-50'}`}
+                          >
+                            {opt.l}
+                          </div>
+                        ))
+                      ) : (
+                        [
+                          {v: 'all', l: 'All Employees'},
+                          {v: 'employee', l: 'Employees Only'},
+                          {v: 'manager', l: 'Managers Only'},
+                          {v: 'hr', l: 'HR Only'},
+                          ...(role === 'admin' ? [{v: 'admin', l: 'Admins Only'}] : []),
+                          {v: 'specific', l: 'Specific Person'}
+                        ].map(opt => (
+                          <div 
+                            key={opt.v}
+                            onClick={() => setForm(f => ({ ...f, targetRole: opt.v, targetUserId: '', _targetRoleOpen: false }))}
+                            className={`px-4 py-2.5 text-[13px] font-bold cursor-pointer transition-colors ${form.targetRole === opt.v ? 'bg-[#00a76b]/10 text-[#00a76b]' : 'text-[#201515] hover:bg-slate-50'}`}
+                          >
+                            {opt.l}
+                          </div>
+                        ))
+                      )}
                     </div>
                   )}
                 </div>
@@ -269,56 +366,16 @@ const Notifications = () => {
               {!editingId && form.targetRole === 'specific' && (
                 <div>
                   <label className="block text-[11px] font-black uppercase tracking-widest text-[#939084] mb-2">
-                    Select Employee
+                    {isManager ? 'Select Team Member' : 'Select Employee'}
                   </label>
-                  <div className="grid grid-cols-2 gap-3">
-                    {/* Role Filter */}
-                    <div ref={roleFilterRef} className="relative">
-                      <div 
-                        onClick={() => setForm(f => ({ ...f, _roleFilterOpen: !f._roleFilterOpen, _targetRoleOpen: false, _empSelectOpen: false }))}
-                        className={`w-full bg-white border ${form._roleFilterOpen ? 'border-[#00a76b]' : 'border-[#eceae3]'} rounded-[12px] px-4 py-3 text-[13px] font-bold text-[#201515] cursor-pointer flex justify-between items-center transition-colors`}
-                      >
-                        <span>
-                          {{
-                            'all': 'Any Role',
-                            'employee': 'Employees',
-                            'manager': 'Managers',
-                            'hr': 'HR',
-                            'admin': 'Admins'
-                          }[form.specificRoleFilter]}
-                        </span>
-                        <ChevronDown size={14} className={`text-[#939084] transition-transform ${form._roleFilterOpen ? 'rotate-180' : ''}`} />
-                      </div>
-                      
-                      {form._roleFilterOpen && (
-                        <div className="absolute top-full left-0 w-full mt-1 bg-white border border-[#eceae3] rounded-[12px] shadow-lg overflow-hidden z-20">
-                          {[
-                            {v: 'all', l: 'Any Role'},
-                            {v: 'employee', l: 'Employees'},
-                            {v: 'manager', l: 'Managers'},
-                            ...(role !== 'manager' ? [{v: 'hr', l: 'HR'}] : []),
-                            ...(role === 'admin' ? [{v: 'admin', l: 'Admins'}] : [])
-                          ].map(opt => (
-                            <div 
-                              key={opt.v}
-                              onClick={() => setForm(f => ({ ...f, specificRoleFilter: opt.v, targetUserId: '', _roleFilterOpen: false }))}
-                              className={`px-4 py-2.5 text-[13px] font-bold cursor-pointer transition-colors ${form.specificRoleFilter === opt.v ? 'bg-[#00a76b]/10 text-[#00a76b]' : 'text-[#201515] hover:bg-slate-50'}`}
-                            >
-                              {opt.l}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Employee Name Select */}
+                  {isManager ? (
                     <div ref={empSelectRef} className="relative">
                       <div 
-                        onClick={() => setForm(f => ({ ...f, _empSelectOpen: !f._empSelectOpen, _targetRoleOpen: false, _roleFilterOpen: false }))}
+                        onClick={() => setForm(f => ({ ...f, _empSelectOpen: !f._empSelectOpen, _targetRoleOpen: false }))}
                         className={`w-full bg-white border ${form._empSelectOpen ? 'border-[#00a76b]' : 'border-[#eceae3]'} rounded-[12px] px-4 py-3 text-[13px] font-bold text-[#201515] cursor-pointer flex justify-between items-center transition-colors`}
                       >
                         <span className="truncate">
-                          {form.targetUserId ? employees.find(e => e.userId && e.userId._id === form.targetUserId)?.userId?.name || '-- Name --' : '-- Name --'}
+                          {form.targetUserId ? (teamMembers.find(m => (m._id || m.id) === form.targetUserId)?.name || '-- Select Team Member --') : '-- Select Team Member --'}
                         </span>
                         <ChevronDown size={14} className={`text-[#939084] shrink-0 ml-2 transition-transform ${form._empSelectOpen ? 'rotate-180' : ''}`} />
                       </div>
@@ -329,24 +386,109 @@ const Notifications = () => {
                             onClick={() => setForm(f => ({ ...f, targetUserId: '', _empSelectOpen: false }))}
                             className={`px-4 py-2.5 text-[13px] font-bold cursor-pointer transition-colors ${!form.targetUserId ? 'bg-[#00a76b]/10 text-[#00a76b]' : 'text-[#201515] hover:bg-slate-50'}`}
                           >
-                            -- Name --
+                            -- Select Team Member --
                           </div>
-                          {employees
-                            .filter(emp => emp.userId && (form.specificRoleFilter === 'all' || emp.userId.role === form.specificRoleFilter))
-                            .filter(emp => role === 'admin' || emp.userId.role !== 'admin')
-                            .map(emp => (
+                          {teamMembers.length === 0 ? (
+                            <div className="px-4 py-3 text-xs text-slate-400 font-medium text-center">
+                              No team members assigned to you
+                            </div>
+                          ) : (
+                            teamMembers.map(member => (
                               <div 
-                                key={emp.userId._id}
-                                onClick={() => setForm(f => ({ ...f, targetUserId: emp.userId._id, _empSelectOpen: false }))}
-                                className={`px-4 py-2.5 text-[13px] font-bold cursor-pointer transition-colors ${form.targetUserId === emp.userId._id ? 'bg-[#00a76b]/10 text-[#00a76b]' : 'text-[#201515] hover:bg-slate-50'}`}
+                                key={member._id || member.id}
+                                onClick={() => setForm(f => ({ ...f, targetUserId: member._id || member.id, _empSelectOpen: false }))}
+                                className={`px-4 py-2.5 text-[13px] font-bold cursor-pointer transition-colors flex items-center justify-between ${form.targetUserId === (member._id || member.id) ? 'bg-[#00a76b]/10 text-[#00a76b]' : 'text-[#201515] hover:bg-slate-50'}`}
                               >
-                                {emp.userId.name}
+                                <span className="truncate">{member.name}</span>
+                                {member.employeeId && (
+                                  <span className="text-[10px] font-semibold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded ml-2">
+                                    {member.employeeId}
+                                  </span>
+                                )}
                               </div>
-                          ))}
+                            ))
+                          )}
                         </div>
                       )}
                     </div>
-                  </div>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-3">
+                      {/* Role Filter */}
+                      <div ref={roleFilterRef} className="relative">
+                        <div 
+                          onClick={() => setForm(f => ({ ...f, _roleFilterOpen: !f._roleFilterOpen, _targetRoleOpen: false, _empSelectOpen: false }))}
+                          className={`w-full bg-white border ${form._roleFilterOpen ? 'border-[#00a76b]' : 'border-[#eceae3]'} rounded-[12px] px-4 py-3 text-[13px] font-bold text-[#201515] cursor-pointer flex justify-between items-center transition-colors`}
+                        >
+                          <span>
+                            {{
+                              'all': 'Any Role',
+                              'employee': 'Employees',
+                              'manager': 'Managers',
+                              'hr': 'HR',
+                              'admin': 'Admins'
+                            }[form.specificRoleFilter]}
+                          </span>
+                          <ChevronDown size={14} className={`text-[#939084] transition-transform ${form._roleFilterOpen ? 'rotate-180' : ''}`} />
+                        </div>
+                        
+                        {form._roleFilterOpen && (
+                          <div className="absolute top-full left-0 w-full mt-1 bg-white border border-[#eceae3] rounded-[12px] shadow-lg overflow-hidden z-20">
+                            {[
+                              {v: 'all', l: 'Any Role'},
+                              {v: 'employee', l: 'Employees'},
+                              {v: 'manager', l: 'Managers'},
+                              {v: 'hr', l: 'HR'},
+                              ...(role === 'admin' ? [{v: 'admin', l: 'Admins'}] : [])
+                            ].map(opt => (
+                              <div 
+                                key={opt.v}
+                                onClick={() => setForm(f => ({ ...f, specificRoleFilter: opt.v, targetUserId: '', _roleFilterOpen: false }))}
+                                className={`px-4 py-2.5 text-[13px] font-bold cursor-pointer transition-colors ${form.specificRoleFilter === opt.v ? 'bg-[#00a76b]/10 text-[#00a76b]' : 'text-[#201515] hover:bg-slate-50'}`}
+                              >
+                                {opt.l}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Employee Name Select */}
+                      <div ref={empSelectRef} className="relative">
+                        <div 
+                          onClick={() => setForm(f => ({ ...f, _empSelectOpen: !f._empSelectOpen, _targetRoleOpen: false, _roleFilterOpen: false }))}
+                          className={`w-full bg-white border ${form._empSelectOpen ? 'border-[#00a76b]' : 'border-[#eceae3]'} rounded-[12px] px-4 py-3 text-[13px] font-bold text-[#201515] cursor-pointer flex justify-between items-center transition-colors`}
+                        >
+                          <span className="truncate">
+                            {form.targetUserId ? employees.find(e => e.userId && e.userId._id === form.targetUserId)?.userId?.name || '-- Name --' : '-- Name --'}
+                          </span>
+                          <ChevronDown size={14} className={`text-[#939084] shrink-0 ml-2 transition-transform ${form._empSelectOpen ? 'rotate-180' : ''}`} />
+                        </div>
+                        
+                        {form._empSelectOpen && (
+                          <div className="absolute top-full left-0 w-full mt-1 bg-white border border-[#eceae3] rounded-[12px] shadow-lg overflow-hidden z-20 max-h-60 overflow-y-auto">
+                            <div 
+                              onClick={() => setForm(f => ({ ...f, targetUserId: '', _empSelectOpen: false }))}
+                              className={`px-4 py-2.5 text-[13px] font-bold cursor-pointer transition-colors ${!form.targetUserId ? 'bg-[#00a76b]/10 text-[#00a76b]' : 'text-[#201515] hover:bg-slate-50'}`}
+                            >
+                              -- Name --
+                            </div>
+                            {employees
+                              .filter(emp => emp.userId && (form.specificRoleFilter === 'all' || emp.userId.role === form.specificRoleFilter))
+                              .filter(emp => role === 'admin' || emp.userId.role !== 'admin')
+                              .map(emp => (
+                                <div 
+                                  key={emp.userId._id}
+                                  onClick={() => setForm(f => ({ ...f, targetUserId: emp.userId._id, _empSelectOpen: false }))}
+                                  className={`px-4 py-2.5 text-[13px] font-bold cursor-pointer transition-colors ${form.targetUserId === emp.userId._id ? 'bg-[#00a76b]/10 text-[#00a76b]' : 'text-[#201515] hover:bg-slate-50'}`}
+                                >
+                                  {emp.userId.name}
+                                </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -424,9 +566,13 @@ const Notifications = () => {
                 <Loader2 size={36} className="animate-spin text-[#00a76b]" />
               </div>
             ) : (() => {
-              // Apply manager specific filter
               const displayNotifications = role === 'manager' 
-                ? notifications.filter(n => n.senderId === currentUserId)
+                ? notifications.filter(n => {
+                    const sid = (n.senderId?._id || n.senderId || '').toString();
+                    const uid = (n.userId?._id || n.userId || '').toString();
+                    const cid = (currentUserId || '').toString();
+                    return sid === cid || uid === cid;
+                  })
                 : notifications;
 
               if (displayNotifications.length === 0) {
@@ -470,13 +616,18 @@ const Notifications = () => {
                             const senderRole = notif.senderRole || notif.senderId?.role || notif.sender?.role || '';
 
                             return (
-                              <tr key={notif._id} className="hover:bg-slate-50/80 dark:hover:bg-[#111c18] transition-colors group">
+                              <tr 
+                                key={notif._id} 
+                                onClick={() => handleNotificationClick(notif)}
+                                className="hover:bg-slate-50/80 dark:hover:bg-[#111c18] transition-colors group cursor-pointer"
+                                title="Click to view details or go to related section"
+                              >
                                 <td className="py-3.5 px-5 border-r border-[#e2eae7] dark:border-[#13221e]">
                                   <div className="flex items-center gap-3">
                                     <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${colorClass}`}>
                                       <Bell size={15} />
                                     </div>
-                                    <span className="text-[13px] font-medium text-slate-800 dark:text-white leading-snug">
+                                    <span className="text-[13px] font-medium text-slate-800 dark:text-white leading-snug group-hover:text-[#00a76b] transition-colors">
                                       {notif.message}
                                     </span>
                                   </div>
@@ -516,14 +667,14 @@ const Notifications = () => {
                                   {isCreator ? (
                                     <div className="flex items-center justify-end gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
                                       <button 
-                                        onClick={() => handleEdit(notif)}
+                                        onClick={(e) => { e.stopPropagation(); handleEdit(notif); }}
                                         className="p-1.5 text-slate-400 hover:text-[#00a76b] hover:bg-emerald-50 dark:hover:bg-emerald-950/30 rounded-lg transition-colors cursor-pointer"
                                         title="Edit"
                                       >
                                         <Edit2 size={14} />
                                       </button>
                                       <button 
-                                        onClick={() => handleDelete(notif._id)}
+                                        onClick={(e) => { e.stopPropagation(); handleDelete(notif._id); }}
                                         className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-lg transition-colors cursor-pointer"
                                         title="Delete"
                                       >
@@ -531,7 +682,10 @@ const Notifications = () => {
                                       </button>
                                     </div>
                                   ) : (
-                                    <span className="text-slate-400 dark:text-slate-600 text-[11px]">-</span>
+                                    <div className="flex items-center justify-end gap-1 text-slate-400 group-hover:text-[#00a76b] transition-colors">
+                                      <span className="text-[11px] font-bold opacity-0 group-hover:opacity-100 transition-opacity">Open</span>
+                                      <ExternalLink size={13} className="opacity-40 group-hover:opacity-100" />
+                                    </div>
                                   )}
                                 </td>
                               </tr>
@@ -601,6 +755,58 @@ const Notifications = () => {
         </div>
 
       </div>
+
+      {/* ── ANNOUNCEMENT / PERSONAL NOTIFICATION DETAIL MODAL ── */}
+      {selectedNotif && (
+        <div 
+          className="fixed inset-0 z-[150] flex items-center justify-center bg-black/50 backdrop-blur-xs p-4 animate-in fade-in duration-200"
+          onClick={() => setSelectedNotif(null)}
+        >
+          <div 
+            className="bg-white dark:bg-[#111c18] border border-[#eceae3] dark:border-[#1a2d29] rounded-[20px] shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-5 border-b border-[#eceae3] dark:border-[#1a2d29] flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${TYPE_COLORS[selectedNotif.type] || TYPE_COLORS.default}`}>
+                  <Bell size={18} />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-[#201515] dark:text-white capitalize">
+                    {selectedNotif.type || 'Announcement'}
+                  </h3>
+                  <p className="text-xs font-semibold text-slate-500 dark:text-[#829e92]">
+                    By {selectedNotif.senderName || selectedNotif.senderId?.name || 'HR / Management'} {selectedNotif.senderRole ? `(${selectedNotif.senderRole})` : ''}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedNotif(null)}
+                className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 hover:bg-slate-200 dark:bg-[#1a2d29] dark:hover:bg-[#223b35] text-slate-600 dark:text-slate-300 transition-colors cursor-pointer border-none"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="bg-slate-50 dark:bg-[#162722]/60 rounded-xl p-4 border border-[#e2eae7] dark:border-[#1a2d29] text-[14px] leading-relaxed text-slate-800 dark:text-slate-100 font-medium whitespace-pre-wrap">
+                {selectedNotif.message}
+              </div>
+              <div className="flex items-center justify-between text-xs text-slate-400 dark:text-[#829e92]">
+                <span>Target: <strong className="text-slate-700 dark:text-slate-200">{selectedNotif.targetLabel || 'All'}</strong></span>
+                <span>{new Date(selectedNotif.createdAt).toLocaleString()}</span>
+              </div>
+            </div>
+            <div className="p-4 border-t border-[#eceae3] dark:border-[#1a2d29] flex justify-end">
+              <button
+                onClick={() => setSelectedNotif(null)}
+                className="px-5 py-2.5 bg-[#00a76b] hover:bg-[#00915c] text-white rounded-[10px] font-bold text-xs transition-all cursor-pointer border-none shadow-sm"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

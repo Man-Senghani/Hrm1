@@ -456,7 +456,7 @@ const TimeTrackingDashboard = ({ user: propUser, socket }) => {
         {/* HEADER SECTION */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16, marginBottom: 28 }}>
           <div>
-            <h1 style={{ fontSize: '32px', fontWeight: 800, color: isDark ? '#fff' : '#2c302e', margin: 0, letterSpacing: '-0.75px' }}>Attendance</h1>
+            <h1 style={{ fontSize: '32px', fontWeight: 600, color: isDark ? '#fff' : '#2c302e', margin: 0, letterSpacing: '-0.75px' }}>Attendance</h1>
             <p style={{ fontSize: '15px', color: isDark ? '#a3b3af' : '#8c918f', margin: '4px 0 0', fontWeight: 500 }}>Track check-ins, hours and shifts.</p>
           </div>
           <div style={{ display: 'flex', gap: 12 }}>

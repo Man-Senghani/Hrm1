@@ -32,14 +32,27 @@ function handleDeepLink(urlStr) {
   try {
     const parsedUrl = new URL(urlStr);
     if (parsedUrl.protocol === 'fluidhr-tracker:') {
-      const token = parsedUrl.searchParams.get('token');
-      const server = parsedUrl.searchParams.get('server');
-      const action = parsedUrl.searchParams.get('action') || (parsedUrl.hostname === 'start' ? 'start' : parsedUrl.pathname.replace(/^\/+/, '')) || 'start';
+      let action = parsedUrl.searchParams.get('action');
+      if (!action) {
+        if (parsedUrl.hostname === 'stop' || parsedUrl.pathname.includes('stop')) {
+          action = 'stop';
+        } else if (parsedUrl.hostname === 'pause' || parsedUrl.pathname.includes('pause')) {
+          action = 'pause';
+        } else {
+          action = 'start';
+        }
+      }
       
       if (mainWindow) {
         if (mainWindow.isMinimized()) mainWindow.restore();
         mainWindow.show();
         mainWindow.focus();
+        mainWindow.setAlwaysOnTop(true);
+        setTimeout(() => {
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.setAlwaysOnTop(false);
+          }
+        }, 800);
 
         if (server) {
           mainWindow.webContents.send('deep-link-server', server);
@@ -92,6 +105,8 @@ function startLocalBridgeServer() {
           if (mainWindow.isMinimized()) mainWindow.restore();
           mainWindow.show();
           mainWindow.focus();
+          mainWindow.setAlwaysOnTop(true);
+          setTimeout(() => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.setAlwaysOnTop(false); }, 800);
           if (token) {
             mainWindow.webContents.send('deep-link-token', token);
           }
@@ -107,6 +122,8 @@ function startLocalBridgeServer() {
           if (mainWindow.isMinimized()) mainWindow.restore();
           mainWindow.show();
           mainWindow.focus();
+          mainWindow.setAlwaysOnTop(true);
+          setTimeout(() => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.setAlwaysOnTop(false); }, 800);
           mainWindow.webContents.send('deep-link-action', 'stop');
         }
         res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -188,7 +205,10 @@ if (!gotTheLock) {
   app.on('second-instance', (event, commandLine) => {
     if (mainWindow) {
       if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.show();
       mainWindow.focus();
+      mainWindow.setAlwaysOnTop(true);
+      setTimeout(() => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.setAlwaysOnTop(false); }, 800);
       
       const url = commandLine.find(arg => arg.startsWith('fluidhr-tracker://'));
       if (url) {

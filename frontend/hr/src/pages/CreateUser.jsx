@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import axios from 'axios';
 import {
   UserPlus,
@@ -25,6 +26,69 @@ import {
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
+import CustomDatePicker from '../components/CustomDatePicker';
+
+// ─── Premium Custom Dropdown ──────────────────────────────────────────────────
+const StyledSelect = ({ name, value, onChange, options, placeholder, required, error }) => {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  const selectedLabel = options.find(o => o.value === value)?.label || '';
+
+  useEffect(() => {
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const handleSelect = (val) => {
+    onChange({ target: { name, value: val } });
+    setOpen(false);
+  };
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen(p => !p)}
+        className={`w-full h-11 px-3.5 pr-9 flex items-center justify-between rounded-xl border text-xs font-bold transition-all cursor-pointer
+          bg-white dark:bg-[#1a1714]
+          ${open ? 'border-[#00a76b] ring-1 ring-[#00a76b]/30 shadow-[0_0_0_3px_rgba(0,167,107,0.08)]' : 'border-slate-200 dark:border-[#38352e] hover:border-[#00a76b]/50'}
+          ${value ? 'text-slate-900 dark:text-white' : 'text-slate-400 dark:text-slate-500'}
+          ${error ? 'border-red-400 ring-1 ring-red-300' : ''}`}
+      >
+        <span className="truncate">{selectedLabel || placeholder || 'Select…'}</span>
+        <ChevronDown
+          size={15}
+          className={`absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none transition-transform duration-200 ${open ? 'rotate-180 text-[#00a76b]' : ''}`}
+        />
+      </button>
+
+      {open && (
+        <div className="absolute z-[9999] left-0 right-0 mt-1.5 bg-white dark:bg-[#1e1b16] border border-slate-200 dark:border-[#38352e] rounded-xl shadow-xl overflow-hidden animate-in fade-in slide-in-from-top-1 duration-150">
+          <div className="max-h-52 overflow-y-auto py-1 scrollbar-thin scrollbar-thumb-slate-200 dark:scrollbar-thumb-[#38352e]">
+            {options.map(opt => (
+              <div
+                key={opt.value}
+                onClick={() => handleSelect(opt.value)}
+                className={`px-3.5 py-2.5 flex items-center gap-2.5 text-xs font-semibold cursor-pointer transition-all
+                  ${value === opt.value
+                    ? 'bg-[#00a76b]/10 text-[#00a76b] dark:bg-[#00a76b]/15'
+                    : 'text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-[#2a261f]'}`}
+              >
+                {value === opt.value && (
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#00a76b] flex-shrink-0" />
+                )}
+                {value !== opt.value && <span className="w-1.5 h-1.5 flex-shrink-0" />}
+                {opt.label}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+// ──────────────────────────────────────────────────────────────────────────────
 
 // Helper to format date strings as DD-MM-YYYY
 const formatDDMMYYYY = (dateStr) => {
@@ -62,19 +126,50 @@ const CreateUser = () => {
     phone: '',
     password: '',
     role: 'employee',
+    department: '',
     designation: '',
     gender: 'Male',
     address: '',
+    permanentAddress: '',
     dob: '',
     joinDate: new Date().toISOString().split('T')[0],
     reportingManager: ''
   });
   const [managers, setManagers] = useState([]);
+  const [departments, setDepartments] = useState([]);
+  const [systemRoles, setSystemRoles] = useState([]);
   const [nextId, setNextId] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState({ type: '', text: '', employeeId: '', status: '' });
   const [errors, setErrors] = useState({});
+
+  const defaultDepartments = [
+    'Engineering',
+    'Sales',
+    'Marketing',
+    'Finance',
+    'HR',
+    'Design',
+    'Operations'
+  ];
+
+  const departmentList = departments.length > 0
+    ? departments.map(d => typeof d === 'string' ? d : d.name).filter(Boolean)
+    : defaultDepartments;
+
+  const defaultRoles = [
+    { value: 'admin', label: '🛡️  System Admin' },
+    { value: 'hr', label: '🧑‍💼  HR Officer' },
+    { value: 'manager', label: '👔  Manager' },
+    { value: 'employee', label: '🧑‍💻  Employee' },
+  ];
+
+  const roleOptions = systemRoles.length > 0
+    ? systemRoles.map(r => ({
+        value: r.roleKey,
+        label: `${r.icon ? r.icon + '  ' : ''}${r.label}`
+      }))
+    : defaultRoles;
 
   // Image State
   const [selectedFile, setSelectedFile] = useState(null);
@@ -84,6 +179,28 @@ const CreateUser = () => {
   const [adharFile, setAdharFile] = useState(null);
   const [bankFile, setBankFile] = useState(null);
   const [panFile, setPanFile] = useState(null);
+  const [previewDoc, setPreviewDoc] = useState(null);
+  const [imgError, setImgError] = useState(false);
+
+  const handlePreviewDoc = (title, localFile) => {
+    setImgError(false);
+    if (localFile) {
+      const blobUrl = URL.createObjectURL(localFile);
+      setPreviewDoc({ title, url: blobUrl });
+    } else {
+      toast.error(`No ${title} document uploaded yet.`);
+    }
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && previewDoc) {
+        setPreviewDoc(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [previewDoc]);
 
   const token = sessionStorage.getItem('token');
 
@@ -106,9 +223,33 @@ const CreateUser = () => {
       } catch (err) { console.warn('Personnel Sync Delayed'); }
     };
 
+    const fetchDepartments = async () => {
+      try {
+        const res = await axios.get('/api/departments', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (Array.isArray(res.data) && res.data.length > 0) {
+          setDepartments(res.data);
+        }
+      } catch (err) { console.warn('Departments Sync Delayed'); }
+    };
+
+    const fetchSystemRoles = async () => {
+      try {
+        const res = await axios.get('/api/system-roles', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (Array.isArray(res.data) && res.data.length > 0) {
+          setSystemRoles(res.data);
+        }
+      } catch (err) { console.warn('System Roles Sync Delayed'); }
+    };
+
     if (token) {
       fetchNextId();
       fetchManagers();
+      fetchDepartments();
+      fetchSystemRoles();
     }
   }, [formData.role, token]);
 
@@ -217,6 +358,7 @@ const CreateUser = () => {
       }
     }
     if (!formData.role) newErrors.role = 'System Role is required.';
+    if (!formData.department) newErrors.department = 'Department is required.';
     if (!formData.gender) newErrors.gender = 'Gender is required.';
     if (!formData.joinDate) newErrors.joinDate = 'Join Date is required.';
 
@@ -238,7 +380,8 @@ const CreateUser = () => {
     if (!['hr', 'manager', 'admin'].includes(formData.role) && !formData.reportingManager) {
       newErrors.reportingManager = 'Reporting Manager is required.';
     }
-    if (!formData.address) newErrors.address = 'Physical Address is required.';
+    if (!formData.address) newErrors.address = 'Local Address is required.';
+    if (!formData.permanentAddress) newErrors.permanentAddress = 'Permanent Address is required.';
 
     if (Object.keys(newErrors).length > 0) {
       setErrors(prev => ({ ...prev, ...newErrors }));
@@ -255,10 +398,12 @@ const CreateUser = () => {
         personalEmail: formData.personalEmail,
         password: formData.password,
         role: formData.role,
-        designation: formData.designation,
+        department: formData.department,
+        designation: formData.designation || formData.department,
         phone: formData.phone,
         gender: formData.gender,
         address: formData.address,
+        permanentAddress: formData.permanentAddress,
         dob: formData.dob,
         joinDate: formData.joinDate,
         reportingManager: formData.role === 'employee' ? formData.reportingManager : null
@@ -316,13 +461,6 @@ const CreateUser = () => {
         } catch (err) { console.warn('PAN Card upload failed:', err); }
       }
 
-      setMessage({
-        type: 'success',
-        text: 'Employee profile created successfully.',
-        employeeId: user?.employeeId,
-        status: user?.status
-      });
-
       toast.success('Employee Created Successfully', {
         style: {
           background: '#00a76b',
@@ -344,6 +482,7 @@ const CreateUser = () => {
         personalEmail: '',
         password: '',
         role: formData.role,
+        department: '',
         designation: '',
         gender: 'Male',
         phone: '',
@@ -365,10 +504,7 @@ const CreateUser = () => {
       } else if (errMsg.toLowerCase().includes('email')) {
         setErrors(prev => ({ ...prev, email: errMsg }));
       } else {
-        setMessage({
-          type: 'error',
-          text: errMsg
-        });
+        toast.error(errMsg);
       }
     } finally {
       setLoading(false);
@@ -377,44 +513,12 @@ const CreateUser = () => {
 
   return (
     <div className="animate-fade-in w-full pb-20 space-y-6">
-      {/* TOAST NOTIFICATION */}
-      {message.text && (
-        <div className="fixed top-24 right-8 bg-white dark:bg-[#181612] border border-slate-200 dark:border-[#38352e] shadow-2xl p-5 rounded-2xl flex items-center gap-4 animate-fade-in z-[100] min-w-[360px]">
-          <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${message.type === 'success' ? 'bg-emerald-500 text-white' : 'bg-red-500 text-white'}`}>
-            {message.type === 'success' ? <CheckCircle size={22} /> : <AlertTriangle size={22} />}
-          </div>
-          <div className="flex-1 min-w-0">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-400 mb-0.5">{message.type === 'success' ? 'Success' : 'Error'}</h4>
-            <p className="text-sm font-bold text-slate-900 dark:text-white leading-tight">{message.text}</p>
-            {message.employeeId && (
-              <div className="flex items-center gap-2 mt-2">
-                <span className="px-2.5 py-0.5 bg-slate-100 dark:bg-[#25201b] text-slate-800 dark:text-slate-200 rounded-md text-[10px] font-extrabold uppercase tracking-wider flex items-center gap-1">
-                  <Fingerprint size={12} /> {message.employeeId}
-                </span>
-                <span className="px-2.5 py-0.5 bg-emerald-500 text-white rounded-md text-[10px] font-extrabold uppercase tracking-wider">
-                  {message.status || 'ACTIVE'}
-                </span>
-              </div>
-            )}
-          </div>
-          <button onClick={() => setMessage({ type: '', text: '', employeeId: '', status: '' })} className="text-slate-400 hover:text-slate-700 dark:hover:text-white cursor-pointer border-none bg-transparent">
-            <X size={18} />
-          </button>
-        </div>
-      )}
 
       {/* TOP HEADER */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-6 border-b border-slate-200/80 dark:border-[#38352e]">
         <div>
-          <div className="flex items-center gap-2 mb-1">
-            {nextId && (
-              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-[#00a76b] dark:text-emerald-400 uppercase tracking-wider flex items-center gap-1">
-                <Fingerprint size={12} className="text-[#00a76b]" /> Next Auto-ID: {nextId}
-              </span>
-            )}
-          </div>
-          <h1 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight">Create Employee</h1>
-          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 font-medium">Add a new team member with profile details, credentials, and verification documents.</p>
+          <h1 className="text-2xl sm:text-3xl font-semibold text-slate-900 dark:text-white tracking-tight">Create Employee</h1>
+          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 font-medium mt-1">Add a new team member with profile details, credentials, and verification documents.</p>
         </div>
         <button
           type="button"
@@ -461,8 +565,9 @@ const CreateUser = () => {
                   : 'New Employee'}
               </h3>
               <p className="text-xs font-semibold text-slate-400 dark:text-slate-400 capitalize mt-0.5">
-                {formData.designation || 'Staff Member'}
+                {formData.department || formData.designation || 'Staff Member'}
               </p>
+
 
               {/* Real-Time Live Data Summary */}
               <div className="w-full mt-5 pt-5 border-t border-slate-100 dark:border-[#28241e] space-y-3 text-left">
@@ -472,6 +577,20 @@ const CreateUser = () => {
                   <span className="font-semibold text-slate-500 dark:text-slate-400">System Role</span>
                   <span className="font-bold text-[#00a76b] uppercase bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-md text-[10px]">
                     {formData.role || 'employee'}
+                  </span>
+                </div>
+
+                <div className="flex justify-between items-center text-xs">
+                  <span className="font-semibold text-slate-500 dark:text-slate-400">Department</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-200 truncate max-w-[170px]">
+                    {formData.department || 'Not selected'}
+                  </span>
+                </div>
+
+                <div className="flex justify-between items-center text-xs">
+                  <span className="font-semibold text-slate-500 dark:text-slate-400">Designation</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-200 truncate max-w-[170px]">
+                    {formData.designation || 'Not specified'}
                   </span>
                 </div>
 
@@ -521,11 +640,19 @@ const CreateUser = () => {
                   </div>
                 )}
 
-                <div className="flex flex-col text-xs pt-1">
-                  <span className="font-semibold text-slate-500 dark:text-slate-400 mb-0.5">Address</span>
-                  <span className="font-medium text-slate-700 dark:text-slate-300 text-[11px] leading-relaxed break-words bg-slate-50 dark:bg-[#1f1b16] p-2 rounded-lg border border-slate-100 dark:border-[#2d2822]">
-                    {formData.address || 'No physical address entered yet.'}
-                  </span>
+                <div className="flex flex-col text-xs pt-1 space-y-2">
+                  <div>
+                    <span className="font-semibold text-slate-500 dark:text-slate-400 mb-0.5 block">1. Local Address</span>
+                    <span className="font-medium text-slate-700 dark:text-slate-300 text-[11px] leading-relaxed break-words bg-slate-50 dark:bg-[#1f1b16] p-2 rounded-lg border border-slate-100 dark:border-[#2d2822] block">
+                      {formData.address || 'No local address entered yet.'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="font-semibold text-slate-500 dark:text-slate-400 mb-0.5 block">2. Permanent Address</span>
+                    <span className="font-medium text-slate-700 dark:text-slate-300 text-[11px] leading-relaxed break-words bg-slate-50 dark:bg-[#1f1b16] p-2 rounded-lg border border-slate-100 dark:border-[#2d2822] block">
+                      {formData.permanentAddress || 'No permanent address entered yet.'}
+                    </span>
+                  </div>
                 </div>
               </div>
 
@@ -533,13 +660,37 @@ const CreateUser = () => {
               <div className="w-full mt-5 pt-5 border-t border-slate-100 dark:border-[#28241e]">
                 <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 dark:text-slate-400 mb-3 text-left">Document Vault Status</p>
                 <div className="grid grid-cols-3 gap-2">
-                  <div className={`p-2 rounded-xl border text-center text-[10px] font-bold ${adharFile ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400' : 'bg-slate-50 dark:bg-[#221e19] border-slate-200 dark:border-[#38352e] text-slate-400'}`}>
+                  <div
+                    onClick={() => handlePreviewDoc('Adharcard', adharFile)}
+                    className={`p-2 rounded-xl border text-center text-[10px] font-bold select-none transition-all ${
+                      adharFile
+                        ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400 cursor-pointer hover:scale-[1.04] hover:shadow-sm active:scale-95'
+                        : 'bg-slate-50 dark:bg-[#221e19] border-slate-200 dark:border-[#38352e] text-slate-400 opacity-60'
+                    }`}
+                    title={adharFile ? "Click to preview Adharcard" : "No Adharcard uploaded"}
+                  >
                     Adhar {adharFile ? '✓' : ''}
                   </div>
-                  <div className={`p-2 rounded-xl border text-center text-[10px] font-bold ${bankFile ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400' : 'bg-slate-50 dark:bg-[#221e19] border-slate-200 dark:border-[#38352e] text-slate-400'}`}>
+                  <div
+                    onClick={() => handlePreviewDoc('Bank Details', bankFile)}
+                    className={`p-2 rounded-xl border text-center text-[10px] font-bold select-none transition-all ${
+                      bankFile
+                        ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400 cursor-pointer hover:scale-[1.04] hover:shadow-sm active:scale-95'
+                        : 'bg-slate-50 dark:bg-[#221e19] border-slate-200 dark:border-[#38352e] text-slate-400 opacity-60'
+                    }`}
+                    title={bankFile ? "Click to preview Bank Details" : "No Bank Details uploaded"}
+                  >
                     Bank {bankFile ? '✓' : ''}
                   </div>
-                  <div className={`p-2 rounded-xl border text-center text-[10px] font-bold ${panFile ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400' : 'bg-slate-50 dark:bg-[#221e19] border-slate-200 dark:border-[#38352e] text-slate-400'}`}>
+                  <div
+                    onClick={() => handlePreviewDoc('PAN Card', panFile)}
+                    className={`p-2 rounded-xl border text-center text-[10px] font-bold select-none transition-all ${
+                      panFile
+                        ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400 cursor-pointer hover:scale-[1.04] hover:shadow-sm active:scale-95'
+                        : 'bg-slate-50 dark:bg-[#221e19] border-slate-200 dark:border-[#38352e] text-slate-400 opacity-60'
+                    }`}
+                    title={panFile ? "Click to preview PAN Card" : "No PAN Card uploaded"}
+                  >
                     PAN {panFile ? '✓' : ''}
                   </div>
                 </div>
@@ -554,7 +705,7 @@ const CreateUser = () => {
             <div className="bg-white dark:bg-[#181612] border border-slate-200/80 dark:border-[#38352e] rounded-2xl p-6 sm:p-7 shadow-xs space-y-6">
               <div className="flex items-center gap-2 border-b border-slate-100 dark:border-[#28241e] pb-4">
                 <User size={18} className="text-[#00a76b]" />
-                <h3 className="text-base font-bold text-slate-900 dark:text-white tracking-tight">Personal & Account Information</h3>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white tracking-tight">Personal Information</h3>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -563,6 +714,7 @@ const CreateUser = () => {
                   <label className="text-[11px] font-extrabold text-slate-600 dark:text-slate-300 uppercase tracking-wider">First Name <span className="text-red-500">*</span></label>
                   <input
                     required name="firstName" value={formData.firstName} onChange={handleChange}
+                    autoComplete="off"
                     className="w-full h-11 px-3.5 bg-white dark:bg-[#1a1714] border border-slate-200 dark:border-[#38352e] rounded-xl text-xs font-semibold text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-[#00a76b] focus:ring-1 focus:ring-[#00a76b] transition-all"
                     placeholder="First Name" maxLength="20"
                   />
@@ -574,6 +726,7 @@ const CreateUser = () => {
                   <label className="text-[11px] font-extrabold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Middle Name</label>
                   <input
                     name="middleName" value={formData.middleName} onChange={handleChange}
+                    autoComplete="off"
                     className="w-full h-11 px-3.5 bg-white dark:bg-[#1a1714] border border-slate-200 dark:border-[#38352e] rounded-xl text-xs font-semibold text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-[#00a76b] focus:ring-1 focus:ring-[#00a76b] transition-all"
                     placeholder="Middle Name (Optional)" maxLength="20"
                   />
@@ -585,6 +738,7 @@ const CreateUser = () => {
                   <label className="text-[11px] font-extrabold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Last Name <span className="text-red-500">*</span></label>
                   <input
                     required name="lastName" value={formData.lastName} onChange={handleChange}
+                    autoComplete="off"
                     className="w-full h-11 px-3.5 bg-white dark:bg-[#1a1714] border border-slate-200 dark:border-[#38352e] rounded-xl text-xs font-semibold text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-[#00a76b] focus:ring-1 focus:ring-[#00a76b] transition-all"
                     placeholder="Last Name" maxLength="20"
                   />
@@ -600,6 +754,7 @@ const CreateUser = () => {
                     <Mail size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
                     <input
                       required name="email" value={formData.email} onChange={handleChange}
+                      autoComplete="off"
                       className="w-full h-11 pl-10 pr-3.5 bg-white dark:bg-[#1a1714] border border-slate-200 dark:border-[#38352e] rounded-xl text-xs font-semibold text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-[#00a76b] focus:ring-1 focus:ring-[#00a76b] transition-all"
                       placeholder="email@organization.com"
                     />
@@ -614,6 +769,7 @@ const CreateUser = () => {
                     <Mail size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
                     <input
                       required name="personalEmail" value={formData.personalEmail} onChange={handleChange}
+                      autoComplete="off"
                       className="w-full h-11 pl-10 pr-3.5 bg-white dark:bg-[#1a1714] border border-slate-200 dark:border-[#38352e] rounded-xl text-xs font-semibold text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-[#00a76b] focus:ring-1 focus:ring-[#00a76b] transition-all"
                       placeholder="personal@gmail.com"
                     />
@@ -628,6 +784,7 @@ const CreateUser = () => {
                     <Phone size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
                     <input
                       required name="phone" value={formData.phone} onChange={handleChange}
+                      autoComplete="off"
                       className="w-full h-11 pl-10 pr-3.5 bg-white dark:bg-[#1a1714] border border-slate-200 dark:border-[#38352e] rounded-xl text-xs font-semibold text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-[#00a76b] focus:ring-1 focus:ring-[#00a76b] transition-all"
                       placeholder="10-digit phone number" maxLength="10"
                     />
@@ -643,6 +800,7 @@ const CreateUser = () => {
                     <input
                       required name="password" value={formData.password} onChange={handleChange} maxLength="20"
                       type={showPassword ? 'text' : 'password'}
+                      autoComplete="new-password"
                       className="w-full h-11 pl-10 pr-10 bg-white dark:bg-[#1a1714] border border-slate-200 dark:border-[#38352e] rounded-xl text-xs font-semibold text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-[#00a76b] focus:ring-1 focus:ring-[#00a76b] transition-all"
                       placeholder="••••••••"
                     />
@@ -669,52 +827,66 @@ const CreateUser = () => {
                 {/* Role */}
                 <div className="space-y-1.5">
                   <label className="text-[11px] font-extrabold text-slate-600 dark:text-slate-300 uppercase tracking-wider">System Role <span className="text-red-500">*</span></label>
-                  <div className="relative">
-                    <select
-                      required name="role" value={formData.role} onChange={handleChange}
-                      className="w-full h-11 px-3.5 pr-8 bg-white dark:bg-[#1a1714] border border-slate-200 dark:border-[#38352e] rounded-xl text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:border-[#00a76b] focus:ring-1 focus:ring-[#00a76b] appearance-none cursor-pointer"
-                    >
-                      <option value="hr">HR</option>
-                      <option value="manager">Manager</option>
-                      <option value="employee">Employee</option>
-                      <option value="admin">System Admin</option>
-                    </select>
-                    <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                  </div>
+                  <StyledSelect
+                    name="role"
+                    value={formData.role}
+                    onChange={handleChange}
+                    placeholder="Select Role"
+                    options={roleOptions}
+                  />
+                </div>
+
+                {/* Department */}
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-extrabold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Department <span className="text-red-500">*</span></label>
+                  <StyledSelect
+                    name="department"
+                    value={formData.department}
+                    onChange={handleChange}
+                    placeholder="Select Department"
+                    error={errors.department}
+                    options={departmentList.map(d => ({ value: d, label: d }))}
+                  />
+                  {errors.department && <p className="text-red-500 text-[10px] font-semibold">{errors.department}</p>}
                 </div>
 
                 {/* Designation */}
                 <div className="space-y-1.5">
                   <label className="text-[11px] font-extrabold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Designation</label>
                   <input
-                    name="designation" value={formData.designation} onChange={handleChange}
+                    type="text"
+                    name="designation"
+                    value={formData.designation}
+                    onChange={handleChange}
+                    placeholder="e.g. Software Engineer"
                     className="w-full h-11 px-3.5 bg-white dark:bg-[#1a1714] border border-slate-200 dark:border-[#38352e] rounded-xl text-xs font-semibold text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-[#00a76b] focus:ring-1 focus:ring-[#00a76b] transition-all"
-                    placeholder="e.g. Software Engineer" maxLength="50"
                   />
                 </div>
 
                 {/* Gender */}
                 <div className="space-y-1.5">
                   <label className="text-[11px] font-extrabold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Gender <span className="text-red-500">*</span></label>
-                  <div className="relative">
-                    <select
-                      required name="gender" value={formData.gender} onChange={handleChange}
-                      className="w-full h-11 px-3.5 pr-8 bg-white dark:bg-[#1a1714] border border-slate-200 dark:border-[#38352e] rounded-xl text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:border-[#00a76b] focus:ring-1 focus:ring-[#00a76b] appearance-none cursor-pointer"
-                    >
-                      <option value="Male">Male</option>
-                      <option value="Female">Female</option>
-                      <option value="Other">Other</option>
-                    </select>
-                    <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                  </div>
+                  <StyledSelect
+                    name="gender"
+                    value={formData.gender}
+                    onChange={handleChange}
+                    placeholder="Select Gender"
+                    options={[
+                      { value: 'Male', label: '♂  Male' },
+                      { value: 'Female', label: '♀  Female' },
+                      { value: 'Other', label: '⚧  Other' },
+                    ]}
+                  />
                 </div>
 
                 {/* Join Date */}
                 <div className="space-y-1.5">
                   <label className="text-[11px] font-extrabold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Join Date <span className="text-red-500">*</span></label>
-                  <input
-                    required type="date" name="joinDate" value={formData.joinDate} onChange={handleChange}
-                    className="w-full h-11 px-3.5 bg-white dark:bg-[#1a1714] border border-slate-200 dark:border-[#38352e] rounded-xl text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-[#00a76b] focus:ring-1 focus:ring-[#00a76b]"
+                  <CustomDatePicker
+                    name="joinDate"
+                    value={formData.joinDate}
+                    onChange={handleChange}
+                    placeholder="Select Join Date"
                   />
                   {errors.joinDate && <p className="text-red-500 text-[10px] font-semibold">{errors.joinDate}</p>}
                 </div>
@@ -724,6 +896,7 @@ const CreateUser = () => {
                   <label className="text-[11px] font-extrabold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Date of Birth <span className="text-red-500">*</span></label>
                   <input
                     required type="date" name="dob" value={formData.dob} onChange={handleChange} max={maxDobDate}
+                    autoComplete="off"
                     className="w-full h-11 px-3.5 bg-white dark:bg-[#1a1714] border border-slate-200 dark:border-[#38352e] rounded-xl text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-[#00a76b] focus:ring-1 focus:ring-[#00a76b]"
                   />
                   {errors.dob && <p className="text-red-500 text-[10px] font-semibold">{errors.dob}</p>}
@@ -733,39 +906,51 @@ const CreateUser = () => {
                 {!['hr', 'manager', 'admin'].includes(formData.role) && (
                   <div className="space-y-1.5">
                     <label className="text-[11px] font-extrabold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Reporting Manager <span className="text-red-500">*</span></label>
-                    <div className="relative">
-                      <select
-                        required name="reportingManager" value={formData.reportingManager} onChange={handleChange}
-                        className="w-full h-11 px-3.5 pr-8 bg-white dark:bg-[#1a1714] border border-slate-200 dark:border-[#38352e] rounded-xl text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:border-[#00a76b] focus:ring-1 focus:ring-[#00a76b] appearance-none cursor-pointer"
-                      >
-                        <option value="">Select Manager</option>
-                        {managers
+                    <StyledSelect
+                      name="reportingManager"
+                      value={formData.reportingManager}
+                      onChange={handleChange}
+                      placeholder="Select Manager"
+                      error={errors.reportingManager}
+                      options={[
+                        ...managers
                           .filter(m => ['manager', 'admin'].includes(m.role?.toLowerCase()))
-                          .map(m => (
-                            <option key={m._id} value={m._id}>{m.name || m.fullName} ({m.role?.toUpperCase()})</option>
-                          ))}
-                      </select>
-                      <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                    </div>
+                          .map(m => ({ value: m._id, label: `${m.name || m.fullName} (${m.role?.toUpperCase()})` }))
+                      ]}
+                    />
                   </div>
                 )}
               </div>
 
-              {/* Physical Address */}
-              <div className="space-y-1.5 pt-2">
-                <label className="text-[11px] font-extrabold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Physical Address <span className="text-red-500">*</span></label>
-                <div className="relative">
-                  <MapPin size={16} className="absolute left-3.5 top-3.5 text-slate-400" />
-                  <textarea
-                    name="address" value={formData.address} onChange={handleChange}
-                    className="w-full h-24 pl-10 pr-3.5 pt-3 bg-white dark:bg-[#1a1714] border border-slate-200 dark:border-[#38352e] rounded-xl text-xs font-semibold text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-[#00a76b] focus:ring-1 focus:ring-[#00a76b] resize-none"
-                    placeholder="Full residential address..."
-                  />
-                  <div className="absolute bottom-2.5 right-3 text-[10px] font-bold text-slate-400">
-                    {formData.address?.length || 0}/250
+              {/* Residential Addresses */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+                {/* 1. Local Address */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[11px] font-extrabold text-slate-600 dark:text-slate-300 uppercase tracking-wider">1. Local Address <span className="text-red-500">*</span></label>
+                    <span className="text-[10px] font-bold text-slate-400 font-mono">{(formData.address || '').length}/250</span>
                   </div>
+                  <textarea
+                    required name="address" value={formData.address} onChange={handleChange} maxLength="250" rows="3"
+                    className="w-full p-3 bg-white dark:bg-[#1a1714] border border-slate-200 dark:border-[#38352e] rounded-xl text-xs font-semibold text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-[#00a76b] focus:ring-1 focus:ring-[#00a76b] transition-all resize-none"
+                    placeholder="Current local residential address..."
+                  />
+                  {errors.address && <p className="text-red-500 text-[10px] font-semibold">{errors.address}</p>}
                 </div>
-                {errors.address && <p className="text-red-500 text-[10px] font-semibold">{errors.address}</p>}
+
+                {/* 2. Permanent Address */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[11px] font-extrabold text-slate-600 dark:text-slate-300 uppercase tracking-wider">2. Permanent Address <span className="text-red-500">*</span></label>
+                    <span className="text-[10px] font-bold text-slate-400 font-mono">{(formData.permanentAddress || '').length}/250</span>
+                  </div>
+                  <textarea
+                    required name="permanentAddress" value={formData.permanentAddress} onChange={handleChange} maxLength="250" rows="3"
+                    className="w-full p-3 bg-white dark:bg-[#1a1714] border border-slate-200 dark:border-[#38352e] rounded-xl text-xs font-semibold text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-[#00a76b] focus:ring-1 focus:ring-[#00a76b] transition-all resize-none"
+                    placeholder="Permanent home address..."
+                  />
+                  {errors.permanentAddress && <p className="text-red-500 text-[10px] font-semibold">{errors.permanentAddress}</p>}
+                </div>
               </div>
             </div>
 
@@ -782,53 +967,101 @@ const CreateUser = () => {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 {/* Adharcard */}
                 <div className={`p-4 rounded-xl border border-dashed transition-all flex flex-col justify-between ${adharFile ? 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-400' : 'bg-slate-50/50 dark:bg-[#1a1714] border-slate-200 dark:border-[#38352e]'}`}>
-                  <div className="flex items-center gap-3 mb-3">
-                    <div className="w-9 h-9 rounded-lg bg-white dark:bg-[#25201b] border border-slate-200 dark:border-[#38352e] flex items-center justify-center text-slate-500 shrink-0">
+                  <div 
+                    onClick={() => adharFile && handlePreviewDoc('Adharcard', adharFile)}
+                    className={`flex items-center gap-3 mb-3 ${adharFile ? 'cursor-pointer group' : ''}`}
+                    title={adharFile ? "Click to preview Adharcard" : ""}
+                  >
+                    <div className="w-9 h-9 rounded-lg bg-white dark:bg-[#25201b] border border-slate-200 dark:border-[#38352e] flex items-center justify-center text-slate-500 group-hover:text-[#00a76b] group-hover:border-[#00a76b] shrink-0 transition-colors">
                       <FileText size={18} />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">Adharcard</p>
-                      <p className="text-[10px] text-slate-400 font-semibold">{adharFile ? 'Attached' : 'Required'}</p>
+                      <p className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate group-hover:text-[#00a76b] transition-colors">Adharcard</p>
+                      <p className="text-[10px] text-slate-400 font-semibold">{adharFile ? 'Attached' : ''}</p>
                     </div>
                   </div>
-                  <label className="h-9 text-xs bg-slate-900 hover:bg-[#00a76b] dark:bg-[#25201b] dark:hover:bg-[#00a76b] text-white font-bold rounded-lg cursor-pointer flex items-center justify-center transition-colors w-full">
-                    {adharFile ? 'Change File' : 'Upload File'}
-                    <input type="file" className="hidden" accept=".jpg,.jpeg,.png,image/jpeg,image/png" onChange={(e) => handleDocumentChange(e, setAdharFile, 'Adharcard')} />
-                  </label>
+                  <div className="flex items-center gap-2">
+                    {adharFile && (
+                      <button
+                        type="button"
+                        onClick={() => handlePreviewDoc('Adharcard', adharFile)}
+                        className="h-9 px-3 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg transition-colors flex items-center justify-center gap-1 shrink-0 cursor-pointer shadow-xs"
+                        title="View Document"
+                      >
+                        <Eye size={14} /> View
+                      </button>
+                    )}
+                    <label className="h-9 text-xs bg-slate-900 hover:bg-[#00a76b] dark:bg-[#25201b] dark:hover:bg-[#00a76b] text-white font-bold rounded-lg cursor-pointer flex items-center justify-center transition-colors w-full">
+                      {adharFile ? 'Change File' : 'Upload File'}
+                      <input type="file" className="hidden" accept=".jpg,.jpeg,.png,image/jpeg,image/png" onChange={(e) => handleDocumentChange(e, setAdharFile, 'Adharcard')} />
+                    </label>
+                  </div>
                 </div>
 
                 {/* Bank Details */}
                 <div className={`p-4 rounded-xl border border-dashed transition-all flex flex-col justify-between ${bankFile ? 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-400' : 'bg-slate-50/50 dark:bg-[#1a1714] border-slate-200 dark:border-[#38352e]'}`}>
-                  <div className="flex items-center gap-3 mb-3">
-                    <div className="w-9 h-9 rounded-lg bg-white dark:bg-[#25201b] border border-slate-200 dark:border-[#38352e] flex items-center justify-center text-slate-500 shrink-0">
+                  <div 
+                    onClick={() => bankFile && handlePreviewDoc('Bank Details', bankFile)}
+                    className={`flex items-center gap-3 mb-3 ${bankFile ? 'cursor-pointer group' : ''}`}
+                    title={bankFile ? "Click to preview Bank Details" : ""}
+                  >
+                    <div className="w-9 h-9 rounded-lg bg-white dark:bg-[#25201b] border border-slate-200 dark:border-[#38352e] flex items-center justify-center text-slate-500 group-hover:text-[#00a76b] group-hover:border-[#00a76b] shrink-0 transition-colors">
                       <FileText size={18} />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">Bank Details</p>
-                      <p className="text-[10px] text-slate-400 font-semibold">{bankFile ? 'Attached' : 'Required'}</p>
+                      <p className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate group-hover:text-[#00a76b] transition-colors">Bank Details</p>
+                      <p className="text-[10px] text-slate-400 font-semibold">{bankFile ? 'Attached' : ''}</p>
                     </div>
                   </div>
-                  <label className="h-9 text-xs bg-slate-900 hover:bg-[#00a76b] dark:bg-[#25201b] dark:hover:bg-[#00a76b] text-white font-bold rounded-lg cursor-pointer flex items-center justify-center transition-colors w-full">
-                    {bankFile ? 'Change File' : 'Upload File'}
-                    <input type="file" className="hidden" accept=".jpg,.jpeg,.png,image/jpeg,image/png" onChange={(e) => handleDocumentChange(e, setBankFile, 'Bank Details')} />
-                  </label>
+                  <div className="flex items-center gap-2">
+                    {bankFile && (
+                      <button
+                        type="button"
+                        onClick={() => handlePreviewDoc('Bank Details', bankFile)}
+                        className="h-9 px-3 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg transition-colors flex items-center justify-center gap-1 shrink-0 cursor-pointer shadow-xs"
+                        title="View Document"
+                      >
+                        <Eye size={14} /> View
+                      </button>
+                    )}
+                    <label className="h-9 text-xs bg-slate-900 hover:bg-[#00a76b] dark:bg-[#25201b] dark:hover:bg-[#00a76b] text-white font-bold rounded-lg cursor-pointer flex items-center justify-center transition-colors w-full">
+                      {bankFile ? 'Change File' : 'Upload File'}
+                      <input type="file" className="hidden" accept=".jpg,.jpeg,.png,image/jpeg,image/png" onChange={(e) => handleDocumentChange(e, setBankFile, 'Bank Details')} />
+                    </label>
+                  </div>
                 </div>
 
                 {/* PAN Card */}
                 <div className={`p-4 rounded-xl border border-dashed transition-all flex flex-col justify-between ${panFile ? 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-400' : 'bg-slate-50/50 dark:bg-[#1a1714] border-slate-200 dark:border-[#38352e]'}`}>
-                  <div className="flex items-center gap-3 mb-3">
-                    <div className="w-9 h-9 rounded-lg bg-white dark:bg-[#25201b] border border-slate-200 dark:border-[#38352e] flex items-center justify-center text-slate-500 shrink-0">
+                  <div 
+                    onClick={() => panFile && handlePreviewDoc('PAN Card', panFile)}
+                    className={`flex items-center gap-3 mb-3 ${panFile ? 'cursor-pointer group' : ''}`}
+                    title={panFile ? "Click to preview PAN Card" : ""}
+                  >
+                    <div className="w-9 h-9 rounded-lg bg-white dark:bg-[#25201b] border border-slate-200 dark:border-[#38352e] flex items-center justify-center text-slate-500 group-hover:text-[#00a76b] group-hover:border-[#00a76b] shrink-0 transition-colors">
                       <FileText size={18} />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">PAN Card</p>
-                      <p className="text-[10px] text-slate-400 font-semibold">{panFile ? 'Attached' : 'Required'}</p>
+                      <p className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate group-hover:text-[#00a76b] transition-colors">PAN Card</p>
+                      <p className="text-[10px] text-slate-400 font-semibold">{panFile ? 'Attached' : ''}</p>
                     </div>
                   </div>
-                  <label className="h-9 text-xs bg-slate-900 hover:bg-[#00a76b] dark:bg-[#25201b] dark:hover:bg-[#00a76b] text-white font-bold rounded-lg cursor-pointer flex items-center justify-center transition-colors w-full">
-                    {panFile ? 'Change File' : 'Upload File'}
-                    <input type="file" className="hidden" accept=".jpg,.jpeg,.png,image/jpeg,image/png" onChange={(e) => handleDocumentChange(e, setPanFile, 'PAN Card')} />
-                  </label>
+                  <div className="flex items-center gap-2">
+                    {panFile && (
+                      <button
+                        type="button"
+                        onClick={() => handlePreviewDoc('PAN Card', panFile)}
+                        className="h-9 px-3 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg transition-colors flex items-center justify-center gap-1 shrink-0 cursor-pointer shadow-xs"
+                        title="View Document"
+                      >
+                        <Eye size={14} /> View
+                      </button>
+                    )}
+                    <label className="h-9 text-xs bg-slate-900 hover:bg-[#00a76b] dark:bg-[#25201b] dark:hover:bg-[#00a76b] text-white font-bold rounded-lg cursor-pointer flex items-center justify-center transition-colors w-full">
+                      {panFile ? 'Change File' : 'Upload File'}
+                      <input type="file" className="hidden" accept=".jpg,.jpeg,.png,image/jpeg,image/png" onChange={(e) => handleDocumentChange(e, setPanFile, 'PAN Card')} />
+                    </label>
+                  </div>
                 </div>
               </div>
             </div>
@@ -859,6 +1092,94 @@ const CreateUser = () => {
           </div>
         </div>
       </form>
+
+      {/* DOCUMENT PREVIEW LIGHTBOX MODAL */}
+      {previewDoc && createPortal(
+        <div
+          className="fixed inset-0 w-screen h-screen z-[999999] flex items-center justify-center p-4 sm:p-8 bg-black/80 backdrop-blur-md animate-in fade-in duration-200 cursor-pointer"
+          onClick={() => setPreviewDoc(null)}
+        >
+          {/* Outer Close Button */}
+          <button
+            type="button"
+            onClick={() => setPreviewDoc(null)}
+            className="fixed top-4 right-4 sm:top-6 sm:right-8 w-11 h-11 bg-white/10 hover:bg-white/20 text-white rounded-full flex items-center justify-center transition-all z-[1000000] cursor-pointer backdrop-blur-md border border-white/20 shadow-lg"
+            title="Close Preview (Esc)"
+          >
+            <X size={24} />
+          </button>
+
+          {/* Modal Content Box */}
+          <div
+            className="relative w-full max-w-4xl h-[80vh] max-h-[640px] min-h-[480px] flex flex-col bg-slate-900/95 dark:bg-[#181612]/95 border border-slate-700/80 dark:border-[#38352e] rounded-3xl p-5 sm:p-6 shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 cursor-default"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="w-full flex items-center justify-between pb-3 mb-3 border-b border-slate-700/60 dark:border-[#38352e]">
+              <h4 className="text-sm font-black text-white uppercase tracking-wider flex items-center gap-2">
+                <FileText size={16} className="text-[#00a76b]" /> {previewDoc.title}
+              </h4>
+              <div className="flex items-center gap-2">
+                <a
+                  href={previewDoc.url}
+                  download={previewDoc.title}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="p-1.5 px-3 rounded-lg bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white transition-colors flex items-center gap-1.5 text-xs font-semibold"
+                  title="Download / Open in new tab"
+                >
+                  <Download size={14} />
+                  <span className="hidden sm:inline">Download</span>
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setPreviewDoc(null)}
+                  className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white transition-colors cursor-pointer"
+                  title="Close"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+
+            <div className="flex-1 w-full flex items-center justify-center overflow-auto p-4 bg-black/40 rounded-2xl">
+              {(previewDoc.url.toLowerCase().endsWith('.pdf') || previewDoc.url.startsWith('data:application/pdf')) ? (
+                <iframe
+                  src={previewDoc.url}
+                  title={previewDoc.title}
+                  className="w-full h-full rounded-xl border border-slate-700"
+                />
+              ) : !imgError ? (
+                <img
+                  src={previewDoc.url}
+                  alt={previewDoc.title}
+                  onError={() => setImgError(true)}
+                  className="max-h-full max-w-full object-contain rounded-xl shadow-lg"
+                />
+              ) : (
+                <div className="flex flex-col items-center justify-center p-8 text-center">
+                  <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-slate-400 mb-4">
+                    <FileText size={32} className="text-amber-500" />
+                  </div>
+                  <h5 className="text-sm font-bold text-white mb-1.5">{previewDoc.title}</h5>
+                  <p className="text-xs text-slate-400 max-w-md mb-5 leading-relaxed">
+                    Preview could not be displayed directly. You can open or download the document below.
+                  </p>
+                  <a
+                    href={previewDoc.url}
+                    download={previewDoc.title}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="px-5 py-2.5 bg-[#00a76b] hover:bg-[#00915c] text-white font-bold text-xs rounded-xl transition-all flex items-center gap-2 shadow-md cursor-pointer"
+                  >
+                    <Download size={15} /> Open / Download File
+                  </a>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 };

@@ -126,6 +126,55 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
     if (!targetPath) return;
     navigate(targetPath, typeof options === 'object' && options !== null ? options : { state: options });
   };
+
+  // Helper to determine target navigation path based on notification type and message content
+  const getNotificationPath = (notif, targetRole) => {
+    const currentRole = targetRole || activeRole || 'employee';
+    const type = (notif?.type || '').toLowerCase();
+    const text = (notif?.message || notif?.text || '').toLowerCase();
+
+    // 1. Leave requests / approvals / status
+    if (
+      type.includes('leave') ||
+      text.includes('leave') ||
+      text.includes('vacation') ||
+      text.includes('time off')
+    ) {
+      return `/${currentRole}/leave`;
+    }
+
+    // 2. Timer / attendance / tracking / check-in / check-out
+    if (
+      type.includes('attendance') ||
+      type.includes('timer') ||
+      text.includes('attendance') ||
+      text.includes('timer') ||
+      text.includes('time track') ||
+      text.includes('tracker') ||
+      text.includes('check-in') ||
+      text.includes('checked in') ||
+      text.includes('check in') ||
+      text.includes('check-out') ||
+      text.includes('checked out') ||
+      text.includes('check out') ||
+      text.includes('clock in') ||
+      text.includes('clock out') ||
+      text.includes('overtime') ||
+      text.includes('late mark') ||
+      text.includes('half day')
+    ) {
+      return `/${currentRole}/attendance`;
+    }
+
+    // 3. Tasks
+    if (type.includes('task') || text.includes('task') || text.includes('assigned to you')) {
+      return `/${currentRole}/tasks`;
+    }
+
+    // 4. Announcements and personal notifications -> notifications page
+    return `/${currentRole}/notifications`;
+  };
+
   const [unreadChats, setUnreadChats] = useState([]);
   const [isChatPopupOpen, setIsChatPopupOpen] = useState(false);
   const chatRef = useRef(null);
@@ -148,9 +197,10 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
             id: n._id,
             type: n.type || 'task',
             text: n.message,
+            message: n.message,
             read: n.read || false,
             time: n.createdAt ? new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Recently',
-            path: `/${activeRole}/notifications`
+            path: getNotificationPath(n, activeRole)
           }));
         setLiveNotifications(alerts.slice(0, 50));
       } catch (err) { console.error('Notification fetch failed:', err); }
@@ -212,10 +262,11 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
         id: notif._id,
         type: notif.type || 'announcement',
         text: notif.message,
+        message: notif.message,
         read: false,
         batchId: notif.batchId,
         time: new Date(notif.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        path: `/${activeRole}/notifications`
+        path: getNotificationPath(notif, activeRole)
       };
       setLiveNotifications(prev => [formatted, ...prev].slice(0, 50));
 
@@ -477,7 +528,10 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
     icon: item.icon || LayoutDashboard
   })) : getMenuItemsByRole(activeRole);
 
-  const menuItems = rawMenuItems.filter(item => !(item.name || '').toLowerCase().includes('notification'));
+  const menuItems = rawMenuItems.filter(item => {
+    const n = (item.name || '').toLowerCase();
+    return !n.includes('notification') && !n.includes('announcement');
+  });
 
   const getCategorizedMenuItems = (role) => {
     const categorized = {
@@ -533,9 +587,16 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
   };
 
   const toggleSidebar = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsSidebarOpen(!isSidebarOpen);
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    if (isSidebarOpen) {
+      setIsSidebarOpen(false);
+      setIsSidebarHovered(false);
+    } else {
+      setIsSidebarOpen(true);
+    }
   };
 
   const [isTrackingActive, setIsTrackingActive] = useState(false);
@@ -685,8 +746,8 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
     <div className="flex flex-col min-h-screen bg-[#f8fafc] dark:bg-[#08100e] text-[#201515] dark:text-[#e2e8f0] transition-colors duration-300 ease-in-out overflow-x-clip w-full">
       {/* 1. FULL WIDTH TOP BAR (Fixed at top) */}
       <header
-        className="fixed top-0 left-0 w-full z-[200] border-b bg-white dark:bg-[#08100e] flex items-center transition-colors duration-300 ease-in-out"
-        style={{ height: '70px', borderColor: isDarkMode ? '#1a2d29' : '#e2eae7' }}
+        className="fixed top-0 left-0 w-full z-[200] border-b backdrop-blur-xl flex items-center transition-colors duration-300 ease-in-out"
+        style={{ height: '70px', borderColor: isDarkMode ? '#1a2d29' : '#e2eae7', backgroundColor: isDarkMode ? 'rgba(8,16,14,0.82)' : 'rgba(255,255,255,0.82)' }}
       >
         {/* Brand Block / Logo (Always visible in top bar) */}
         <Link
@@ -708,11 +769,11 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
 
         {/* Top Bar Controls */}
         <div className="flex-1 flex items-center h-full px-3 md:px-6 gap-4">
-          {/* Left Controls (Menu Toggle) */}
-          <div className="flex items-center">
+          {/* Mobile Menu Toggle */}
+          <div className="flex items-center md:hidden">
             <button
               onClick={toggleSidebar}
-              className="md:hidden flex items-center justify-center w-10 h-10 hover:bg-slate-100 dark:hover:bg-slate-800/80 rounded-full text-[#374151] dark:text-[#cbd5e1] transition-all cursor-pointer border-none bg-transparent shrink-0"
+              className="flex items-center justify-center w-10 h-10 hover:bg-slate-100 dark:hover:bg-slate-800/80 rounded-full text-[#374151] dark:text-[#cbd5e1] transition-all cursor-pointer border-none bg-transparent shrink-0"
               title={isSidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
             >
               <Menu size={20} />
@@ -812,7 +873,7 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
               {isNotificationsOpen && (
                 <div className="absolute top-[48px] right-0 w-80 bg-white dark:bg-[#111c18] border border-[#c5c0b1] dark:border-[#1a2d29] rounded-xl shadow-[0_20px_50px_rgba(0,0,0,0.1)] dark:shadow-[0_20px_50px_rgba(0,0,0,0.3)] overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200 z-[100]">
                   <div className="p-4 border-b border-[#eceae3] dark:border-[#1a2d29] bg-[#fffdf9] dark:bg-[#162722] flex justify-between items-center">
-                    <span className="text-[11px] font-black uppercase tracking-widest text-[#201515] dark:text-white">Intelligence Alerts</span>
+                    <span className="text-[11px] font-black uppercase tracking-widest text-[#201515] dark:text-white">Announcement</span>
                     {liveNotifications.filter(n => !n.read).length > 0 && (
                       <span className="px-2 py-0.5 bg-[#00a76b]/10 text-[#00a76b] text-[8px] font-black rounded-full uppercase">
                         {liveNotifications.filter(n => !n.read).length} New
@@ -822,7 +883,7 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
                   <div className="max-h-[320px] overflow-y-auto">
                     {liveNotifications.length === 0 ? (
                       <div className="p-8 text-center opacity-40">
-                        <p className="text-[10px] font-black uppercase tracking-widest text-[#939084] dark:text-[#a3b3af]">No Active Alerts</p>
+                        <p className="text-[10px] font-black uppercase tracking-widest text-[#939084] dark:text-[#a3b3af]">No Active Announcements</p>
                       </div>
                     ) : (
                       liveNotifications.map((n, i) => (
@@ -837,7 +898,8 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
                                 console.error('Failed to mark notification as read:', err);
                               }
                             }
-                            navigate(n.path);
+                            const targetPath = n.path || getNotificationPath(n, activeRole);
+                            handleNav(targetPath, { state: { highlightedNotificationId: n.id, notification: n } });
                             setIsNotificationsOpen(false);
                           }}
                           className="p-4 border-b border-[#eceae3] dark:border-[#1a2d29] hover:bg-[#fffdf9] dark:hover:bg-[#162722]/50 transition-all cursor-pointer group"
@@ -995,19 +1057,6 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
           />
         )}
 
-        {/* Floating Expand/Collapse Arrow Button (Desktop only) */}
-        <button
-          onClick={toggleSidebar}
-          className="hidden md:flex fixed top-[90px] z-[160] items-center justify-center w-7 h-7 bg-[#00a76b] text-white hover:bg-[#00915c] rounded-full shadow-md border border-[#00a76b] cursor-pointer transition-all duration-300 hover:scale-105 active:scale-95"
-          style={{
-            left: showExpandedSidebar ? '236px' : '58px',
-            transition: 'left 0.3s ease-in-out'
-          }}
-          title={isSidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
-        >
-          {isSidebarOpen ? <ChevronLeft size={16} strokeWidth={2.8} /> : <ChevronRight size={16} strokeWidth={2.8} />}
-        </button>
-
         {/* SIDEBAR PLACEHOLDER (desktop spacing) */}
         <div
           className="hidden md:block shrink-0 transition-all duration-300 ease-in-out"
@@ -1017,14 +1066,14 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
         {/* LEFT SIDEBAR */}
         <aside
           onMouseEnter={() => { if (!isSidebarOpen) setIsSidebarHovered(true); }}
-          onMouseLeave={() => setIsSidebarHovered(false)}
-          className={`flex flex-col shrink-0 border-r transition-all duration-300 ease-in-out z-[150] fixed top-[70px] ${showExpandedSidebar
-            ? 'left-0 w-[250px] translate-x-0 shadow-[10px_0_30px_rgba(0,0,0,0.15)]'
+          onMouseLeave={() => { if (!isSidebarOpen) setIsSidebarHovered(false); }}
+          className={`group/sidebar flex flex-col shrink-0 border-r backdrop-blur-xl transition-all duration-300 ease-in-out z-[150] fixed top-[70px] ${showExpandedSidebar
+            ? 'left-0 w-[250px] translate-x-0'
             : '-left-[250px] md:left-0 md:translate-x-0 md:w-[72px]'
-            }`}
+            } ${!isSidebarOpen && isSidebarHovered ? 'shadow-[10px_0_30px_rgba(0,0,0,0.18)]' : ''}`}
           style={{
             height: 'calc(100vh - 70px)',
-            backgroundColor: isDarkMode ? '#08100e' : '#ffffff',
+            backgroundColor: isDarkMode ? 'rgba(8,16,14,0.82)' : 'rgba(255,255,255,0.82)',
             borderColor: isDarkMode ? '#1a2d29' : '#e2eae7'
           }}
         >
@@ -1032,11 +1081,27 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
           <div className="flex-1 flex flex-col pb-6 w-full pt-3 px-3 space-y-3.5 overflow-y-auto scrollbar-hide">
             {(() => {
               const categorized = getCategorizedMenuItems(activeRole);
-              return Object.entries(categorized).map(([category, items]) => (
+              return Object.entries(categorized).map(([category, items], catIndex) => (
                 <div key={category} className="space-y-0.5">
-                  <p className={`px-3 text-[10px] font-bold text-[#829e92] dark:text-[#527068] uppercase tracking-[0.15em] mb-1.5 mt-0.5 transition-opacity duration-200 ${showExpandedSidebar ? 'opacity-100' : 'opacity-0 select-none pointer-events-none'}`}>
-                    {category}
-                  </p>
+                  {catIndex === 0 ? (
+                    <div className={`flex items-center mb-1.5 mt-0.5 h-6 transition-all ${showExpandedSidebar ? 'justify-between px-3' : 'justify-center px-0'}`}>
+                      <p className={`text-[10px] font-bold text-[#829e92] dark:text-[#527068] uppercase tracking-[0.15em] transition-opacity duration-200 ${showExpandedSidebar ? 'opacity-100' : 'opacity-0 w-0 overflow-hidden select-none pointer-events-none'}`}>
+                        {category}
+                      </p>
+                      <button
+                        onClick={toggleSidebar}
+                        className="hidden md:flex items-center justify-center w-6 h-6 rounded-md text-slate-500 dark:text-[#829e92] hover:text-[#00a76b] dark:hover:text-[#00a76b] hover:bg-slate-100 dark:hover:bg-[#111c18] transition-all cursor-pointer border-none bg-transparent active:scale-95"
+                        title={isSidebarOpen ? "Collapse sidebar" : "Keep sidebar open"}
+                        aria-label={isSidebarOpen ? "Collapse sidebar" : "Keep sidebar open"}
+                      >
+                        <ChevronLeft size={16} strokeWidth={2.8} />
+                      </button>
+                    </div>
+                  ) : (
+                    <p className={`px-3 text-[10px] font-bold text-[#829e92] dark:text-[#527068] uppercase tracking-[0.15em] mb-1.5 mt-0.5 transition-opacity duration-200 ${showExpandedSidebar ? 'opacity-100' : 'opacity-0 select-none pointer-events-none'}`}>
+                      {category}
+                    </p>
+                  )}
                   <div className="space-y-0.5">
                     {items.map((item) => {
                       let isActive = false;

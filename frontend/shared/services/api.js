@@ -8,7 +8,7 @@ export const getDynamicApiUrl = () => {
     if (host.includes('staging')) {
       return 'https://hrm1-wljp.onrender.com';
     }
-    if ((host === 'localhost' || host === '127.0.0.1') && port && port !== '5000') {
+    if (host === 'localhost' || host === '127.0.0.1') {
       return 'http://localhost:5000';
     }
     return 'https://hrm1-1-zli1.onrender.com';

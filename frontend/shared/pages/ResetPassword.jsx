@@ -47,6 +47,18 @@ const ResetPassword = () => {
     setError('');
     setSuccess('');
 
+    if (!password) {
+      setError('Please enter a new password.');
+      setLoading(false);
+      return;
+    }
+
+    if (!confirmPassword) {
+      setError('Please confirm your new password.');
+      setLoading(false);
+      return;
+    }
+
     if (password !== confirmPassword) {
       setError('Passwords do not match.');
       setLoading(false);
@@ -105,13 +117,15 @@ const ResetPassword = () => {
             </div>
 
             {verifying ? null : userDetails ? (
-              <form onSubmit={handleSubmit} className="space-y-5">
+              <form onSubmit={handleSubmit} noValidate className="space-y-5">
                  <EntryInput 
                     label="NEW PASSWORD"
                     type={showPassword ? 'text' : 'password'}
-                    required
                     value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                    onChange={(e) => {
+                      setPassword(e.target.value);
+                      if (error) setError('');
+                    }}
                     placeholder="Enter new password"
                     icon={<Lock size={20} />}
                     rightElement={
@@ -130,9 +144,11 @@ const ResetPassword = () => {
                  <EntryInput 
                     label="CONFIRM PASSWORD"
                     type={showConfirmPassword ? 'text' : 'password'} 
-                    required
                     value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    onChange={(e) => {
+                      setConfirmPassword(e.target.value);
+                      if (error) setError('');
+                    }}
                     placeholder="Confirm new password"
                     icon={<Lock size={20} />}
                     rightElement={

@@ -599,7 +599,7 @@ const Dashboard = () => {
       {/* 1. WELCOME SECTION */}
       <div className="flex flex-col sm:flex-row justify-between items-start gap-3">
         <div>
-          <h1 className="text-3xl md:text-4xl font-bold text-gray-900 dark:text-white leading-tight" style={{ fontFamily: 'Playfair Display, serif' }}>
+          <h1 className="text-3xl md:text-4xl font-semibold text-gray-900 dark:text-white leading-tight" style={{ fontFamily: 'Playfair Display, serif' }}>
             {getGreeting()}, {firstName}! 👋
           </h1>
           <p className="text-[#939084] mt-1">Have a productive day at work.</p>

@@ -6,13 +6,20 @@ import { useLocation } from 'react-router-dom';
 import toast from 'react-hot-toast';
 
 const Profile = () => {
-  const [userData, setUserData] = useState(null);
+  const [userData, setUserData] = useState(() => {
+    try {
+      const stored = sessionStorage.getItem('user');
+      return (stored && stored !== 'undefined' && stored !== 'null') ? JSON.parse(stored) : null;
+    } catch (e) {
+      return null;
+    }
+  });
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState({});
   // Status removed in favor of toast
   const [loading, setLoading] = useState(false);
   const [uploadingDocType, setUploadingDocType] = useState(null);
-  const [syncing, setSyncing] = useState(true);
+  const [syncing, setSyncing] = useState(!userData);
   const [viewingDoc, setViewingDoc] = useState(null);
 
   const token = sessionStorage.getItem('token');
@@ -39,7 +46,13 @@ const Profile = () => {
         window.dispatchEvent(new Event('profileUpdated'));
       }
     } catch (err) {
-      console.warn('Initial sync failed.');
+      console.warn('Profile sync fallback:', err?.response?.data || err.message);
+      const stored = sessionStorage.getItem('user');
+      if (stored && (!userData || Object.keys(userData).length === 0)) {
+        try {
+          setUserData(JSON.parse(stored));
+        } catch (e) {}
+      }
     } finally {
       setSyncing(false);
     }
@@ -49,41 +62,55 @@ const Profile = () => {
     if (token) fetchProfile();
   }, [token]);
 
-  if (syncing) {
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') setViewingDoc(null);
+    };
+    if (viewingDoc) {
+      window.addEventListener('keydown', handleKeyDown);
+    }
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [viewingDoc]);
+
+  if (syncing && !userData) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', gap: 16 }}>
         <RefreshCw size={32} className="animate-spin text-[#00a76b]" />
-        <p style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.2em', color: '#9ca3af' }}>Syncing Identity Node...</p>
+        <p style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.2em', color: '#9ca3af' }}>Loading Profile...</p>
       </div>
     );
   }
 
   const safeUserData = userData || {};
-  const fullName = safeUserData.name || (safeUserData.profile ? `${safeUserData.profile.firstName || ''} ${safeUserData.profile.lastName || ''}`.trim() : 'System Admin');
-  const userEmail = safeUserData.email || 'admin@fluidhr.com';
-  const userRole = safeUserData.role || 'Personnel';
-  const userDept = (safeUserData.department && typeof safeUserData.department === 'object') ? safeUserData.department.name : (safeUserData.department || 'General Operations');
+  const fullName = safeUserData.fullName || safeUserData.name || (safeUserData.profile ? `${safeUserData.profile.firstName || ''} ${safeUserData.profile.lastName || ''}`.trim() : '') || '';
+  const userEmail = safeUserData.email || '';
+  const userRole = safeUserData.role || sessionStorage.getItem('role') || '';
+  const userDept = (safeUserData.department && typeof safeUserData.department === 'object') ? (safeUserData.department.name || '') : (safeUserData.department || safeUserData.dept || '');
+  const currentRole = (userRole || '').toLowerCase();
+  const showReportingManager = !['hr', 'admin', 'manager'].includes(currentRole) && 
+    !(typeof window !== 'undefined' && (window.location.pathname.startsWith('/hr') || window.location.pathname.startsWith('/admin')));
 
-  const empId = safeUserData.employeeId || 'PENDING-SYNC';
-  const personalEmail = safeUserData.personalEmail || 'Not Configured';
-  const joinDateRaw = safeUserData.joinDate || safeUserData.createdAt;
-  const joinDate = joinDateRaw ? new Date(joinDateRaw).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }) : 'Not Set';
-  const phone = safeUserData.phone || 'Data Missing';
-  const empType = safeUserData.employmentType || 'Standard';
-  const gender = safeUserData.gender || 'Not Specified';
-  const address = safeUserData.address || 'Locator Data Missing';
-  const birthdate = safeUserData.dob ? new Date(safeUserData.dob).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }) : 'Not Configured';
+  const empId = safeUserData.employeeId || '';
+  const personalEmail = safeUserData.personalEmail || '';
+  const joinDateRaw = safeUserData.joinDate;
+  const joinDate = joinDateRaw ? new Date(joinDateRaw).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
+  const phone = safeUserData.phone || '';
+  const empType = safeUserData.employmentType || '';
+  const gender = safeUserData.gender || '';
+  const localAddress = safeUserData.localAddress || safeUserData.address || '';
+  const permanentAddress = safeUserData.permanentAddress || '';
+  const birthdate = safeUserData.dob ? new Date(safeUserData.dob).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
   const adharCard = safeUserData.adharCard || null;
   const bankDetails = safeUserData.bankDetails || null;
   const panCard = safeUserData.panCard || null;
 
-  const initials = fullName ? fullName.split(' ').filter(Boolean).map(n => n[0]).join('').toUpperCase().substring(0, 2) || 'NA' : 'NA';
+  const initials = fullName ? fullName.split(' ').filter(Boolean).map(n => n[0]).join('').toUpperCase().substring(0, 2) : '';
 
   const reportingManagerName = safeUserData.reportingManager
     ? (typeof safeUserData.reportingManager === 'object'
-      ? (safeUserData.reportingManager.name || safeUserData.reportingManager.fullName)
+      ? (safeUserData.reportingManager.name || safeUserData.reportingManager.fullName || '')
       : safeUserData.reportingManager)
-    : 'Not Assigned';
+    : '';
 
   const handleDocumentUpload = async (type, file) => {
     if (!file) return;
@@ -134,13 +161,18 @@ const Profile = () => {
   };
 
   const handleSaveProfile = async () => {
-    if (!editForm.personalEmail?.trim() || !editForm.phone?.trim() || !editForm.address?.trim()) {
-      toast.error('Personal Email, Phone Number, and Address are required fields.');
+    if (!editForm.personalEmail?.trim() || !editForm.phone?.trim()) {
+      toast.error('Personal Email and Phone Number are required fields.');
       return;
     }
 
-    if (editForm.address && editForm.address.length > 250) {
-      toast.error('Address cannot exceed 250 characters.');
+    if (editForm.localAddress && editForm.localAddress.length > 250) {
+      toast.error('Local Address cannot exceed 250 characters.');
+      return;
+    }
+
+    if (editForm.permanentAddress && editForm.permanentAddress.length > 250) {
+      toast.error('Permanent Address cannot exceed 250 characters.');
       return;
     }
 
@@ -154,8 +186,13 @@ const Profile = () => {
       return;
     }
 
-    if (editForm.address && !/^[a-zA-Z0-9\s,.\-/#]*$/.test(editForm.address)) {
-      toast.error('Address contains invalid special characters.');
+    if (editForm.localAddress && !/^[a-zA-Z0-9\s,.\-/#]*$/.test(editForm.localAddress)) {
+      toast.error('Local Address contains invalid special characters.');
+      return;
+    }
+
+    if (editForm.permanentAddress && !/^[a-zA-Z0-9\s,.\-/#]*$/.test(editForm.permanentAddress)) {
+      toast.error('Permanent Address contains invalid special characters.');
       return;
     }
 
@@ -165,7 +202,9 @@ const Profile = () => {
         fullName: editForm.fullName,
         personalEmail: editForm.personalEmail,
         phone: editForm.phone,
-        address: editForm.address,
+        address: editForm.localAddress,
+        localAddress: editForm.localAddress,
+        permanentAddress: editForm.permanentAddress,
         profileImage: editForm.profileImage,
       };
       const response = await axios.put('/api/auth/profile', payload, {
@@ -178,7 +217,9 @@ const Profile = () => {
           fullName: editForm.fullName,
           personalEmail: editForm.personalEmail,
           phone: editForm.phone,
-          address: editForm.address,
+          address: editForm.localAddress,
+          localAddress: editForm.localAddress,
+          permanentAddress: editForm.permanentAddress,
           profileImage: editForm.profileImage || prev?.profileImage
         }));
         await fetchProfile();
@@ -194,10 +235,11 @@ const Profile = () => {
 
   const handleEditClick = () => {
     setEditForm({
-      fullName,
-      personalEmail: personalEmail !== 'Not Configured' ? personalEmail : '',
-      phone: phone !== 'Data Missing' ? phone : '',
-      address: address !== 'Locator Data Missing' ? address : '',
+      fullName: fullName || '',
+      personalEmail: personalEmail || '',
+      phone: phone || '',
+      localAddress: localAddress || '',
+      permanentAddress: permanentAddress || '',
       profileImage: null,
     });
     setIsEditing(true);
@@ -214,7 +256,7 @@ const Profile = () => {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, marginBottom: 24 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
             <div>
-              <h1 style={{ fontSize: 28, fontWeight: 800, color: isDark ? '#fff' : '#2c302e', margin: 0, letterSpacing: '-0.5px' }}>My profile</h1>
+              <h1 style={{ fontSize: 28, fontWeight: 600, color: isDark ? '#fff' : '#2c302e', margin: 0, letterSpacing: '-0.5px' }}>My profile</h1>
               <p style={{ fontSize: 14, color: isDark ? '#a3b3af' : '#8c918f', margin: '4px 0 0' }}>Personal information.</p>
             </div>
 
@@ -284,9 +326,9 @@ const Profile = () => {
             </div>
 
             <h3 style={{ fontSize: 18, fontWeight: 800, color: '#3b3e3c', margin: '0 0 4px' }}>{fullName}</h3>
-            <p style={{ fontSize: 13, color: '#8c918f', margin: '0 0 2px', fontWeight: 600 }}>{userRole.toUpperCase()}</p>
-            <p style={{ fontSize: 13, color: '#00a76b', margin: '0 0 2px', fontWeight: 700 }}>ID: {empId}</p>
-            <p style={{ fontSize: 12, color: '#9ca3af', margin: 0, fontWeight: 600 }}>{userDept}</p>
+            {userRole ? <p style={{ fontSize: 13, color: '#8c918f', margin: '0 0 2px', fontWeight: 600 }}>{userRole.toUpperCase()}</p> : null}
+            {empId ? <p style={{ fontSize: 13, color: '#00a76b', margin: '0 0 2px', fontWeight: 700 }}>ID: {empId}</p> : null}
+            {userDept ? <p style={{ fontSize: 12, color: '#9ca3af', margin: 0, fontWeight: 600 }}>{userDept}</p> : null}
           </div>
 
           {/* VERIFIED DOCUMENTS VAULT */}
@@ -416,8 +458,13 @@ const Profile = () => {
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <label style={{ fontSize: 11, fontWeight: 700, color: isDark ? '#a3b3af' : '#939084', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Full Address</label>
-                  <input type="text" maxLength="250" readOnly={!isEditing} value={isEditing ? editForm.address : address} onChange={e => setEditForm({...editForm, address: e.target.value.replace(/[^a-zA-Z0-9\s,.\-/#]/g, '')})} className="verdant-input" style={{ backgroundColor: isEditing ? (isDark ? '#162722' : '#fff') : undefined }} />
+                  <label style={{ fontSize: 11, fontWeight: 700, color: isDark ? '#a3b3af' : '#939084', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Local Address</label>
+                  <input type="text" maxLength="250" readOnly={!isEditing} value={isEditing ? editForm.localAddress : localAddress} onChange={e => setEditForm({...editForm, localAddress: e.target.value.replace(/[^a-zA-Z0-9\s,.\-/#]/g, '')})} className="verdant-input" style={{ backgroundColor: isEditing ? (isDark ? '#162722' : '#fff') : undefined }} />
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: isDark ? '#a3b3af' : '#939084', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Permanent Address</label>
+                  <input type="text" maxLength="250" readOnly={!isEditing} value={isEditing ? editForm.permanentAddress : permanentAddress} onChange={e => setEditForm({...editForm, permanentAddress: e.target.value.replace(/[^a-zA-Z0-9\s,.\-/#]/g, '')})} className="verdant-input" style={{ backgroundColor: isEditing ? (isDark ? '#162722' : '#fff') : undefined }} />
                 </div>
               </div>
             </div>
@@ -434,7 +481,7 @@ const Profile = () => {
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   <label style={{ fontSize: 11, fontWeight: 700, color: isDark ? '#a3b3af' : '#939084', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Designation</label>
-                  <input type="text" readOnly value={userData?.designation || userData?.position || userRole} className="verdant-input" />
+                  <input type="text" readOnly value={safeUserData.designation || safeUserData.position || ''} className="verdant-input" />
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -442,10 +489,12 @@ const Profile = () => {
                   <input type="text" readOnly value={userDept} className="verdant-input" />
                 </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <label style={{ fontSize: 11, fontWeight: 700, color: isDark ? '#a3b3af' : '#939084', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Reporting Manager</label>
-                  <input type="text" readOnly value={reportingManagerName} className="verdant-input" />
-                </div>
+                {showReportingManager && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <label style={{ fontSize: 11, fontWeight: 700, color: isDark ? '#a3b3af' : '#939084', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Reporting Manager</label>
+                    <input type="text" readOnly value={reportingManagerName} className="verdant-input" />
+                  </div>
+                )}
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   <label style={{ fontSize: 11, fontWeight: 700, color: isDark ? '#a3b3af' : '#939084', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Joining Date</label>
@@ -480,94 +529,88 @@ const Profile = () => {
         {/* DOCUMENT VIEW POPUP MODAL */}
         {viewingDoc && (
           <div 
-            style={{
-              position: 'fixed',
-              top: 0,
-              left: 0,
-              width: '100vw',
-              height: '100vh',
-              backgroundColor: 'rgba(0, 0, 0, 0.85)',
-              backdropFilter: 'blur(8px)',
-              zIndex: 1000,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: 40,
-              boxSizing: 'border-box'
-            }}
+            className="fixed inset-0 z-[99999] flex items-center justify-center p-4 sm:p-6 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200 cursor-pointer"
             onClick={() => setViewingDoc(null)}
           >
-            {/* Content Area (Borderless) */}
+            {/* Proper Modal Card Box with Uniform Dimensions */}
             <div 
-              style={{
-                position: 'relative',
-                width: 'auto',
-                maxWidth: viewingDoc.url.toLowerCase().includes('.pdf') ? '1000px' : '90%',
-                maxHeight: '90vh',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center'
-              }}
-              onClick={e => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
+              className={`relative w-full ${
+                viewingDoc.url.toLowerCase().includes('.pdf')
+                  ? 'max-w-4xl h-[85vh]'
+                  : 'max-w-2xl h-[580px] max-h-[90vh]'
+              } flex flex-col bg-white dark:bg-[#162722] border border-slate-200 dark:border-[#1a2d29] rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 cursor-default`}
             >
-              {/* Close Button positioned at the top-right corner of the content */}
-              <button 
-                onClick={() => setViewingDoc(null)}
-                style={{
-                  position: 'absolute',
-                  top: -15,
-                  right: -15,
-                  background: '#201515',
-                  border: '2px solid #fff',
-                  cursor: 'pointer',
-                  color: '#fff',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  padding: 8,
-                  borderRadius: '50%',
-                  transition: 'background-color 0.2s, transform 0.2s',
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
-                  zIndex: 1010
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = '#ff4f00';
-                  e.currentTarget.style.transform = 'scale(1.1)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = '#201515';
-                  e.currentTarget.style.transform = 'scale(1)';
-                }}
-              >
-                <X size={16} />
-              </button>
+              {/* Box Header */}
+              <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-[#1a2d29] bg-slate-50/70 dark:bg-[#111c18]/70 shrink-0">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                    <FileText size={18} />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-extrabold text-slate-900 dark:text-white leading-tight">
+                      {viewingDoc.name || 'Image Preview'}
+                    </h4>
+                    <p className="text-[11px] font-medium text-slate-400 dark:text-slate-500">
+                      {viewingDoc.url.toLowerCase().includes('.pdf') ? 'Document Viewer' : 'Photo Viewer'}
+                    </p>
+                  </div>
+                </div>
 
-              {viewingDoc.url.toLowerCase().includes('.pdf') ? (
-                <iframe 
-                  src={viewingDoc.url} 
-                  title={viewingDoc.name}
-                  style={{
-                    width: '100%',
-                    height: '80vh',
-                    border: 'none',
-                    borderRadius: 16,
-                    boxShadow: '0 10px 30px rgba(0,0,0,0.5)',
-                    backgroundColor: '#fff'
-                  }}
-                />
-              ) : (
-                <img 
-                  src={viewingDoc.url} 
-                  alt={viewingDoc.name}
-                  style={{
-                    maxWidth: '100%',
-                    maxHeight: '85vh',
-                    objectFit: 'contain',
-                    borderRadius: 16,
-                    boxShadow: '0 10px 30px rgba(0,0,0,0.5)'
-                  }}
-                />
-              )}
+                <div className="flex items-center gap-2">
+                  <a
+                    href={viewingDoc.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="p-2 px-3 rounded-xl bg-slate-100 dark:bg-[#111c18] hover:bg-slate-200 dark:hover:bg-[#1a2d29] text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white text-xs font-bold transition-colors flex items-center gap-1.5"
+                    title="Open Original in New Tab"
+                  >
+                    <Eye size={14} />
+                    <span className="hidden sm:inline">Open Original</span>
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => setViewingDoc(null)}
+                    className="p-2 rounded-xl bg-slate-100 dark:bg-[#111c18] hover:bg-slate-200 dark:hover:bg-[#1a2d29] text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors cursor-pointer"
+                    title="Close"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Box Viewport: Uniform dimensions for all images (small or large) */}
+              <div className="flex-1 w-full p-4 sm:p-6 flex items-center justify-center overflow-hidden bg-slate-950/[0.03] dark:bg-black/40 relative">
+                {viewingDoc.url.toLowerCase().includes('.pdf') ? (
+                  <iframe 
+                    src={viewingDoc.url} 
+                    title={viewingDoc.name}
+                    className="w-full h-full rounded-xl border border-slate-200 dark:border-[#1a2d29] bg-white shadow-xs"
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center">
+                    <img 
+                      src={viewingDoc.url} 
+                      alt={viewingDoc.name}
+                      className="max-w-full max-h-full w-auto h-auto object-contain rounded-xl shadow-md select-none transition-all duration-200"
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Box Footer */}
+              <div className="px-5 py-3 border-t border-slate-100 dark:border-[#1a2d29] bg-slate-50/50 dark:bg-[#111c18]/50 flex items-center justify-between shrink-0">
+                <span className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 truncate max-w-xs">
+                  {viewingDoc.name}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setViewingDoc(null)}
+                  className="px-5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs transition-colors cursor-pointer shadow-xs"
+                >
+                  Close
+                </button>
+              </div>
             </div>
           </div>
         )}

@@ -65,7 +65,7 @@ const TaskUpdate = () => {
 
   if (!task) return (
     <div className="p-12 text-center text-[#939084] font-black uppercase tracking-widest italic animate-pulse">
-      Syncing Task Node...
+      Loading Task...
     </div>
   );
 
@@ -80,7 +80,7 @@ const TaskUpdate = () => {
           <ArrowLeft size={16} /> Cancel Update
         </button>
         <div className="text-right">
-          <h1 className="text-3xl font-black text-[#201515] tracking-tighter uppercase">
+          <h1 className="text-3xl font-semibold text-[#201515] tracking-tight uppercase">
             End-of-Day <span className="text-[#00a76b]">Update.</span>
           </h1>
           <p className="text-[10px] font-black text-[#939084] uppercase tracking-widest mt-1">Daily Work Status Reporting</p>
