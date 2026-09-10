@@ -37,7 +37,7 @@ router.get('/all', authorize('admin', 'hr', 'manager', 'employee'), async (req, 
 });
 
 // 🔢 SEQUENTIAL IDENTITY ENGINE: Fetch Next ID for Role
-router.get('/next-id/:role', authorize('admin'), async (req, res) => {
+router.get('/next-id/:role', authorize('admin', 'hr'), async (req, res) => {
   try {
     const count = await User.countDocuments({});
     const nextId = `AT_EMP_${count + 1}`;

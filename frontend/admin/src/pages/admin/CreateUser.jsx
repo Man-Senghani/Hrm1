@@ -392,7 +392,6 @@ const CreateUser = () => {
     }
 
     setLoading(true);
-    setMessage({ type: '', text: '', employeeId: '', status: '' });
 
     try {
       const payload = {
