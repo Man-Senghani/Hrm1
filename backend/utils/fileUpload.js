@@ -27,17 +27,21 @@ const saveBase64Image = async (base64Str, subFolder, prefix) => {
       return null;
     }
     
-    // Attempt Cloudinary upload first
+    // Attempt Cloudinary upload first with a strict 8s timeout to avoid hanging requests
     try {
       if (process.env.CLOUDINARY_URL) {
-        const uploadRes = await cloudinary.uploader.upload(base64Str, {
+        const cloudinaryPromise = cloudinary.uploader.upload(base64Str, {
           folder: `hrm/${subFolder}`,
           resource_type: 'auto'
         });
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Cloudinary upload timed out after 8s')), 8000)
+        );
+        const uploadRes = await Promise.race([cloudinaryPromise, timeoutPromise]);
         return uploadRes.secure_url;
       }
     } catch (cloudErr) {
-      console.error('Cloudinary upload failed, falling back to local storage:', cloudErr.message || cloudErr);
+      console.warn('Cloudinary upload skipped or timed out, falling back to local storage:', cloudErr.message || cloudErr);
     }
     
     const matches = base64Str.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);

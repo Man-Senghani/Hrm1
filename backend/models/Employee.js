@@ -35,5 +35,7 @@ const employeeSchema = new mongoose.Schema({
 employeeSchema.index({ status: 1 });
 employeeSchema.index({ role: 1, status: 1 });
 employeeSchema.index({ managerId: 1 });
+employeeSchema.index({ email: 1 });
+employeeSchema.index({ personalEmail: 1 });
 
 module.exports = mongoose.model('Employee', employeeSchema);

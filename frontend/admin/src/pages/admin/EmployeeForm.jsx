@@ -30,6 +30,7 @@ import {
 import { toast } from 'react-hot-toast';
 import CustomDatePicker from '../../components/CustomDatePicker';
 import { getImageUrl } from '@shared/services/api';
+import { compressImageAndConvertToBase64 } from '@shared/utils/imageCompressor';
 
 // Helper to format date strings as DD-MM-YYYY
 const formatDDMMYYYY = (dateStr) => {
@@ -435,43 +436,81 @@ const EmployeeForm = () => {
         profileId = res.data.user?.profileId || res.data.user?._id;
       }
 
-      // Sequential File Uploads
-      if (selectedFile && profileId) {
-        try {
-          const base64 = await toBase64(selectedFile);
-          await axios.post(`/api/employees/${profileId}/profile-image`, { image: base64 }, {
-            headers: { Authorization: `Bearer ${token}` }
-          });
-        } catch (imgErr) {
-          console.warn('Photo upload failed:', imgErr);
+      // Parallel Compressed File Uploads (Ultra-Fast)
+      if (profileId) {
+        const uploadTasks = [];
+
+        if (selectedFile) {
+          uploadTasks.push(
+            (async () => {
+              try {
+                const base64 = await compressImageAndConvertToBase64(selectedFile, 800, 800, 0.8);
+                if (base64) {
+                  await axios.post(`/api/employees/${profileId}/profile-image`, { image: base64 }, {
+                    headers: { Authorization: `Bearer ${token}` }
+                  });
+                }
+              } catch (imgErr) {
+                console.warn('Photo upload failed:', imgErr);
+              }
+            })()
+          );
         }
-      }
 
-      if (adharFile && profileId) {
-        try {
-          const base64 = await toBase64(adharFile);
-          await axios.post(`/api/employees/${profileId}/adhar-card`, { document: base64 }, {
-            headers: { Authorization: `Bearer ${token}` }
-          });
-        } catch (err) { console.warn('Adhar upload failed:', err); }
-      }
+        if (adharFile) {
+          uploadTasks.push(
+            (async () => {
+              try {
+                const base64 = await compressImageAndConvertToBase64(adharFile, 1200, 1200, 0.75);
+                if (base64) {
+                  await axios.post(`/api/employees/${profileId}/adhar-card`, { document: base64 }, {
+                    headers: { Authorization: `Bearer ${token}` }
+                  });
+                }
+              } catch (err) {
+                console.warn('Adhar upload failed:', err);
+              }
+            })()
+          );
+        }
 
-      if (bankFile && profileId) {
-        try {
-          const base64 = await toBase64(bankFile);
-          await axios.post(`/api/employees/${profileId}/bank-details`, { document: base64 }, {
-            headers: { Authorization: `Bearer ${token}` }
-          });
-        } catch (err) { console.warn('Bank detail upload failed:', err); }
-      }
+        if (bankFile) {
+          uploadTasks.push(
+            (async () => {
+              try {
+                const base64 = await compressImageAndConvertToBase64(bankFile, 1200, 1200, 0.75);
+                if (base64) {
+                  await axios.post(`/api/employees/${profileId}/bank-details`, { document: base64 }, {
+                    headers: { Authorization: `Bearer ${token}` }
+                  });
+                }
+              } catch (err) {
+                console.warn('Bank detail upload failed:', err);
+              }
+            })()
+          );
+        }
 
-      if (panFile && profileId) {
-        try {
-          const base64 = await toBase64(panFile);
-          await axios.post(`/api/employees/${profileId}/pan-card`, { document: base64 }, {
-            headers: { Authorization: `Bearer ${token}` }
-          });
-        } catch (err) { console.warn('PAN Card upload failed:', err); }
+        if (panFile) {
+          uploadTasks.push(
+            (async () => {
+              try {
+                const base64 = await compressImageAndConvertToBase64(panFile, 1200, 1200, 0.75);
+                if (base64) {
+                  await axios.post(`/api/employees/${profileId}/pan-card`, { document: base64 }, {
+                    headers: { Authorization: `Bearer ${token}` }
+                  });
+                }
+              } catch (err) {
+                console.warn('PAN Card upload failed:', err);
+              }
+            })()
+          );
+        }
+
+        if (uploadTasks.length > 0) {
+          await Promise.allSettled(uploadTasks);
+        }
       }
 
       toast.success(isEdit ? 'Employee Profile Updated Successfully' : 'Employee Profile Created Successfully', {

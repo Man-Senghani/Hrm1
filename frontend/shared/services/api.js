@@ -91,4 +91,13 @@ export const formatDate = (dateInput) => {
 
 export const formatDateDDMMYYYY = formatDate;
 
+// 💓 Keep-Alive background heartbeat to prevent Render free-tier spin-downs while users are active
+if (typeof window !== 'undefined') {
+  setInterval(() => {
+    if (!document.hidden) {
+      fetch(`${API_BASE_URL}/api/health`, { method: 'GET', cache: 'no-store' }).catch(() => {});
+    }
+  }, 3 * 60 * 1000); // Ping every 3 minutes
+}
+
 export default api;

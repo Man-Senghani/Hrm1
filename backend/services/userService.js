@@ -26,15 +26,18 @@ exports.createNewUserAtomic = async (userData) => {
       throw new Error('Office Email and Personal Email cannot be the same');
     }
 
-    // 1. Uniqueness Protocol
-    const emailInUser = await User.findOne({ email: lowerEmail });
-    const emailInPersonal = await Employee.findOne({ personalEmail: lowerEmail });
+    // 1. Parallel Uniqueness Protocol (High Performance)
+    const [emailInUser, emailInPersonal, personalInUser, personalInPersonal] = await Promise.all([
+      User.findOne({ email: lowerEmail }).lean(),
+      Employee.findOne({ personalEmail: lowerEmail }).lean(),
+      User.findOne({ email: lowerPersonalEmail }).lean(),
+      Employee.findOne({ personalEmail: lowerPersonalEmail }).lean()
+    ]);
+
     if (emailInUser || emailInPersonal) {
       throw new Error('Duplicate email addresses are not allowed. This Office Email is already registered.');
     }
 
-    const personalInUser = await User.findOne({ email: lowerPersonalEmail });
-    const personalInPersonal = await Employee.findOne({ personalEmail: lowerPersonalEmail });
     if (personalInUser || personalInPersonal) {
       throw new Error('Duplicate email addresses are not allowed. This Personal Email is already registered.');
     }

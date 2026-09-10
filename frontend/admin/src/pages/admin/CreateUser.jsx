@@ -27,6 +27,7 @@ import {
 import { toast } from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
 import CustomDatePicker from '../../components/CustomDatePicker';
+import { compressImageAndConvertToBase64 } from '@shared/utils/imageCompressor';
 
 // ─── Premium Custom Dropdown ──────────────────────────────────────────────────
 const StyledSelect = ({ name, value, onChange, options, placeholder, required, error }) => {
@@ -419,51 +420,81 @@ const CreateUser = () => {
       const { user } = response.data;
       const profileId = user.profileId; // 🎯 SYNC: Use the actual Profile ID, not User ID
 
-      const toBase64 = file => new Promise((resolve, reject) => {
-        const r = new FileReader();
-        r.onload = () => resolve(r.result);
-        r.onerror = reject;
-        r.readAsDataURL(file);
-      });
+      // 2. Parallel Compressed File Uploads (Ultra-Fast)
+      if (profileId) {
+        const uploadTasks = [];
 
-      // 2. Upload Photo if selected (Sequential Linkage)
-      if (selectedFile && profileId) {
-        try {
-          const base64 = await toBase64(selectedFile);
-          await axios.post(`/api/employees/${profileId}/profile-image`, { image: base64 }, {
-            headers: { Authorization: `Bearer ${token}` }
-          });
-        } catch (imgErr) {
-          console.warn('Photo upload failed but user was created:', imgErr);
+        if (selectedFile) {
+          uploadTasks.push(
+            (async () => {
+              try {
+                const base64 = await compressImageAndConvertToBase64(selectedFile, 800, 800, 0.8);
+                if (base64) {
+                  await axios.post(`/api/employees/${profileId}/profile-image`, { image: base64 }, {
+                    headers: { Authorization: `Bearer ${token}` }
+                  });
+                }
+              } catch (imgErr) {
+                console.warn('Photo upload failed but user was created:', imgErr);
+              }
+            })()
+          );
         }
-      }
 
-      // 3. Upload Documents if selected
-      if (adharFile && profileId) {
-        try {
-          const base64 = await toBase64(adharFile);
-          await axios.post(`/api/employees/${profileId}/adhar-card`, { document: base64 }, {
-            headers: { Authorization: `Bearer ${token}` }
-          });
-        } catch (err) { console.warn('Adhar upload failed:', err); }
-      }
+        if (adharFile) {
+          uploadTasks.push(
+            (async () => {
+              try {
+                const base64 = await compressImageAndConvertToBase64(adharFile, 1200, 1200, 0.75);
+                if (base64) {
+                  await axios.post(`/api/employees/${profileId}/adhar-card`, { document: base64 }, {
+                    headers: { Authorization: `Bearer ${token}` }
+                  });
+                }
+              } catch (err) {
+                console.warn('Adhar upload failed:', err);
+              }
+            })()
+          );
+        }
 
-      if (bankFile && profileId) {
-        try {
-          const base64 = await toBase64(bankFile);
-          await axios.post(`/api/employees/${profileId}/bank-details`, { document: base64 }, {
-            headers: { Authorization: `Bearer ${token}` }
-          });
-        } catch (err) { console.warn('Bank detail upload failed:', err); }
-      }
+        if (bankFile) {
+          uploadTasks.push(
+            (async () => {
+              try {
+                const base64 = await compressImageAndConvertToBase64(bankFile, 1200, 1200, 0.75);
+                if (base64) {
+                  await axios.post(`/api/employees/${profileId}/bank-details`, { document: base64 }, {
+                    headers: { Authorization: `Bearer ${token}` }
+                  });
+                }
+              } catch (err) {
+                console.warn('Bank detail upload failed:', err);
+              }
+            })()
+          );
+        }
 
-      if (panFile && profileId) {
-        try {
-          const base64 = await toBase64(panFile);
-          await axios.post(`/api/employees/${profileId}/pan-card`, { document: base64 }, {
-            headers: { Authorization: `Bearer ${token}` }
-          });
-        } catch (err) { console.warn('PAN Card upload failed:', err); }
+        if (panFile) {
+          uploadTasks.push(
+            (async () => {
+              try {
+                const base64 = await compressImageAndConvertToBase64(panFile, 1200, 1200, 0.75);
+                if (base64) {
+                  await axios.post(`/api/employees/${profileId}/pan-card`, { document: base64 }, {
+                    headers: { Authorization: `Bearer ${token}` }
+                  });
+                }
+              } catch (err) {
+                console.warn('PAN Card upload failed:', err);
+              }
+            })()
+          );
+        }
+
+        if (uploadTasks.length > 0) {
+          await Promise.allSettled(uploadTasks);
+        }
       }
 
       toast.success('Employee Created Successfully', {
