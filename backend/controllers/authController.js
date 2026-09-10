@@ -32,6 +32,38 @@ exports.login = async (req, res) => {
       const crypto = require('crypto');
       const sessionId = crypto.randomUUID ? crypto.randomUUID() : crypto.randomBytes(16).toString('hex');
 
+      // 🛡️ If user has an active running tracker session on previous device, pause it so that on the new device it appears in PAUSED state (with RESUME button)
+      const today = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Kolkata',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      }).format(new Date());
+
+      const TimeTrack = require('../models/TimeTrack');
+      const activeSession = await TimeTrack.findOne({ employeeId: user._id, date: today, status: { $in: ['active', 'idle'] } });
+      if (activeSession) {
+        const now = new Date();
+        if (activeSession.status === 'active' && activeSession.segmentStart) {
+          const segSecs = Math.max(0, Math.floor((now - new Date(activeSession.segmentStart)) / 1000));
+          activeSession.activeTime = (activeSession.activeTime || 0) + segSecs;
+        }
+        activeSession.segmentStart = null;
+        activeSession.idleStart = now;
+        activeSession.status = 'paused';
+        activeSession.isRunning = false;
+        activeSession.lastHeartbeat = now;
+        activeSession.idleApplied = false;
+
+        const lastIdx = activeSession.sessions ? activeSession.sessions.length - 1 : -1;
+        if (lastIdx >= 0 && activeSession.sessions[lastIdx]) {
+          if (!activeSession.sessions[lastIdx].pause && !activeSession.sessions[lastIdx].end) {
+            activeSession.sessions[lastIdx].pause = now;
+          }
+        }
+        await activeSession.save();
+      }
+
       // Notify previous active session on another device (if any) to automatically logout
       const io = req.app.get('io');
       if (io) {
@@ -40,6 +72,9 @@ exports.login = async (req, res) => {
           message: 'Your account has been logged in on another device. You have been logged out on this machine.',
           newSessionId: sessionId
         });
+        if (activeSession) {
+          io.to(`user_${user._id}`).emit('timer_paused', { reason: 'device_switch' });
+        }
       }
 
       user.activeSessionId = sessionId;

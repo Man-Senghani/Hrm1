@@ -128,10 +128,34 @@ io.on('connection', (socket) => {
         const now = new Date();
 
         // 🛡️ Logout should NOT checkout! Only pause running sessions so time is preserved without checking out.
-        await TimeTrack.updateMany(
-          { employeeId: userId, status: 'active' },
-          { $set: { status: 'paused', isRunning: false, segmentStart: null } }
-        );
+        const today = new Intl.DateTimeFormat('en-CA', {
+          timeZone: 'Asia/Kolkata',
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit'
+        }).format(new Date());
+
+        const activeSessions = await TimeTrack.find({ employeeId: userId, date: today, status: { $in: ['active', 'idle'] } });
+        for (const session of activeSessions) {
+          if (session.status === 'active' && session.segmentStart) {
+            const segSecs = Math.max(0, Math.floor((now - new Date(session.segmentStart)) / 1000));
+            session.activeTime = (session.activeTime || 0) + segSecs;
+          }
+          session.segmentStart = null;
+          session.idleStart = now;
+          session.status = 'paused';
+          session.isRunning = false;
+          session.lastHeartbeat = now;
+          session.idleApplied = false;
+
+          const lastIdx = session.sessions ? session.sessions.length - 1 : -1;
+          if (lastIdx >= 0 && session.sessions[lastIdx]) {
+            if (!session.sessions[lastIdx].pause && !session.sessions[lastIdx].end) {
+              session.sessions[lastIdx].pause = now;
+            }
+          }
+          await session.save();
+        }
 
         io.to(`user_${userId}`).emit('desktop_app_logout', {
           userId,

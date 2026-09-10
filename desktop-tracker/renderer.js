@@ -220,8 +220,7 @@ async function pollSessionStatus() {
     if (res.status === 401) {
       const errData = await res.json().catch(() => ({}));
       if (errData.code === 'SESSION_TERMINATED') {
-        alert('Your account has been logged in on another device. You have been logged out on this machine.');
-        logout();
+        showDeviceLogoutModal(errData.message || 'Your account has been logged in on another device. You have been logged out on this machine.');
         return;
       }
     }
@@ -782,8 +781,7 @@ async function initSocket() {
     if (res.status === 401) {
       const errData = await res.json().catch(() => ({}));
       if (errData.code === 'SESSION_TERMINATED') {
-        alert('Your account has been logged in on another device. You have been logged out on this machine.');
-        logout();
+        showDeviceLogoutModal(errData.message || 'Your account has been logged in on another device. You have been logged out on this machine.');
         return;
       }
     }
@@ -802,8 +800,7 @@ async function initSocket() {
     socket.on('timer_update', (data) => { if (data) applyServerState(data); });
     socket.on('force_device_logout', (data) => {
       console.warn('[FORCE DEVICE LOGOUT] Another device logged in to this account.');
-      alert(data?.message || 'Your account has been logged in on another device. You have been logged out on this machine.');
-      logout();
+      showDeviceLogoutModal(data?.message || 'Your account has been logged in on another device. You have been logged out on this machine.');
     });
     socket.on('new_notification', (notif) => {
       if (window.electronAPI?.notifyNative) {
@@ -925,7 +922,68 @@ if (window.electronAPI?.onDeepLinkAction) {
   });
 }
 
+// ============================================================
+// 🛡️ ANOTHER DEVICE LOGOUT MODAL
+// ============================================================
+let isDeviceLogoutHandled = false;
+
+function showDeviceLogoutModal(msg) {
+  if (isDeviceLogoutHandled) return;
+  isDeviceLogoutHandled = true;
+
+  // 1. Immediately halt all background intervals & loops
+  stopPolling();
+  stopHeartbeat();
+  stopScreenshotLoop();
+  stopIdleReminderLoop();
+
+  // 2. Clear authentication token immediately so no background requests fire
+  authToken = '';
+  window.electronAPI.setStoreValue('authToken', '');
+
+  // 3. Disconnect socket
+  if (socket) {
+    try { socket.disconnect(); } catch (_) {}
+    socket = null;
+  }
+
+  // 4. Update UI to OFFLINE state
+  status = 'OFFLINE';
+  isIdle = false;
+  isSessionRunning = false;
+  activeSeconds = 0;
+  inactiveSeconds = 0;
+  updateDisplay();
+
+  // 5. Open styled in-app modal overlay
+  const modalEl = document.getElementById('device-logout-section');
+  if (modalEl) {
+    const textEl = document.getElementById('device-logout-msg');
+    if (textEl && msg) {
+      textEl.innerText = msg;
+    }
+    modalEl.style.display = 'flex';
+  } else {
+    showAuthSection();
+  }
+}
+
+function handleDismissDeviceLogout() {
+  const modalEl = document.getElementById('device-logout-section');
+  if (modalEl) modalEl.style.display = 'none';
+
+  isDeviceLogoutHandled = false;
+  showAuthSection();
+  const profileEl = document.getElementById('user-profile-display');
+  if (profileEl) profileEl.style.display = 'none';
+}
+
 async function logout() {
+  stopPolling();
+  stopHeartbeat();
+  stopScreenshotLoop();
+  stopIdleReminderLoop();
+
   const currentToken = authToken;
   const currentSocket = socket;
   const nowStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
@@ -933,12 +991,6 @@ async function logout() {
   // 1. Tell backend to record logout, but DO NOT check out! Only pause timer if running so time is preserved.
   if (currentToken) {
     try {
-      await fetch(`${API_BASE}/desktop-logout`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${currentToken}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ logoutTime: nowStr })
-      }).catch(() => {});
-
       if (status === 'ACTIVE' || isSessionRunning) {
         await fetch(`${API_BASE}/pause`, {
           method: 'POST',
@@ -970,14 +1022,11 @@ async function logout() {
   await window.electronAPI.setStoreValue('serverHost', PRODUCTION_BACKEND_URL);
   BACKEND_HOST = PRODUCTION_BACKEND_URL;
   API_BASE = `${BACKEND_HOST}/api/time`;
-  stopPolling();
-  stopHeartbeat();
-  stopScreenshotLoop();
-  stopIdleReminderLoop();
   activeSeconds = 0;
   inactiveSeconds = 0;
   status = 'OFFLINE';
   isIdle = false;
+  isSessionRunning = false;
   updateDisplay();
   showAuthSection();
   const profileEl = document.getElementById('user-profile-display');
@@ -1004,6 +1053,8 @@ document.getElementById('resume-btn')?.addEventListener('click', resumeSession);
 document.getElementById('stop-btn')?.addEventListener('click', stopSession);
 document.getElementById('confirm-checkout-btn')?.addEventListener('click', confirmStopSession);
 document.getElementById('cancel-checkout-btn')?.addEventListener('click', hideCheckoutConfirmationModal);
+document.getElementById('device-logout-ok-btn')?.addEventListener('click', handleDismissDeviceLogout);
+document.getElementById('device-logout-section')?.addEventListener('click', handleDismissDeviceLogout);
 document.getElementById('minimize-btn')?.addEventListener('click', () => window.electronAPI.minimizeApp());
 document.getElementById('close-btn')?.addEventListener('click', () => window.electronAPI.closeApp());
 document.getElementById('web-auth-btn')?.addEventListener('click', redirectToWebLogin);
