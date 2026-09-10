@@ -802,19 +802,30 @@ const parseTimeToMins = (tStr) => {
 };
 
 const getWorkingHours = (clockIn, clockOut, totalHours, record, activeLiveSecs) => {
-  // 0. Priority 0: Live active seconds for today's active ongoing session
+  if (!record || record.status === 'Absent' || record.status === 'Leave') {
+    return '--';
+  }
+
+  const cInRaw = (clockIn && clockIn !== '--') ? clockIn : ((record?.clockIn && record.clockIn !== '--') ? record.clockIn : record?.checkInTime);
+  const cOutRaw = (clockOut && clockOut !== '--') ? clockOut : ((record?.clockOut && record.clockOut !== '--') ? record.clockOut : record?.checkOutTime);
+
+  if (!cInRaw || cInRaw === '--' || cInRaw === '--:--') {
+    return '--';
+  }
+
+  // 0. Priority 0: Live active seconds for today's active ongoing session of current user ONLY
   if (activeLiveSecs && typeof activeLiveSecs === 'number' && activeLiveSecs > 0) {
     const isTodayRec = record && record.date && (
       (typeof record.date === 'string' && record.date.split('T')[0] === getLocalYYYYMMDD(new Date()))
     );
-    if (isTodayRec && (!record.clockOut || record.clockOut === '--' || !record.checkOutTime)) {
+    if (isTodayRec && (!cOutRaw || cOutRaw === '--' || cOutRaw === '--:--')) {
       const h = Math.floor(activeLiveSecs / 3600);
       const m = Math.floor((activeLiveSecs % 3600) / 60);
       return `${h}h ${m}m`;
     }
   }
 
-  // 1. Priority 1: Actual tracked active seconds (timer logs excluding breaks)
+  // 1. Priority 1: Actual tracked active seconds (from timer logs / desktop tracker)
   const activeSecs = record?.totalActiveTime ?? record?.activeTime ?? record?.trackedTime;
   if (activeSecs !== undefined && activeSecs !== null && typeof activeSecs === 'number' && activeSecs > 0) {
     const h = Math.floor(activeSecs / 3600);
@@ -822,10 +833,7 @@ const getWorkingHours = (clockIn, clockOut, totalHours, record, activeLiveSecs) 
     return `${h}h ${m}m`;
   }
 
-  // 2. Priority 2: Parse Check-In and Check-Out times/timestamps (bypassing '--' strings)
-  const cInRaw = (clockIn && clockIn !== '--') ? clockIn : ((record?.clockIn && record.clockIn !== '--') ? record.clockIn : record?.checkInTime);
-  const cOutRaw = (clockOut && clockOut !== '--') ? clockOut : ((record?.clockOut && record.clockOut !== '--') ? record.clockOut : record?.checkOutTime);
-
+  // 2. Priority 2: Parse Check-In and Check-Out times/timestamps (if checked out)
   const inMins = parseTimeToMins(cInRaw);
   const outMins = parseTimeToMins(cOutRaw);
 
@@ -836,7 +844,27 @@ const getWorkingHours = (clockIn, clockOut, totalHours, record, activeLiveSecs) 
     return `${h}h ${m}m`;
   }
 
-  // 3. Priority 3: Backend decimal totalHours (handles both number and numeric strings e.g. "4.57")
+  // 3. Priority 3: Checked in today but not checked out yet -> calculate elapsed time from check-in to current time
+  const isTodayRec = record && record.date && (
+    (typeof record.date === 'string' && record.date.split('T')[0] === getLocalYYYYMMDD(new Date()))
+  );
+  if (isTodayRec && inMins !== null && (outMins === null || !cOutRaw || cOutRaw === '--' || cOutRaw === '--:--')) {
+    const now = new Date();
+    const nowParts = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Kolkata', hour: 'numeric', minute: 'numeric', hour12: false
+    }).formatToParts(now);
+    const curHour = parseInt(nowParts.find(p => p.type === 'hour')?.value || '0', 10);
+    const curMin = parseInt(nowParts.find(p => p.type === 'minute')?.value || '0', 10);
+    const nowMins = curHour * 60 + curMin;
+    if (nowMins >= inMins) {
+      const diff = nowMins - inMins;
+      const h = Math.floor(diff / 60);
+      const m = diff % 60;
+      return `${h}h ${m}m`;
+    }
+  }
+
+  // 4. Priority 4: Backend decimal totalHours (handles both number and numeric strings e.g. "4.57")
   const hoursVal = totalHours ?? record?.totalHours;
   if (hoursVal !== undefined && hoursVal !== null && hoursVal !== '--') {
     const numericHours = typeof hoursVal === 'number' ? hoursVal : parseFloat(String(hoursVal));
@@ -848,22 +876,20 @@ const getWorkingHours = (clockIn, clockOut, totalHours, record, activeLiveSecs) 
     }
   }
 
-  if (cInRaw) {
-    return '0h 0m';
-  }
-
-  return '--';
+  return '0h 0m';
 };
 
 const getInactiveTime = (record, liveIdleSecs) => {
-  if (!record || record.status === 'Absent' || record.status === 'Leave' || (!record.clockIn && !record.checkInTime && !record.clock_in)) {
+  if (!record || record.status === 'Absent' || record.status === 'Leave') {
     return '--';
   }
+  const cInRaw = (record?.clockIn && record.clockIn !== '--') ? record.clockIn : record?.checkInTime;
+  if (!cInRaw || cInRaw === '--' || cInRaw === '--:--') {
+    return '--';
+  }
+
   let idleSecs = record.idleTime ?? record.inactiveTime ?? record.idle_time ?? 0;
-  const isTodayRec = record && record.date && (
-    (typeof record.date === 'string' && record.date.split('T')[0] === getLocalYYYYMMDD(new Date()))
-  );
-  if (isTodayRec && liveIdleSecs && typeof liveIdleSecs === 'number' && liveIdleSecs > 0) {
+  if (liveIdleSecs && typeof liveIdleSecs === 'number' && liveIdleSecs > 0) {
     idleSecs = liveIdleSecs;
   }
   if (typeof idleSecs === 'number' && idleSecs > 0) {
@@ -871,11 +897,17 @@ const getInactiveTime = (record, liveIdleSecs) => {
     const m = Math.floor((idleSecs % 3600) / 60);
     return `${h}h ${m}m`;
   }
-  return '0h 00m';
+  return '--';
 };
 
 const getTotalHoursCombined = (clockIn, clockOut, totalHours, record, activeLiveSecs, liveIdleSecs) => {
   if (!record || record.status === 'Absent' || record.status === 'Leave') {
+    return '--';
+  }
+  const cInRaw = (clockIn && clockIn !== '--') ? clockIn : ((record?.clockIn && record.clockIn !== '--') ? record.clockIn : record?.checkInTime);
+  const cOutRaw = (clockOut && clockOut !== '--') ? clockOut : ((record?.clockOut && record.clockOut !== '--') ? record.clockOut : record?.checkOutTime);
+
+  if (!cInRaw || cInRaw === '--' || cInRaw === '--:--') {
     return '--';
   }
 
@@ -884,7 +916,7 @@ const getTotalHoursCombined = (clockIn, clockOut, totalHours, record, activeLive
     const isTodayRec = record && record.date && (
       (typeof record.date === 'string' && record.date.split('T')[0] === getLocalYYYYMMDD(new Date()))
     );
-    if (isTodayRec && (!record.clockOut || record.clockOut === '--' || !record.checkOutTime)) {
+    if (isTodayRec && (!cOutRaw || cOutRaw === '--' || cOutRaw === '--:--')) {
       activeSecs = activeLiveSecs;
     }
   }
@@ -892,14 +924,27 @@ const getTotalHoursCombined = (clockIn, clockOut, totalHours, record, activeLive
     activeSecs = record?.totalActiveTime ?? record?.activeTime ?? record?.trackedTime ?? 0;
   }
 
-  const cInRaw = (clockIn && clockIn !== '--') ? clockIn : ((record?.clockIn && record.clockIn !== '--') ? record.clockIn : record?.checkInTime);
-  const cOutRaw = (clockOut && clockOut !== '--') ? clockOut : ((record?.clockOut && record.clockOut !== '--') ? record.clockOut : record?.checkOutTime);
-
   if (!activeSecs) {
     const inMins = parseTimeToMins(cInRaw);
     const outMins = parseTimeToMins(cOutRaw);
     if (inMins !== null && outMins !== null && outMins >= inMins) {
       activeSecs = (outMins - inMins) * 60;
+    } else if (inMins !== null) {
+      const isTodayRec = record && record.date && (
+        (typeof record.date === 'string' && record.date.split('T')[0] === getLocalYYYYMMDD(new Date()))
+      );
+      if (isTodayRec) {
+        const now = new Date();
+        const nowParts = new Intl.DateTimeFormat('en-US', {
+          timeZone: 'Asia/Kolkata', hour: 'numeric', minute: 'numeric', hour12: false
+        }).formatToParts(now);
+        const curHour = parseInt(nowParts.find(p => p.type === 'hour')?.value || '0', 10);
+        const curMin = parseInt(nowParts.find(p => p.type === 'minute')?.value || '0', 10);
+        const nowMins = curHour * 60 + curMin;
+        if (nowMins >= inMins) {
+          activeSecs = (nowMins - inMins) * 60;
+        }
+      }
     }
   }
 
@@ -914,10 +959,7 @@ const getTotalHoursCombined = (clockIn, clockOut, totalHours, record, activeLive
   }
 
   let idleSecs = record?.idleTime ?? record?.inactiveTime ?? record?.idle_time ?? 0;
-  const isTodayRec = record && record.date && (
-    (typeof record.date === 'string' && record.date.split('T')[0] === getLocalYYYYMMDD(new Date()))
-  );
-  if (isTodayRec && liveIdleSecs && typeof liveIdleSecs === 'number' && liveIdleSecs > 0) {
+  if (liveIdleSecs && typeof liveIdleSecs === 'number' && liveIdleSecs > 0) {
     idleSecs = liveIdleSecs;
   }
 
@@ -926,10 +968,6 @@ const getTotalHoursCombined = (clockIn, clockOut, totalHours, record, activeLive
     const h = Math.floor(combinedSecs / 3600);
     const m = Math.floor((combinedSecs % 3600) / 60);
     return `${h}h ${m}m`;
-  }
-
-  if (cInRaw) {
-    return getWorkingHours(clockIn, clockOut, totalHours, record, activeLiveSecs);
   }
 
   return '--';
@@ -1847,7 +1885,7 @@ const Attendance = () => {
     return base;
   }, [allCombinedRecords, viewContext]);
 
-  const attendanceExportColumns = [
+  const attendanceExportColumns = useMemo(() => [
     { 
       key: 'date', 
       label: 'Date', 
@@ -1929,9 +1967,9 @@ const Attendance = () => {
       defaultSelected: false, 
       getValue: (r) => r.inactiveTime || '--' 
     }
-  ];
+  ], []);
 
-  const attendanceExportFilters = [
+  const attendanceExportFilters = useMemo(() => [
     {
       key: 'status',
       label: 'Status',
@@ -1943,7 +1981,7 @@ const Attendance = () => {
         { label: 'Absent', value: 'absent' }
       ]
     }
-  ];
+  ], []);
 
   const [overrideModalTarget, setOverrideModalTarget] = useState(null);
   const [isSubmittingOverride, setIsSubmittingOverride] = useState(false);
@@ -2729,8 +2767,29 @@ const Attendance = () => {
                 </tr>
               ) : paginatedRecords.map((record, i) => {
                 const sc = STATUS_COLORS[record.status] || STATUS_COLORS['Present'];
-                const isToday = record.date === new Date().toISOString().split('T')[0];
-                const hasCheckedOut = !!(record.clockOut || record.clock_out || record.checkOutTime);
+                const todayIso = new Date().toISOString().split('T')[0];
+                const todayLocal = new Date().toLocaleDateString('en-CA');
+                const recDateStr = record.date ? String(record.date).split('T')[0] : '';
+                const isToday = recDateStr === todayIso || recDateStr === todayLocal || (record.date && new Date(record.date).toDateString() === new Date().toDateString());
+
+                const isAbsentOrLeave = ['absent', 'leave', 'holiday'].includes(String(record.status || '').toLowerCase());
+                const rawIn = (record.clockIn && record.clockIn !== '--' && record.clockIn !== '--:--')
+                  ? record.clockIn
+                  : ((record.clock_in && record.clock_in !== '--' && record.clock_in !== '--:--')
+                    ? record.clock_in
+                    : record.checkInTime);
+                const hasCheckedIn = !!rawIn && rawIn !== '--' && rawIn !== '--:--' && formatTime12h(rawIn) !== '--:--';
+
+                const rawOut = (record.clockOut && record.clockOut !== '--' && record.clockOut !== '--:--')
+                  ? record.clockOut
+                  : ((record.clock_out && record.clock_out !== '--' && record.clock_out !== '--:--')
+                    ? record.clock_out
+                    : record.checkOutTime);
+                const hasCheckedOutTime = !!rawOut && rawOut !== '--' && rawOut !== '--:--' && formatTime12h(rawOut) !== '--:--';
+                const isSessionRunning = !!(record.isRunning || record.isLiveActive);
+
+                // Show override ONLY if the user was present, checked in, and has completed checkout today
+                const hasCheckedOut = !isAbsentOrLeave && hasCheckedIn && hasCheckedOutTime && !isSessionRunning;
 
                 return (
                   <tr
@@ -2779,13 +2838,25 @@ const Attendance = () => {
                         {(() => {
                           const cIn = (record.clockIn && record.clockIn !== '--') ? record.clockIn : ((record.clock_in && record.clock_in !== '--') ? record.clock_in : record.checkInTime);
                           const cOut = (record.clockOut && record.clockOut !== '--') ? record.clockOut : ((record.clock_out && record.clock_out !== '--') ? record.clock_out : record.checkOutTime);
-                          return getWorkingHours(cIn, cOut, record.totalHours, record, liveActiveSeconds);
+                          const currentLoggedInUser = JSON.parse(sessionStorage.getItem('user') || '{}');
+                          const myId = currentLoggedInUser._id || currentLoggedInUser.id;
+                          const recUserId = record.user?._id || record.user?.id || (typeof record.user === 'string' ? record.user : null);
+                          const isMe = Boolean(myId && recUserId && String(myId) === String(recUserId));
+                          const userLiveActive = isMe ? liveActiveSeconds : 0;
+                          return getWorkingHours(cIn, cOut, record.totalHours, record, userLiveActive);
                         })()}
                       </span>
                     </td>
                     <td className="px-3 py-1.5 border-r border-[#e2eae7] dark:border-[#133029]">
                       <span className="text-[11.5px] font-medium text-amber-600 dark:text-amber-400">
-                        {getInactiveTime(record, liveIdleSeconds)}
+                        {(() => {
+                          const currentLoggedInUser = JSON.parse(sessionStorage.getItem('user') || '{}');
+                          const myId = currentLoggedInUser._id || currentLoggedInUser.id;
+                          const recUserId = record.user?._id || record.user?.id || (typeof record.user === 'string' ? record.user : null);
+                          const isMe = Boolean(myId && recUserId && String(myId) === String(recUserId));
+                          const userLiveIdle = isMe ? liveIdleSeconds : 0;
+                          return getInactiveTime(record, userLiveIdle);
+                        })()}
                       </span>
                     </td>
                     <td className="px-3 py-1.5 border-r border-[#e2eae7] dark:border-[#133029]">
@@ -2793,7 +2864,13 @@ const Attendance = () => {
                         {(() => {
                           const cIn = (record.clockIn && record.clockIn !== '--') ? record.clockIn : ((record.clock_in && record.clock_in !== '--') ? record.clock_in : record.checkInTime);
                           const cOut = (record.clockOut && record.clockOut !== '--') ? record.clockOut : ((record.clock_out && record.clock_out !== '--') ? record.clock_out : record.checkOutTime);
-                          return getTotalHoursCombined(cIn, cOut, record.totalHours, record, liveActiveSeconds, liveIdleSeconds);
+                          const currentLoggedInUser = JSON.parse(sessionStorage.getItem('user') || '{}');
+                          const myId = currentLoggedInUser._id || currentLoggedInUser.id;
+                          const recUserId = record.user?._id || record.user?.id || (typeof record.user === 'string' ? record.user : null);
+                          const isMe = Boolean(myId && recUserId && String(myId) === String(recUserId));
+                          const userLiveActive = isMe ? liveActiveSeconds : 0;
+                          const userLiveIdle = isMe ? liveIdleSeconds : 0;
+                          return getTotalHoursCombined(cIn, cOut, record.totalHours, record, userLiveActive, userLiveIdle);
                         })()}
                       </span>
                     </td>

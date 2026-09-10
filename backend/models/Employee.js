@@ -25,8 +25,8 @@ const employeeSchema = new mongoose.Schema({
   bankDetails: { type: String, default: null },
   panCard: { type: String, default: null },
   status: { type: String, default: 'active' },
-  position: { type: String, default: 'Associate' },
-  designation: { type: String, default: 'Employee' },
+  position: { type: String, default: '' },
+  designation: { type: String, default: '' },
   department: { type: String, default: '' },
   managerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   reportingManager: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }

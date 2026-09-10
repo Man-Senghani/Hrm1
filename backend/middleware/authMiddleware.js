@@ -11,19 +11,27 @@ const protect = async (req, res, next) => {
       const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback_secret');
 
       // Verify user exists in active database
-      let dbUser = await User.findById(decoded.id).select('_id role name profileImage').lean();
+      let dbUser = await User.findById(decoded.id).select('_id role name profileImage activeSessionId').lean();
       if (!dbUser && decoded.role) {
         // Resilience recovery: if DB was reseeded or IDs changed, match by decoded name & role
         if (decoded.name) {
-          dbUser = await User.findOne({ name: decoded.name, role: decoded.role }).select('_id role name profileImage').lean();
+          dbUser = await User.findOne({ name: decoded.name, role: decoded.role }).select('_id role name profileImage activeSessionId').lean();
         }
         if (!dbUser) {
-          dbUser = await User.findOne({ role: decoded.role }).select('_id role name profileImage').lean();
+          dbUser = await User.findOne({ role: decoded.role }).select('_id role name profileImage activeSessionId').lean();
         }
       }
 
       if (!dbUser) {
         return res.status(401).json({ message: 'User account not found. Please log in again.' });
+      }
+
+      // 🛡️ Single Session Enforcement: If account logged in on another device, invalidate old token
+      if (decoded.sessionId && dbUser.activeSessionId && dbUser.activeSessionId !== decoded.sessionId) {
+        return res.status(401).json({
+          message: 'Your account was logged in from another device. Please log in again.',
+          code: 'SESSION_TERMINATED'
+        });
       }
 
       req.user = {

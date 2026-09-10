@@ -12,7 +12,7 @@ const HREmployees = () => {
   const [searchTerm, setSearchTerm] = useState(() => sessionStorage.getItem('hr_searchTerm') || '');
   const [filterRole, setFilterRole] = useState(() => {
     try {
-      const stored = sessionStorage.getItem('hr_filterRole');
+      const stored = sessionStorage.getItem('hr_filterRole_v2');
       if (stored) {
         const parsed = JSON.parse(stored);
         if (Array.isArray(parsed) && parsed.length > 0) return parsed;
@@ -22,16 +22,16 @@ const HREmployees = () => {
   });
   const [filterStatus, setFilterStatus] = useState(() => {
     try { 
-      const stored = sessionStorage.getItem('hr_filterStatus');
+      const stored = sessionStorage.getItem('hr_filterStatus_v2');
       if (stored) {
         const parsed = JSON.parse(stored);
         if (Array.isArray(parsed) && parsed.length > 0) return parsed;
       }
-      return ['active']; 
-    } catch { return ['active']; }
+      return ['all']; 
+    } catch { return ['all']; }
   });
   const [tempFilterRole, setTempFilterRole] = useState(['hr', 'manager', 'employee']);
-  const [tempFilterStatus, setTempFilterStatus] = useState(['active']);
+  const [tempFilterStatus, setTempFilterStatus] = useState(['active', 'inactive']);
   const [showFiltersPanel, setShowFiltersPanel] = useState(false);
   const filtersRef = useRef(null);
   const navigate = useNavigate();
@@ -78,24 +78,23 @@ const HREmployees = () => {
   useEffect(() => {
     setCurrentPage(1);
     sessionStorage.setItem('hr_searchTerm', searchTerm);
-    sessionStorage.setItem('hr_filterRole', JSON.stringify(filterRole));
-    sessionStorage.setItem('hr_filterStatus', JSON.stringify(filterStatus));
+    sessionStorage.setItem('hr_filterRole_v2', JSON.stringify(filterRole));
+    sessionStorage.setItem('hr_filterStatus_v2', JSON.stringify(filterStatus));
   }, [searchTerm, filterRole, filterStatus]);
 
   // Filter unique employees, ensuring admins are strictly excluded from HR scope
   const uniqueEmployees = Array.from(new Map(dbEmployees.map(emp => [emp._id, emp])).values())
     .filter(emp => {
-      const empRole = (emp.role || emp.userId?.role || '').toLowerCase();
-      if (empRole === 'admin') return false;
+      const empRole = (emp.role || emp.userId?.role || '').toLowerCase().trim();
+      if (empRole.includes('admin')) return false;
       return true;
     });
 
   // Base scope for this page (respecting active status scope)
   const baseEmployees = uniqueEmployees.filter(emp => {
-    const empStatus = (emp.status || emp.userId?.status || 'active').toLowerCase();
-    if (filterStatus.includes('all')) return true;
-    if (filterStatus.length === 0) return false;
-    return filterStatus.includes(empStatus);
+    const empStatus = (emp.status || emp.userId?.status || 'active').toLowerCase().trim();
+    if (filterStatus.includes('all') || filterStatus.length === 0) return true;
+    return filterStatus.map(s => s.toLowerCase().trim()).includes(empStatus);
   });
 
   const filteredEmployees = baseEmployees.filter(emp => {
@@ -112,12 +111,10 @@ const HREmployees = () => {
       desig.includes(search) ||
       empId.includes(search);
 
-    const empRole = (emp.role || emp.userId?.role || '').toLowerCase();
-    const matchesRole = filterRole.includes('all')
+    const empRole = (emp.role || emp.userId?.role || '').toLowerCase().trim();
+    const matchesRole = filterRole.includes('all') || filterRole.length === 0
       ? true
-      : filterRole.length === 0
-        ? false
-        : filterRole.includes(empRole);
+      : filterRole.map(r => r.toLowerCase().trim()).includes(empRole);
 
     return matchesSearch && matchesRole;
   });
@@ -216,6 +213,16 @@ const HREmployees = () => {
       return (parts[0][0] + parts[1][0]).toUpperCase();
     }
     return name.substring(0, 2).toUpperCase();
+  };
+
+  const getDisplayDesignation = (emp) => {
+    const d = typeof emp.designation === 'object' ? emp.designation?.name : emp.designation;
+    if (!d) return '';
+    const trimmed = String(d).trim();
+    if (['Employee', 'Associate', 'Staff Member', 'N/A', 'node-undef'].includes(trimmed)) {
+      return '';
+    }
+    return trimmed;
   };
 
   const formatDate = (dateStr) => {
@@ -331,12 +338,7 @@ const HREmployees = () => {
     );
   };
 
-  const availableRoles = useMemo(() => {
-    if (currentRole === 'admin') return ['admin', 'hr', 'manager', 'employee'];
-    if (currentRole === 'hr') return ['hr', 'manager', 'employee'];
-    return ['manager', 'employee'];
-  }, [currentRole]);
-
+  const availableRoles = useMemo(() => ['hr', 'manager', 'employee'], []);
   const availableStatuses = useMemo(() => ['active', 'inactive'], []);
 
   const isAllRolesChecked = useMemo(() => {
@@ -386,8 +388,8 @@ const HREmployees = () => {
       e.preventDefault();
       e.stopPropagation();
     }
-    const finalRole = isAllRolesChecked ? ['all'] : [...tempFilterRole];
-    const finalStatus = isAllStatusesChecked ? ['all'] : [...tempFilterStatus];
+    const finalRole = isAllRolesChecked || tempFilterRole.length === 0 ? ['all'] : [...tempFilterRole];
+    const finalStatus = isAllStatusesChecked || tempFilterStatus.length === 0 ? ['all'] : [...tempFilterStatus];
     setFilterRole(finalRole);
     setFilterStatus(finalStatus);
     setShowFiltersPanel(false);
@@ -399,14 +401,14 @@ const HREmployees = () => {
       e.stopPropagation();
     }
     setTempFilterRole([...availableRoles]);
-    setTempFilterStatus(['active']);
+    setTempFilterStatus([...availableStatuses]);
     setFilterRole(['all']);
-    setFilterStatus(['active']);
+    setFilterStatus(['all']);
     setShowFiltersPanel(false);
   };
 
   const activeFiltersCount = (filterRole.length > 0 && !filterRole.includes('all') ? filterRole.length : 0) +
-    (filterStatus.length > 0 && !(filterStatus.length === 1 && filterStatus[0] === 'active') ? filterStatus.length : 0);
+    (filterStatus.length > 0 && !filterStatus.includes('all') ? filterStatus.length : 0);
 
   return (
     <div className="animate-fade-in w-full pb-12">
@@ -452,8 +454,8 @@ const HREmployees = () => {
               onClick={(e) => {
                 e.stopPropagation();
                 if (!showFiltersPanel) {
-                  setTempFilterRole(filterRole.includes('all') ? [...availableRoles] : [...filterRole]);
-                  setTempFilterStatus(filterStatus.includes('all') ? [...availableStatuses] : [...filterStatus]);
+                  setTempFilterRole(filterRole.includes('all') || filterRole.length === 0 ? [...availableRoles] : [...filterRole]);
+                  setTempFilterStatus(filterStatus.includes('all') || filterStatus.length === 0 ? [...availableStatuses] : [...filterStatus]);
                 }
                 setShowFiltersPanel(!showFiltersPanel);
               }}
@@ -545,6 +547,7 @@ const HREmployees = () => {
                   <th className="py-2.5 px-4 text-[10px] font-bold text-slate-500 dark:text-[#829e92] uppercase tracking-wider border-r border-slate-200 dark:border-[#1e3b32] w-[130px] max-w-[130px]">EMPLOYEE ID</th>
                   <th className="py-2.5 px-4 text-[10px] font-bold text-slate-500 dark:text-[#829e92] uppercase tracking-wider border-r border-slate-200 dark:border-[#1e3b32] w-[240px] max-w-[240px]">EMPLOYEE</th>
                   <th className="py-2.5 px-4 text-[10px] font-bold text-slate-500 dark:text-[#829e92] uppercase tracking-wider border-r border-slate-200 dark:border-[#1e3b32]">DESIGNATION</th>
+                  <th className="py-2.5 px-4 text-[10px] font-bold text-slate-500 dark:text-[#829e92] uppercase tracking-wider border-r border-slate-200 dark:border-[#1e3b32]">DEPARTMENT</th>
                   <th className="py-2.5 px-4 text-[10px] font-bold text-slate-500 dark:text-[#829e92] uppercase tracking-wider border-r border-slate-200 dark:border-[#1e3b32]">JOIN DATE</th>
                   <th className="py-2.5 px-4 text-[10px] font-bold text-slate-500 dark:text-[#829e92] uppercase tracking-wider">STATUS</th>
                 </tr>
@@ -552,7 +555,7 @@ const HREmployees = () => {
               <tbody className="divide-y divide-slate-200 dark:divide-[#1e3b32]">
                 {paginatedEmployees.length === 0 ? (
                 <tr>
-                  <td colSpan="5" className="text-center py-16 text-slate-400 dark:text-[#829e92] font-semibold text-xs">
+                  <td colSpan="6" className="text-center py-16 text-slate-400 dark:text-[#829e92] font-semibold text-xs">
                     No active personnel nodes matching filter.
                   </td>
                 </tr>
@@ -586,7 +589,11 @@ const HREmployees = () => {
                       </td>
                       {/* Designation */}
                       <td className="py-3 px-4 text-xs font-medium text-slate-700 dark:text-gray-300 border-r border-slate-200 dark:border-[#1e3b32]">
-                        {emp.designation || 'N/A'}
+                        {getDisplayDesignation(emp)}
+                      </td>
+                      {/* Department */}
+                      <td className="py-3 px-4 text-xs font-medium text-slate-700 dark:text-gray-300 border-r border-slate-200 dark:border-[#1e3b32]">
+                        {typeof emp.department === 'object' ? emp.department?.name : (emp.department || '')}
                       </td>
                       {/* Join Date */}
                       <td className="py-3 px-4 text-xs font-medium text-slate-600 dark:text-gray-400 border-r border-slate-200 dark:border-[#1e3b32]">

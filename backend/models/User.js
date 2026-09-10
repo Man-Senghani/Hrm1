@@ -15,6 +15,7 @@ const userSchema = new mongoose.Schema({
   teamId: { type: mongoose.Schema.Types.ObjectId, ref: 'Team', default: null },
   reportingManager: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   status: { type: String, enum: ['active', 'inactive'], default: 'active' },
+  activeSessionId: { type: String, default: null },
   resetPasswordToken: String,
   resetPasswordExpire: Date
 }, { timestamps: true });

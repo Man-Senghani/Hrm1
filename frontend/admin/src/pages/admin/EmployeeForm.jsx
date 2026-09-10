@@ -199,8 +199,8 @@ const EmployeeForm = () => {
 
           const fetchedRole = emp.userId?.role || emp.role || 'employee';
           let fetchedDesignation = emp.designation || emp.position || '';
-          if (!fetchedDesignation || fetchedDesignation === 'Employee' || fetchedDesignation === 'Staff Member') {
-            fetchedDesignation = fetchedRole === 'admin' ? 'Admin' : fetchedRole === 'hr' ? 'HR' : fetchedRole === 'manager' ? 'Manager' : 'Employee';
+          if (['Employee', 'Associate', 'Staff Member', 'Admin', 'HR', 'Manager', 'N/A'].includes(fetchedDesignation)) {
+            fetchedDesignation = '';
           }
 
           setFormData({
@@ -284,11 +284,9 @@ const EmployeeForm = () => {
 
     setErrors(newErrors);
     if (name === 'role') {
-      const capRole = value === 'admin' ? 'Admin' : value === 'hr' ? 'HR' : value === 'manager' ? 'Manager' : 'Employee';
       setFormData(prev => ({
         ...prev,
-        role: value,
-        designation: (!prev.designation || prev.designation === 'Employee' || prev.designation === 'Staff Member' || prev.designation === 'Manager' || prev.designation === 'HR' || prev.designation === 'Admin') ? capRole : prev.designation
+        role: value
       }));
     } else {
       setFormData({ ...formData, [name]: value });

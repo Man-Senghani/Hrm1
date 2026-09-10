@@ -149,30 +149,39 @@ const ExportFilterModal = ({
     return initial;
   });
 
-  // Re-sync when modal opens or columns change
+  const wasOpenRef = useRef(false);
+
+  // Re-sync only when modal opens (transitions from false to true)
   useEffect(() => {
     if (isOpen) {
-      setSelectedColumnKeys(columns.filter(c => c.defaultSelected !== false).map(c => c.key));
-      setDataScope(hasFilterDifference ? 'filtered' : 'all');
-      const resetFilters = {};
-      customFilters.forEach(f => {
-        resetFilters[f.key] = 'all';
-      });
-      setActiveCustomFilters(resetFilters);
       document.body.style.overflow = 'hidden';
-      
+
       const handleKeyDown = (e) => {
         if (e.key === 'Escape') onClose();
       };
       window.addEventListener('keydown', handleKeyDown);
+
+      // Only initialize state when the modal transitions from closed to open
+      if (!wasOpenRef.current) {
+        setSelectedColumnKeys(columns.filter(c => c.defaultSelected !== false).map(c => c.key));
+        setDataScope(hasFilterDifference ? 'filtered' : 'all');
+        const resetFilters = {};
+        customFilters.forEach(f => {
+          resetFilters[f.key] = 'all';
+        });
+        setActiveCustomFilters(resetFilters);
+        wasOpenRef.current = true;
+      }
+
       return () => {
         document.body.style.overflow = '';
         window.removeEventListener('keydown', handleKeyDown);
       };
     } else {
+      wasOpenRef.current = false;
       document.body.style.overflow = '';
     }
-  }, [isOpen, columns, hasFilterDifference]);
+  }, [isOpen]);
 
   // Compute records to export based on scope and in-modal filters
   const recordsToExport = useMemo(() => {

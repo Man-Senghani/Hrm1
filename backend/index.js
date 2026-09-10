@@ -125,35 +125,22 @@ io.on('connection', (socket) => {
       const logoutTime = data?.timestamp || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
       if (userId) {
         const TimeTrack = require('./models/TimeTrack');
-        const Attendance = require('./models/Attendance');
         const now = new Date();
 
+        // 🛡️ Logout should NOT checkout! Only pause running sessions so time is preserved without checking out.
         await TimeTrack.updateMany(
-          { employeeId: userId, status: { $in: ['active', 'paused', 'idle'] } },
-          { $set: { status: 'completed', isRunning: false, endTime: now, segmentStart: null } }
+          { employeeId: userId, status: 'active' },
+          { $set: { status: 'paused', isRunning: false, segmentStart: null } }
         );
 
-        io.to(`user_${userId}`).emit('timer_stopped', {
-          userId,
-          hasActiveSession: false,
-          isRunning: false,
-          status: 'completed',
-          activeTime: 0
-        });
-        io.to(`user_${userId}`).emit('timer_update', {
-          hasActiveSession: false,
-          isRunning: false,
-          status: 'completed',
-          activeTime: 0
-        });
         io.to(`user_${userId}`).emit('desktop_app_logout', {
           userId,
-          message: `You are successfully logged out at ${logoutTime}`,
+          message: `Desktop app logged out at ${logoutTime}`,
           time: logoutTime,
           logoutTime: logoutTime,
           timestamp: new Date().toISOString()
         });
-        console.log(`[SOCKET DESKTOP LOGOUT] Emitted for user_${userId} at ${logoutTime}`);
+        console.log(`[SOCKET DESKTOP LOGOUT] Emitted for user_${userId} at ${logoutTime} (Attendance kept active, not checked out)`);
       }
     } catch (err) {
       console.error('[SOCKET DESKTOP LOGOUT ERROR]', err);
@@ -349,4 +336,21 @@ server.listen(PORT, '0.0.0.0', () => {
 
   // Initialize Cron Jobs
   initCronJobs();
+
+  // 🔄 Keep-Alive Auto-Pinger (Prevents cloud hosts like Render free tier from sleeping)
+  const isCloudHost = process.env.RENDER || process.env.RENDER_EXTERNAL_URL || process.env.NODE_ENV === 'production';
+  if (isCloudHost) {
+    const keepAliveUrl = process.env.RENDER_EXTERNAL_URL
+      ? `${process.env.RENDER_EXTERNAL_URL}/api/health`
+      : 'https://hrm1-1-zli1.onrender.com/api/health';
+    const https = require('https');
+    console.log(`[KEEP-ALIVE] Cloud keep-alive pinger initialized for ${keepAliveUrl}`);
+    setInterval(() => {
+      https.get(keepAliveUrl, (res) => {
+        // Cloud load balancer registers incoming traffic and resets idle sleep timer
+      }).on('error', (e) => {
+        // Silently catch network fluctuation
+      });
+    }, 10 * 60 * 1000); // Ping every 10 minutes
+  }
 });

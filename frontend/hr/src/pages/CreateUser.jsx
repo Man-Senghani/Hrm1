@@ -399,7 +399,7 @@ const CreateUser = () => {
         password: formData.password,
         role: formData.role,
         department: formData.department,
-        designation: formData.designation || formData.department,
+        designation: (formData.designation || '').trim(),
         phone: formData.phone,
         gender: formData.gender,
         address: formData.address,

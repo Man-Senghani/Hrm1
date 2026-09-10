@@ -217,6 +217,14 @@ async function pollSessionStatus() {
     const res = await fetch(`${API_BASE}/status`, {
       headers: { Authorization: `Bearer ${authToken}` }
     });
+    if (res.status === 401) {
+      const errData = await res.json().catch(() => ({}));
+      if (errData.code === 'SESSION_TERMINATED') {
+        alert('Your account has been logged in on another device. You have been logged out on this machine.');
+        logout();
+        return;
+      }
+    }
     if (!res.ok) return;
     const data = await res.json();
     applyServerState(data);
@@ -771,6 +779,14 @@ async function initSocket() {
     const res = await fetch(`${BACKEND_HOST}/api/auth/me`, {
       headers: { Authorization: `Bearer ${authToken}` }
     });
+    if (res.status === 401) {
+      const errData = await res.json().catch(() => ({}));
+      if (errData.code === 'SESSION_TERMINATED') {
+        alert('Your account has been logged in on another device. You have been logged out on this machine.');
+        logout();
+        return;
+      }
+    }
     const user = await res.json();
     if (!user?.id && !user?._id) return;
     socket = io(BACKEND_HOST);
@@ -784,6 +800,11 @@ async function initSocket() {
       else pollSessionStatus();
     });
     socket.on('timer_update', (data) => { if (data) applyServerState(data); });
+    socket.on('force_device_logout', (data) => {
+      console.warn('[FORCE DEVICE LOGOUT] Another device logged in to this account.');
+      alert(data?.message || 'Your account has been logged in on another device. You have been logged out on this machine.');
+      logout();
+    });
     socket.on('new_notification', (notif) => {
       if (window.electronAPI?.notifyNative) {
         window.electronAPI.notifyNative('New Announcement', notif.message).catch(() => { });
@@ -909,7 +930,7 @@ async function logout() {
   const currentSocket = socket;
   const nowStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
 
-  // 1. Tell backend to stop tracking and record logout
+  // 1. Tell backend to record logout, but DO NOT check out! Only pause timer if running so time is preserved.
   if (currentToken) {
     try {
       await fetch(`${API_BASE}/desktop-logout`, {
@@ -918,10 +939,12 @@ async function logout() {
         body: JSON.stringify({ logoutTime: nowStr })
       }).catch(() => {});
 
-      await fetch(`${API_BASE}/stop`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${currentToken}`, 'Content-Type': 'application/json' }
-      }).catch(() => {});
+      if (status === 'ACTIVE' || isSessionRunning) {
+        await fetch(`${API_BASE}/pause`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${currentToken}`, 'Content-Type': 'application/json' }
+        }).catch(() => {});
+      }
     } catch (e) {
       console.error('[LOGOUT NOTIFICATION ERROR]', e);
     }

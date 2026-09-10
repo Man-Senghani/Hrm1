@@ -445,7 +445,7 @@ exports.getAttendance = async (req, res) => {
       query = {};
     } else if (role === 'hr') {
       const User = require('../models/User');
-      const nonAdminUsers = await User.find({ role: { $nin: ['admin', 'superadmin'] } }).select('_id');
+      const nonAdminUsers = await User.find({ role: { $not: /admin/i } }).select('_id');
       const hrUserIds = nonAdminUsers.map(u => u._id.toString());
       query = { user: { $in: hrUserIds } };
     } else if (role === 'manager') {
@@ -453,9 +453,17 @@ exports.getAttendance = async (req, res) => {
       query = { user: { $in: empIds } };
     }
 
-    const records = await Attendance.find(query)
+    let records = await Attendance.find(query)
       .populate('user', 'name role email')
       .lean();
+
+    if (role === 'hr') {
+      records = records.filter(r => {
+        const userRole = (r.user?.role || '').toLowerCase();
+        const userName = (r.user?.name || '').toLowerCase();
+        return !userRole.includes('admin') && !userName.includes('admin');
+      });
+    }
 
     const Leave = require('../models/Leave');
     let leaveQuery = { status: 'approved' };
@@ -464,7 +472,7 @@ exports.getAttendance = async (req, res) => {
       leaveQuery.user = { $in: empIds };
     } else if (role === 'hr') {
       const User = require('../models/User');
-      const users = await User.find({ role: { $nin: ['admin', 'superadmin'] } }).select('_id');
+      const users = await User.find({ role: { $not: /admin/i } }).select('_id');
       const hrUserIds = users.map(u => u._id.toString());
       leaveQuery.user = { $in: hrUserIds };
     }
@@ -519,7 +527,7 @@ exports.getAttendance = async (req, res) => {
     const User = require('../models/User');
     let targetUsers = [];
     if (role === 'admin' || role === 'hr') {
-      targetUsers = await User.find({ role: { $nin: ['admin', 'superadmin'] } }).select('_id name email role joinDate createdAt').lean();
+      targetUsers = await User.find({ role: { $not: /admin/i } }).select('_id name email role joinDate createdAt').lean();
     } else if (role === 'manager') {
       const empIds = await getManagerSubordinateUserIds(userId);
       targetUsers = await User.find({ _id: { $in: empIds } }).select('_id name email role joinDate createdAt').lean();

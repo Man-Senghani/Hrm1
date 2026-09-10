@@ -556,7 +556,26 @@ exports.getHRTime = async (req, res) => {
 
 exports.getAllTime = async (req, res) => {
   try {
-    res.json(await TimeTrack.find({}).sort({ date: -1 }).populate('employeeId', 'name fullName email').lean());
+    const userRole = (req.user?.role || '').toLowerCase();
+    let filter = {};
+    if (userRole === 'hr') {
+      const User = require('../models/User');
+      const nonAdminUsers = await User.find({ role: { $not: /admin/i } }).select('_id');
+      const allowedIds = nonAdminUsers.map(u => u._id);
+      filter = {
+        employeeId: { $in: allowedIds },
+        employeeRole: { $not: /admin/i }
+      };
+    }
+    const tracks = await TimeTrack.find(filter).sort({ date: -1 }).populate('employeeId', 'name fullName email role').lean();
+    const result = userRole === 'hr'
+      ? tracks.filter(t => {
+          const r = (t.employeeId?.role || t.employeeRole || '').toLowerCase();
+          const n = (t.employeeId?.name || t.employeeId?.fullName || '').toLowerCase();
+          return !r.includes('admin') && !n.includes('admin');
+        })
+      : tracks;
+    res.json(result);
   } catch (err) { res.status(500).json({ message: 'All logs failed', error: err.message }); }
 };
 

@@ -342,6 +342,15 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
       window.dispatchEvent(new CustomEvent('timerStatusChanged', { detail: { status: 'stopped', ...data } }));
     });
 
+    socket.on('force_device_logout', (data) => {
+      toast.error(data?.message || 'Your account has been logged in on another device. Logging out...', { duration: 4500 });
+      sessionStorage.clear();
+      localStorage.removeItem('token');
+      setTimeout(() => {
+        window.location.href = '/';
+      }, 1500);
+    });
+
     return () => socket.disconnect();
   }, [token, role, activeRole]);
 

@@ -29,11 +29,28 @@ exports.login = async (req, res) => {
         return res.status(403).json({ message: `Access Denied: You are not authorized for role ${role}` });
       }
 
+      const crypto = require('crypto');
+      const sessionId = crypto.randomUUID ? crypto.randomUUID() : crypto.randomBytes(16).toString('hex');
+
+      // Notify previous active session on another device (if any) to automatically logout
+      const io = req.app.get('io');
+      if (io) {
+        io.to(`user_${user._id}`).emit('force_device_logout', {
+          userId: user._id.toString(),
+          message: 'Your account has been logged in on another device. You have been logged out on this machine.',
+          newSessionId: sessionId
+        });
+      }
+
+      user.activeSessionId = sessionId;
+      await user.save();
+
       const token = jwt.sign(
         {
           id: user._id,
           role: user.role,
-          name: user.name
+          name: user.name,
+          sessionId
         },
         process.env.JWT_SECRET || 'fallback_secret',
         { expiresIn: '30d' }
