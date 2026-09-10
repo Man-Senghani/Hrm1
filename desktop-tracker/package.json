@@ -11,7 +11,7 @@
   "build": {
     "appId": "com.fluidhr.tracker",
     "productName": "FluidHR Tracker",
-    "compression": "normal",
+    "compression": "store",
     "protocols": [
       {
         "name": "FluidHR Tracker Protocol",
