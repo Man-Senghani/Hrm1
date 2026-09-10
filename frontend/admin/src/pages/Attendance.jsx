@@ -963,7 +963,10 @@ const getTotalHoursCombined = (clockIn, clockOut, totalHours, record, activeLive
     idleSecs = liveIdleSecs;
   }
 
-  const combinedSecs = (record?.totalTime ?? (activeSecs + idleSecs));
+  // Total hours should always be the true sum of working (active) hours + inactive (idle) hours
+  const combinedSecs = (activeSecs + idleSecs) > 0 
+    ? (activeSecs + idleSecs) 
+    : (record?.totalTime ?? 0);
   if (combinedSecs > 0) {
     const h = Math.floor(combinedSecs / 3600);
     const m = Math.floor((combinedSecs % 3600) / 60);
