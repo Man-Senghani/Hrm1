@@ -751,7 +751,7 @@ exports.getDailyData = async (req, res) => {
   try {
     const { employeeId, date } = req.params;
 
-    if (req.user.id !== employeeId && req.user.role !== 'admin' && req.user.role !== 'hr') {
+    if (req.user.id !== employeeId && req.user.role !== 'admin' && req.user.role !== 'hr' && req.user.role !== 'manager') {
       return res.status(403).json({ message: 'Unauthorized' });
     }
 
@@ -765,6 +765,7 @@ exports.getDailyData = async (req, res) => {
       totalWorkedDuration: Math.floor((track.activeTime || 0) / 60),
       totalPauseDuration: Math.floor((track.idleTime || 0) / 60),
       pauseEvents: track.sessions ? track.sessions.filter(s => s.pause) : [],
+      sessions: track.sessions || [],
       isAutoStop: track.isAutoStop || false
     });
   } catch (err) {

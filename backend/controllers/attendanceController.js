@@ -341,7 +341,9 @@ const buildEmployeeAttendanceHistory = async (userId) => {
         totalActiveTime: activeSecs,
         activeTime: activeSecs,
         idleTime: tt?.idleTime || 0,
-        totalTime: ((activeSecs || 0) + (tt?.idleTime || 0)) || tt?.totalTime || 0
+        totalTime: ((activeSecs || 0) + (tt?.idleTime || 0)) || tt?.totalTime || 0,
+        sessions: tt?.sessions || [],
+        startTime: tt?.startTime || existingAtt.checkInTime
       });
     } else {
       const dStart = new Date(d);
@@ -627,6 +629,8 @@ exports.getAttendance = async (req, res) => {
             }
             rec.idleTime = tt.idleTime || 0;
             rec.totalTime = ((rec.activeTime || 0) + (tt.idleTime || 0)) || tt.totalTime || 0;
+            rec.sessions = tt.sessions || [];
+            rec.startTime = tt.startTime || rec.checkInTime;
           }
 
           // Fallback calculation: calculate duration between checkInTime and checkOutTime if totalHours is 0

@@ -45,8 +45,26 @@ const AttendanceSessionDetailModal = ({ isOpen, onClose, record }) => {
   useEffect(() => {
     if (record) {
       setActiveRecord(record);
-      setSelectedDate(parseToYYYYMMDD(record.date));
+      const dateStr = parseToYYYYMMDD(record.date);
+      setSelectedDate(dateStr);
       setCurrentPage(1);
+
+      // If initial record has no sessions array, fetch it immediately from daily endpoint
+      const userId = record.user?._id || record.user?.id || (typeof record.user === 'string' ? record.user : null) || record.userId;
+      if (userId && (!Array.isArray(record.sessions) || record.sessions.length === 0)) {
+        const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+        axios.get(`/api/time/daily/${userId}/${dateStr}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        }).then(dailyRes => {
+          if (dailyRes.data && (dailyRes.data.sessions || dailyRes.data.pauseEvents)) {
+            setActiveRecord(prev => ({
+              ...(prev || record),
+              sessions: dailyRes.data.sessions || dailyRes.data.pauseEvents || [],
+              startTime: dailyRes.data.startTime || prev?.startTime || record.startTime || record.checkInTime
+            }));
+          }
+        }).catch(() => {});
+      }
     }
   }, [record, isOpen]);
 
@@ -69,6 +87,15 @@ const AttendanceSessionDetailModal = ({ isOpen, onClose, record }) => {
   const empName = currentRecord.user?.name || currentRecord.name || currentRecord.employeeName || 'Employee';
   const empRole = currentRecord.department || currentRecord.user?.role || 'employee';
 
+  // Helper to format minutes cleanly
+  const formatMinutes = (seconds) => {
+    const totalSecs = parseInt(seconds) || 0;
+    const h = Math.floor(totalSecs / 3600);
+    const m = Math.floor((totalSecs % 3600) / 60);
+    if (h > 0) return `${h}h ${m}m`;
+    return `${m}m`;
+  };
+
   // Fetch activity log for selected date
   const handleDateChange = async (newDateStr) => {
     if (!newDateStr) return;
@@ -90,9 +117,40 @@ const AttendanceSessionDetailModal = ({ isOpen, onClose, record }) => {
       });
       
       const resData = response.data?.attendance || response.data?.logs || response.data || [];
-      const match = Array.isArray(resData) 
-        ? resData.find(r => r.date === newDateStr || (r.user && (r.user._id === userId || r.user === userId)))
+      let match = Array.isArray(resData) 
+        ? resData.find(r => {
+            const rDate = r.date ? (typeof r.date === 'string' ? r.date.split('T')[0] : r.date) : '';
+            const rUserId = r.user?._id || r.user?.id || (typeof r.user === 'string' ? r.user : null);
+            return rDate === newDateStr && (!userId || String(rUserId) === String(userId));
+          })
         : (resData.date === newDateStr ? resData : null);
+
+      // If attendance record doesn't have sessions, fetch from daily endpoint
+      if (userId && (!match || !Array.isArray(match.sessions) || match.sessions.length === 0)) {
+        try {
+          const dailyRes = await axios.get(`/api/time/daily/${userId}/${newDateStr}`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          if (dailyRes.data && (dailyRes.data.sessions || dailyRes.data.pauseEvents)) {
+            const fetchedSessions = dailyRes.data.sessions || dailyRes.data.pauseEvents || [];
+            if (match) {
+              match.sessions = fetchedSessions;
+              if (dailyRes.data.startTime) match.startTime = dailyRes.data.startTime;
+            } else {
+              match = {
+                date: newDateStr,
+                user: record.user,
+                name: record.name,
+                employeeName: record.employeeName,
+                department: record.department,
+                checkInTime: dailyRes.data.startTime,
+                startTime: dailyRes.data.startTime,
+                sessions: fetchedSessions
+              };
+            }
+          }
+        } catch (dailyErr) {}
+      }
 
       if (match) {
         setActiveRecord(match);
@@ -103,6 +161,7 @@ const AttendanceSessionDetailModal = ({ isOpen, onClose, record }) => {
           name: record.name,
           employeeName: record.employeeName,
           department: record.department,
+          sessions: [],
           pauseHistory: [],
           breaks: []
         });
@@ -115,6 +174,7 @@ const AttendanceSessionDetailModal = ({ isOpen, onClose, record }) => {
         name: record.name,
         employeeName: record.employeeName,
         department: record.department,
+        sessions: [],
         pauseHistory: [],
         breaks: []
       });
@@ -166,12 +226,85 @@ const AttendanceSessionDetailModal = ({ isOpen, onClose, record }) => {
   const formattedDate = formatDateDisplay(selectedDate || currentRecord.date);
 
   // Initial check-in time formatted cleanly
-  const rawCheckIn = currentRecord.clockIn || currentRecord.clock_in || currentRecord.checkInTime || '--:--';
+  const rawCheckIn = currentRecord.startTime || currentRecord.clockIn || currentRecord.clock_in || currentRecord.checkInTime || '--:--';
   const initialCheckIn = format12hTime(rawCheckIn);
 
   // Format pause/resume logs matching table structure:
   // Columns: CHECK-IN TIME | NO. OF PAUSES | RESUME TIME | PAUSE TIME | TOTAL TIME
   const getDailyActivityRows = () => {
+    // 1. Primary: TimeTrack sessions array
+    if (Array.isArray(currentRecord.sessions) && currentRecord.sessions.length > 0) {
+      const cleanSessions = currentRecord.sessions.filter((sess, index, self) => {
+        const startOrResume = sess.start || sess.resume;
+        const pauseOrEnd = sess.pause || sess.end;
+        if (!startOrResume) return false;
+
+        // Deduplicate sessions starting within 10 seconds of previous session
+        if (index > 0) {
+          const prevSess = self[index - 1];
+          const currTime = new Date(startOrResume).getTime();
+          const prevTime = new Date(prevSess.start || prevSess.resume || 0).getTime();
+          if (Math.abs(currTime - prevTime) < 10000) return false;
+        }
+
+        // Ignore instant zero-duration segments (<= 5 seconds)
+        if (pauseOrEnd) {
+          const diffMs = new Date(pauseOrEnd).getTime() - new Date(startOrResume).getTime();
+          if (diffMs <= 5000) return false;
+        }
+
+        return true;
+      });
+
+      const rows = [];
+      cleanSessions.forEach((session, idx) => {
+        const startOrResume = session.start || session.resume;
+        const isLastSession = idx === cleanSessions.length - 1;
+        const nextSession = cleanSessions[idx + 1];
+
+        let pauseOrEnd = session.pause || session.end;
+        if (!pauseOrEnd && nextSession) {
+          pauseOrEnd = nextSession.start || nextSession.resume;
+        }
+
+        if (startOrResume) {
+          const resumeStr = format12hTime(startOrResume);
+          let pauseStr = '--:--';
+          let totalStr = '0m';
+
+          if (pauseOrEnd) {
+            pauseStr = format12hTime(pauseOrEnd);
+            const diffSecs = Math.max(0, Math.floor((new Date(pauseOrEnd).getTime() - new Date(startOrResume).getTime()) / 1000));
+            totalStr = formatMinutes(diffSecs);
+          } else if (isLastSession) {
+            const isToday = parseToYYYYMMDD(currentRecord.date) === todayStr;
+
+            if (isToday && (currentRecord.status === 'active' || currentRecord.isRunning)) {
+              pauseStr = 'Running...';
+              const diffSecs = Math.max(0, Math.floor((Date.now() - new Date(startOrResume).getTime()) / 1000));
+              totalStr = formatMinutes(diffSecs);
+            } else {
+              const effectiveEnd = currentRecord.idleStart || currentRecord.endTime || currentRecord.checkOutTime || currentRecord.updatedAt || Date.now();
+              pauseStr = format12hTime(effectiveEnd);
+              const diffSecs = Math.max(0, Math.floor((new Date(effectiveEnd).getTime() - new Date(startOrResume).getTime()) / 1000));
+              totalStr = formatMinutes(diffSecs);
+            }
+          }
+
+          rows.push({
+            checkInTime: initialCheckIn,
+            noOfPauses: idx + 1,
+            resumeTime: resumeStr,
+            pauseTime: pauseStr,
+            totalTime: totalStr
+          });
+        }
+      });
+
+      if (rows.length > 0) return rows;
+    }
+
+    // 2. Fallback: pauseHistory
     if (Array.isArray(currentRecord.pauseHistory) && currentRecord.pauseHistory.length > 0) {
       return currentRecord.pauseHistory.map((item, index) => ({
         checkInTime: initialCheckIn,
@@ -182,6 +315,7 @@ const AttendanceSessionDetailModal = ({ isOpen, onClose, record }) => {
       }));
     }
 
+    // 3. Fallback: breaks
     if (Array.isArray(currentRecord.breaks) && currentRecord.breaks.length > 0) {
       return currentRecord.breaks.map((item, index) => ({
         checkInTime: initialCheckIn,
