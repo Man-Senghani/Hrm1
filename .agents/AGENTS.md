@@ -16,3 +16,5 @@
 
 ## Production Build & Dist File Synchronization
 - **Automatic Dist Bundle Rebuild:** Whenever frontend source code files (`frontend/...`) are edited or modified, always run `npm run build` so that production `dist/` static bundles (`frontend/admin/dist`, `frontend/hr/dist`, `frontend/employee/dist`, `frontend/manager/dist`, `frontend/login/dist`) remain freshly updated and in sync with the source code.
+- **Automatic Zip Package Regeneration:** Immediately after rebuilding dist bundles, always run `node create_hostinger_zip.js` and copy `hostinger_public_html.zip` to `dist_bundle.zip`, `hrm-production.zip`, and `hrm-master-production.zip` so all deployment archives contain the exact same latest changes.
+- **Strict No-Commit Rule:** Under no circumstances should `git commit` be executed unless explicitly instructed by the user ("do not commit the code").

@@ -17,6 +17,7 @@ import {
   Briefcase,
   User
 } from 'lucide-react';
+import { syncSessionFromActiveAccount, clearActiveAccountAndSession, setupCrossTabSessionSync } from '@shared/utils/sessionSync';
 
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Attendance = lazy(() => import('./pages/Attendance'));
@@ -32,7 +33,6 @@ const Chat = lazy(() => import('@shared/pages/Chat'));
 const Profile = lazy(() => import('@shared/pages/Profile'));
 const Settings = lazy(() => import('@shared/pages/Settings'));
 const Notifications = lazy(() => import('../../admin/src/pages/Notifications'));
-
 const DailyReport = lazy(() => import('./pages/DailyReport'));
 
 const ScrollToTop = () => {
@@ -55,22 +55,30 @@ const RouteLoadingFallback = () => (
 );
 
 function App() {
+  syncSessionFromActiveAccount();
   const user = JSON.parse(sessionStorage.getItem('user') || '{}');
   const token = sessionStorage.getItem('token');
 
   useEffect(() => {
-    if (!token) {
-      window.location.href = '/';
+    syncSessionFromActiveAccount();
+    const currentToken = sessionStorage.getItem('token');
+    if (!currentToken) {
+      window.location.href = '/login';
     }
-  }, [token]);
+
+    const cleanup = setupCrossTabSessionSync(() => {
+      window.location.href = '/login';
+    });
+    return cleanup;
+  }, []);
 
   if (!token) {
     return null;
   }
 
   const handleLogout = () => {
-    sessionStorage.clear();
-    window.location.href = '/';
+    clearActiveAccountAndSession();
+    window.location.href = '/login';
   };
 
   const navItems = [

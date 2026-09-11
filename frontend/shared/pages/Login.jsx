@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { ShieldCheck, ArrowRight, Lock, Mail, AlertCircle, Zap } from 'lucide-react';
+import { ShieldCheck, ArrowRight, Lock, Mail, AlertCircle, Zap, LogOut, UserCheck, AlertTriangle } from 'lucide-react';
 import { EntryButton, EntryInput, EntrySelect } from '../components/EntryPrimitives';
 
 import { API_BASE_URL } from '../services/api';
@@ -14,6 +14,7 @@ const Login = () => {
   const [formErrors, setFormErrors] = useState({});
   const [loading, setLoading] = useState(false);
   const [showThankYou, setShowThankYou] = useState(false);
+  const [existingActiveAccount, setExistingActiveAccount] = useState(null);
 
   const redirectToRole = (userRole, authToken) => {
     const queryParams = new URLSearchParams(window.location.search);
@@ -39,18 +40,60 @@ const Login = () => {
     window.location.href = targetPath;
   };
 
-  // REDIRECT IF ALREADY LOGGED IN
+  // 🛡️ BROWSER-WIDE SINGLE ACCOUNT DETECTION & REDIRECT
   useEffect(() => {
-    const token = sessionStorage.getItem('token');
-    const role = sessionStorage.getItem('role');
+    const checkActiveBrowserAccount = () => {
+      try {
+        const stored = localStorage.getItem('activeAccount');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (parsed && parsed.token && parsed.role) {
+            setExistingActiveAccount(parsed);
+            return;
+          }
+        }
+        setExistingActiveAccount(null);
+      } catch (_) {
+        setExistingActiveAccount(null);
+      }
+    };
 
-    if (token && role) {
-      redirectToRole(role, token);
-    }
+    checkActiveBrowserAccount();
+
+    const handleStorageChange = (e) => {
+      if (e.key === 'activeAccount') {
+        checkActiveBrowserAccount();
+      }
+    };
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
   }, []);
+
+  const handleSwitchAccount = () => {
+    localStorage.removeItem('activeAccount');
+    localStorage.removeItem('token');
+    sessionStorage.clear();
+    setExistingActiveAccount(null);
+    setError('');
+    setEmail('');
+    setPassword('');
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    // 🛡️ Prevent logging into another account if an account is already active in this browser
+    const storedAccountRaw = localStorage.getItem('activeAccount');
+    if (storedAccountRaw) {
+      try {
+        const active = JSON.parse(storedAccountRaw);
+        if (active && active.email && active.email.toLowerCase() !== email.trim().toLowerCase()) {
+          setError(`Another account (${active.name || active.email}) is currently active in this browser. Only one account can be logged in per browser. Please log out from that account first.`);
+          setExistingActiveAccount(active);
+          return;
+        }
+      } catch (_) {}
+    }
 
     const newErrors = {};
     if (!email.trim()) {
@@ -78,8 +121,15 @@ const Login = () => {
         password
       });
 
-      const { token, role, _id, email: userEmail } = response.data;
-      const user = { _id, role, email: userEmail };
+      const { token, role, _id, email: userEmail, name: resName } = response.data;
+      let userName = resName;
+      if (!userName && token) {
+        try {
+          const payload = JSON.parse(atob(token.split('.')[1]));
+          userName = payload.name;
+        } catch (_) {}
+      }
+      const user = { _id, role, email: userEmail, name: userName };
 
       if (!role) {
         throw new Error('Identity verification failed: No role assigned');
@@ -88,6 +138,18 @@ const Login = () => {
       sessionStorage.setItem('token', token);
       sessionStorage.setItem('user', JSON.stringify(user));
       sessionStorage.setItem('role', role);
+
+      // 🛡️ Single Account Per Browser Storage
+      const activeAccountData = {
+        _id,
+        role,
+        email: userEmail,
+        name: userName || userEmail,
+        token,
+        loggedInAt: Date.now()
+      };
+      localStorage.setItem('activeAccount', JSON.stringify(activeAccountData));
+      localStorage.setItem('token', token);
 
       redirectToRole(role, token);
     } catch (err) {
@@ -213,81 +275,155 @@ const Login = () => {
            </div>
         </div>
 
-        {/* AUTH FORM - Unified Login */}
+        {/* AUTH FORM OR ACTIVE BROWSER SESSION NOTICE */}
         <div className="lg:col-span-7 p-6 md:p-8 flex flex-col justify-center bg-[#fffefb]">
-           <div className="max-w-[380px] w-full mx-auto">
+          {existingActiveAccount ? (
+            <div className="max-w-[390px] w-full mx-auto">
+              <div className="w-14 h-14 bg-[#e6f4ea] border border-[#00a76b]/30 rounded-full flex items-center justify-center mb-4 text-[#00a76b]">
+                <ShieldCheck size={30} />
+              </div>
+              
+              <div className="mb-4">
+                <p className="zap-caption-upper mb-1.5 text-[#00a76b]">Single Browser Session</p>
+                <h1 className="text-[26px] md:text-[28px] font-medium text-[#201515] tracking-tight mb-2 leading-[1.15]">
+                  Active Session Detected
+                </h1>
+                <p className="text-[13px] text-[#36342e] font-normal leading-relaxed">
+                  An account is already logged into this browser. Only one account can be logged in per browser.
+                </p>
+              </div>
+
+              {/* ACTIVE USER CARD */}
+              <div className="p-3.5 rounded-lg bg-[#f8f9fa] border border-[#e2e8f0] text-left mb-5 flex items-center gap-3 shadow-xs">
+                <div className="w-10 h-10 rounded-full bg-[#00a76b] text-white font-bold flex items-center justify-center text-sm shadow-xs shrink-0">
+                  {(existingActiveAccount.name || existingActiveAccount.email || 'U').charAt(0).toUpperCase()}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <p className="font-bold text-[#201515] text-[13.5px] truncate">
+                      {existingActiveAccount.name || 'Active User'}
+                    </p>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-300">
+                      {existingActiveAccount.role || 'User'}
+                    </span>
+                  </div>
+                  <p className="text-[12px] text-[#64748b] truncate mt-0.5">
+                    {existingActiveAccount.email}
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    try {
+                      sessionStorage.setItem('token', existingActiveAccount.token);
+                      sessionStorage.setItem('role', existingActiveAccount.role);
+                      sessionStorage.setItem('user', JSON.stringify({
+                        _id: existingActiveAccount._id,
+                        role: existingActiveAccount.role,
+                        email: existingActiveAccount.email,
+                        name: existingActiveAccount.name
+                      }));
+                    } catch (_) {}
+                    redirectToRole(existingActiveAccount.role, existingActiveAccount.token);
+                  }}
+                  className="h-[46px] w-full text-[14px] font-bold bg-[#00a76b] hover:bg-[#201515] text-[#fffefb] rounded-[4px] flex items-center justify-center gap-2 transition-all shadow-sm cursor-pointer"
+                >
+                  Continue to Dashboard <ArrowRight size={18} />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleSwitchAccount}
+                  className="h-[44px] w-full text-[13px] font-bold bg-transparent hover:bg-rose-50 text-rose-600 border border-rose-200 rounded-[4px] flex items-center justify-center gap-2 transition-all cursor-pointer"
+                >
+                  <LogOut size={16} /> Log Out to Use Another Account
+                </button>
+              </div>
+
+              <div className="mt-6 pt-4 border-t border-[#eceae3] text-center">
+                <p className="text-[12px] text-[#939084] font-medium">
+                  Logging out will release this browser so you can sign into another account.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="max-w-[380px] w-full mx-auto">
               <div className="mb-5">
-                 <p className="zap-caption-upper mb-2 text-[#00a76b]">Enterprise Access</p>
-                 <h1 className="text-[28px] md:text-[32px] font-medium text-[#201515] tracking-tight mb-2 leading-[1.1]">
-                    HRMS Login
-                 </h1>
-                 <p className="text-[13px] text-[#36342e] font-medium leading-relaxed">
-                    Enter your corporate credentials to continue to your workspace.
-                 </p>
+                <p className="zap-caption-upper mb-2 text-[#00a76b]">Enterprise Access</p>
+                <h1 className="text-[28px] md:text-[32px] font-medium text-[#201515] tracking-tight mb-2 leading-[1.1]">
+                  HRMS Login
+                </h1>
+                <p className="text-[13px] text-[#36342e] font-medium leading-relaxed">
+                  Enter your corporate credentials to continue to your workspace.
+                </p>
               </div>
 
               <form onSubmit={handleSubmit} noValidate className="space-y-4">
-                 <EntryInput 
-                    label="Email"
-                    type="email" 
-                    value={email}
+                <EntryInput 
+                  label="Email"
+                  type="email" 
+                  value={email}
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    if (formErrors.email) setFormErrors(prev => ({ ...prev, email: '' }));
+                    if (error) setError('');
+                  }}
+                  placeholder="name@company.io"
+                  icon={<Mail size={20} />}
+                  error={formErrors.email}
+                />
+
+                <div>
+                  <EntryInput 
+                    label="Password"
+                    type="password" 
+                    value={password}
                     onChange={(e) => {
-                      setEmail(e.target.value);
-                      if (formErrors.email) setFormErrors(prev => ({ ...prev, email: '' }));
+                      setPassword(e.target.value);
+                      if (formErrors.password) setFormErrors(prev => ({ ...prev, password: '' }));
                       if (error) setError('');
                     }}
-                    placeholder="name@company.io"
-                    icon={<Mail size={20} />}
-                    error={formErrors.email}
+                    placeholder="Enter password"
+                    icon={<Lock size={20} />}
+                    error={formErrors.password}
                   />
+                  <div className="flex justify-end mt-1.5">
+                    <button type="button" onClick={() => navigate('/forgot-password')} className="text-[13px] font-bold text-[#00a76b] hover:text-[#201515] transition-colors">
+                      Forgot Password?
+                    </button>
+                  </div>
+                </div>
 
-                 <div>
-                   <EntryInput 
-                      label="Password"
-                      type="password" 
-                      value={password}
-                      onChange={(e) => {
-                        setPassword(e.target.value);
-                        if (formErrors.password) setFormErrors(prev => ({ ...prev, password: '' }));
-                        if (error) setError('');
-                      }}
-                      placeholder="Enter password"
-                      icon={<Lock size={20} />}
-                      error={formErrors.password}
-                    />
-                   <div className="flex justify-end mt-1.5">
-                     <button type="button" onClick={() => navigate('/forgot-password')} className="text-[13px] font-bold text-[#00a76b] hover:text-[#201515] transition-colors">
-                       Forgot Password?
-                     </button>
-                   </div>
-                 </div>
+                {error && (
+                  <div className="w-full bg-[#fff8f6] border border-[#d9381e] p-3 rounded-[4px] flex items-start gap-2.5 animate-fade-in">
+                    <AlertCircle size={18} className="text-[#d9381e] shrink-0 mt-0.5" />
+                    <span className="text-[13px] text-[#d9381e] font-semibold">{error}</span>
+                  </div>
+                )}
 
-                 {error && (
-                   <div className="w-full bg-[#fff8f6] border border-[#d9381e] p-3 rounded-[4px] flex items-start gap-2.5 animate-fade-in">
-                     <AlertCircle size={18} className="text-[#d9381e] shrink-0 mt-0.5" />
-                     <span className="text-[13px] text-[#d9381e] font-semibold">{error}</span>
-                   </div>
-                 )}
+                <div className="pt-2">
+                  <EntryButton 
+                    type="submit" 
+                    disabled={loading}
+                    variant="primary"
+                    className="h-[48px] text-[15px] font-bold bg-[#00a76b] text-[#fffefb] hover:bg-[#201515] flex items-center justify-center w-full"
+                  >
+                    {loading ? 'Validating credentials...' : 'Login'}
+                    {!loading && <ArrowRight size={20} className="ml-2" />}
+                  </EntryButton>
+                </div>
 
-                 <div className="pt-2">
-                    <EntryButton 
-                      type="submit" 
-                      disabled={loading}
-                      variant="primary"
-                      className="h-[48px] text-[15px] font-bold bg-[#00a76b] text-[#fffefb] hover:bg-[#201515] flex items-center justify-center w-full"
-                    >
-                       {loading ? 'Validating credentials...' : 'Login'}
-                       {!loading && <ArrowRight size={20} className="ml-2" />}
-                    </EntryButton>
-                 </div>
-
-                 <div className="mt-6 pt-5 border-t border-[#eceae3] text-center">
-                    <p className="text-[13px] text-[#939084] font-medium">
-                       Authorized personnel only. All access is logged.
-                    </p>
-                 </div>
+                <div className="mt-6 pt-5 border-t border-[#eceae3] text-center">
+                  <p className="text-[13px] text-[#939084] font-medium">
+                    Authorized personnel only. All access is logged.
+                  </p>
+                </div>
               </form>
-           </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

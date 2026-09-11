@@ -28,6 +28,7 @@ import ForgotPassword from '@shared/pages/ForgotPassword';
 import ResetPassword from '@shared/pages/ResetPassword';
 import MainLayout from '@shared/layouts/MainLayout';
 import { Users, Calendar, Bell, Camera, User, FileText, SlidersHorizontal } from 'lucide-react';
+import { syncSessionFromActiveAccount, setupCrossTabSessionSync } from '@shared/utils/sessionSync';
 
 // Route-level pages are lazy-loaded so a role only downloads the code for
 // the pages it actually visits, instead of every page in the app upfront.
@@ -92,6 +93,7 @@ const RouteLoadingFallback = () => (
 
 // ROUTE PROTECTION LOGIC
 const ProtectedRoute = ({ children, allowedRole }) => {
+  syncSessionFromActiveAccount();
   const token = sessionStorage.getItem('token');
   const role = sessionStorage.getItem('role');
 
@@ -118,6 +120,13 @@ const ProtectedRoute = ({ children, allowedRole }) => {
 };
 
 const App = () => {
+  React.useEffect(() => {
+    syncSessionFromActiveAccount();
+    const cleanup = setupCrossTabSessionSync(() => {
+      window.location.href = '/login';
+    });
+    return cleanup;
+  }, []);
   // Background chunk preloader to ensure instant navigation for key views without initial load freeze
   React.useEffect(() => {
     // Batch 1: Primary pages across all modules (1.5 seconds after mount)

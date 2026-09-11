@@ -12,8 +12,29 @@ import {
   CheckSquare, 
   Square, 
   Filter,
-  Users
+  Users,
+  Calendar
 } from 'lucide-react';
+
+const getLocalYYYYMMDD = (d) => {
+  if (!d) return '';
+  if (typeof d === 'string') return d.split('T')[0];
+  const offset = d.getTimezoneOffset() * 60000;
+  return new Date(d.getTime() - offset).toISOString().split('T')[0];
+};
+
+const getItemDateString = (item) => {
+  if (!item) return '';
+  const raw = item.date || item.checkInTime || item.createdAt;
+  if (!raw) return '';
+  if (typeof raw === 'string') {
+    return raw.split('T')[0];
+  }
+  if (raw instanceof Date) {
+    return getLocalYYYYMMDD(raw);
+  }
+  return '';
+};
 
 /**
  * Stylish custom dropdown select for export filters with smooth animations,
@@ -133,6 +154,26 @@ const ExportFilterModal = ({
   // Determine if there is an active view filter
   const hasFilterDifference = filteredData && filteredData.length !== allData.length;
   
+  // Date Range state
+  const todayStr = useMemo(() => getLocalYYYYMMDD(new Date()), []);
+  const [startDate, setStartDate] = useState(() => `${todayStr.slice(0, 7)}-01`);
+  const [endDate, setEndDate] = useState(todayStr);
+
+  const hasDateProperty = useMemo(() => {
+    if (!allData || allData.length === 0) return false;
+    return allData.some(item => !!getItemDateString(item));
+  }, [allData]);
+
+  const dateRangeRecords = useMemo(() => {
+    if (!hasDateProperty || !startDate || !endDate) return [];
+    const s = startDate <= endDate ? startDate : endDate;
+    const e = startDate <= endDate ? endDate : startDate;
+    return allData.filter(item => {
+      const d = getItemDateString(item);
+      return d && d >= s && d <= e;
+    });
+  }, [allData, hasDateProperty, startDate, endDate]);
+
   // State
   const [dataScope, setDataScope] = useState(hasFilterDifference ? 'filtered' : 'all');
   const [selectedFormat, setSelectedFormat] = useState('csv'); // 'csv' | 'xlsx' | 'json'
@@ -165,6 +206,8 @@ const ExportFilterModal = ({
       if (!wasOpenRef.current) {
         setSelectedColumnKeys(columns.filter(c => c.defaultSelected !== false).map(c => c.key));
         setDataScope(hasFilterDifference ? 'filtered' : 'all');
+        setStartDate(`${todayStr.slice(0, 7)}-01`);
+        setEndDate(todayStr);
         const resetFilters = {};
         customFilters.forEach(f => {
           resetFilters[f.key] = 'all';
@@ -185,7 +228,13 @@ const ExportFilterModal = ({
 
   // Compute records to export based on scope and in-modal filters
   const recordsToExport = useMemo(() => {
-    const baseList = dataScope === 'filtered' && filteredData ? filteredData : allData;
+    let baseList = allData;
+    if (dataScope === 'filtered' && filteredData) {
+      baseList = filteredData;
+    } else if (dataScope === 'dateRange') {
+      baseList = dateRangeRecords;
+    }
+
     if (!baseList || !Array.isArray(baseList)) return [];
 
     return baseList.filter(item => {
@@ -200,7 +249,7 @@ const ExportFilterModal = ({
       }
       return true;
     });
-  }, [dataScope, allData, filteredData, customFilters, activeCustomFilters]);
+  }, [dataScope, allData, filteredData, dateRangeRecords, customFilters, activeCustomFilters]);
 
   // Toggle single column
   const toggleColumn = (key) => {
@@ -236,7 +285,8 @@ const ExportFilterModal = ({
 
     const activeCols = columns.filter(c => selectedColumnKeys.includes(c.key));
     const timestamp = new Date().toISOString().split('T')[0];
-    const filename = `${defaultFilename}_${timestamp}`;
+    const dateScopeSuffix = dataScope === 'dateRange' && startDate && endDate ? `_${startDate}_to_${endDate}` : '';
+    const filename = `${defaultFilename}${dateScopeSuffix}_${timestamp}`;
 
     if (onExport) {
       onExport(activeCols, recordsToExport, selectedFormat, filename);
@@ -331,37 +381,39 @@ const ExportFilterModal = ({
 
         {/* Modal Body */}
         <div className="p-4 sm:p-5 overflow-y-auto space-y-5 flex-1 custom-scrollbar">
-          {/* 1. Scope Selection (Only show if there are filtered vs all differences) */}
-          {hasFilterDifference && (
+          {/* 1. Scope Selection (Filtered / All / Custom Date Range) */}
+          {(hasFilterDifference || hasDateProperty) && (
             <div>
               <label className="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2 flex items-center gap-1.5">
                 <Filter size={13} />
                 <span>Data Scope</span>
               </label>
               <div className="grid grid-cols-1 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setDataScope('filtered')}
-                  className={`flex items-start gap-2.5 p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
-                    dataScope === 'filtered'
-                      ? 'border-[#00a76b] bg-emerald-50/60 dark:bg-emerald-950/30 ring-1 ring-[#00a76b]'
-                      : 'border-gray-200 dark:border-[#1a332b] bg-white dark:bg-[#11221d] hover:bg-gray-50 dark:hover:bg-[#162f27]'
-                  }`}
-                >
-                  <div className={`w-3.5 h-3.5 rounded-full border mt-0.5 flex items-center justify-center shrink-0 ${
-                    dataScope === 'filtered' ? 'border-[#00a76b] bg-[#00a76b]' : 'border-gray-300 dark:border-gray-600'
-                  }`}>
-                    {dataScope === 'filtered' && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
-                  </div>
-                  <div>
-                    <div className="text-xs font-bold text-gray-900 dark:text-white">
-                      Current Filtered View ({filteredData.length})
+                {hasFilterDifference && (
+                  <button
+                    type="button"
+                    onClick={() => setDataScope('filtered')}
+                    className={`flex items-start gap-2.5 p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                      dataScope === 'filtered'
+                        ? 'border-[#00a76b] bg-emerald-50/60 dark:bg-emerald-950/30 ring-1 ring-[#00a76b]'
+                        : 'border-gray-200 dark:border-[#1a332b] bg-white dark:bg-[#11221d] hover:bg-gray-50 dark:hover:bg-[#162f27]'
+                    }`}
+                  >
+                    <div className={`w-3.5 h-3.5 rounded-full border mt-0.5 flex items-center justify-center shrink-0 ${
+                      dataScope === 'filtered' ? 'border-[#00a76b] bg-[#00a76b]' : 'border-gray-300 dark:border-gray-600'
+                    }`}>
+                      {dataScope === 'filtered' && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
                     </div>
-                    <div className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5 leading-tight">
-                      Export only items matching active search and page filters
+                    <div>
+                      <div className="text-xs font-bold text-gray-900 dark:text-white">
+                        Current Filtered View ({filteredData.length})
+                      </div>
+                      <div className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5 leading-tight">
+                        Export only items matching active search and page filters
+                      </div>
                     </div>
-                  </div>
-                </button>
+                  </button>
+                )}
 
                 <button
                   type="button"
@@ -386,6 +438,105 @@ const ExportFilterModal = ({
                     </div>
                   </div>
                 </button>
+
+                {hasDateProperty && (
+                  <div className="space-y-2">
+                    <button
+                      type="button"
+                      onClick={() => setDataScope('dateRange')}
+                      className={`w-full flex items-start gap-2.5 p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                        dataScope === 'dateRange'
+                          ? 'border-[#00a76b] bg-emerald-50/60 dark:bg-emerald-950/30 ring-1 ring-[#00a76b]'
+                          : 'border-gray-200 dark:border-[#1a332b] bg-white dark:bg-[#11221d] hover:bg-gray-50 dark:hover:bg-[#162f27]'
+                      }`}
+                    >
+                      <div className={`w-3.5 h-3.5 rounded-full border mt-0.5 flex items-center justify-center shrink-0 ${
+                        dataScope === 'dateRange' ? 'border-[#00a76b] bg-[#00a76b]' : 'border-gray-300 dark:border-gray-600'
+                      }`}>
+                        {dataScope === 'dateRange' && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs font-bold text-gray-900 dark:text-white flex items-center justify-between">
+                          <span className="flex items-center gap-1.5">
+                            <Calendar size={13} className="text-[#00a76b]" />
+                            <span>Select Date Range</span>
+                          </span>
+                          <span className="text-[10.5px] font-bold text-emerald-600 dark:text-emerald-400">
+                            ({dateRangeRecords.length} {dateRangeRecords.length === 1 ? 'record' : 'records'})
+                          </span>
+                        </div>
+                        <div className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5 leading-tight">
+                          Export records between 2 specific dates (From &amp; To, max: Today)
+                        </div>
+                      </div>
+                    </button>
+
+                    {dataScope === 'dateRange' && (
+                      <div className="p-3 rounded-xl border border-emerald-200/80 dark:border-emerald-800/50 bg-emerald-50/50 dark:bg-emerald-950/30 space-y-2.5 animate-in fade-in slide-in-from-top-1 duration-200">
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-[10.5px] font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300 block mb-1">
+                              From Date
+                            </label>
+                            <input
+                              type="date"
+                              value={startDate}
+                              max={endDate || todayStr}
+                              onChange={(e) => setStartDate(e.target.value)}
+                              className="w-full px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-gray-200 dark:border-[#1e3b32] bg-white dark:bg-[#0f1c18] text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#00a76b] cursor-pointer shadow-xs"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="text-[10.5px] font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300 block mb-1">
+                              To Date (Max Date)
+                            </label>
+                            <input
+                              type="date"
+                              value={endDate}
+                              min={startDate}
+                              max={todayStr}
+                              onChange={(e) => setEndDate(e.target.value)}
+                              className="w-full px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-gray-200 dark:border-[#1e3b32] bg-white dark:bg-[#0f1c18] text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#00a76b] cursor-pointer shadow-xs"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Presets */}
+                        <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                          <span className="text-[9.5px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
+                            Presets:
+                          </span>
+                          {[
+                            { label: 'Today', getDates: () => ({ s: todayStr, e: todayStr }) },
+                            { label: 'Last 7 Days', getDates: () => {
+                              const d = new Date(); d.setDate(d.getDate() - 6);
+                              return { s: getLocalYYYYMMDD(d), e: todayStr };
+                            }},
+                            { label: 'This Month', getDates: () => ({ s: `${todayStr.slice(0, 7)}-01`, e: todayStr }) },
+                            { label: 'Last 30 Days', getDates: () => {
+                              const d = new Date(); d.setDate(d.getDate() - 29);
+                              return { s: getLocalYYYYMMDD(d), e: todayStr };
+                            }}
+                          ].map(preset => (
+                            <button
+                              key={preset.label}
+                              type="button"
+                              onClick={() => {
+                                const { s, e } = preset.getDates();
+                                setStartDate(s);
+                                setEndDate(e);
+                              }}
+                              className="px-2 py-0.5 text-[10px] font-bold rounded-md bg-white dark:bg-[#12241f] border border-gray-200 dark:border-[#1e3b32] hover:border-[#00a76b] text-gray-600 dark:text-gray-300 hover:text-[#00a76b] dark:hover:text-emerald-400 transition-all cursor-pointer shadow-2xs"
+                            >
+                              {preset.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           )}

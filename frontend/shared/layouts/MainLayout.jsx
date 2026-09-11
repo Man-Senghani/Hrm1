@@ -49,6 +49,7 @@ import {
 import { io } from 'socket.io-client';
 import { API_BASE_URL, getImageUrl } from '@shared/services/api';
 import RoleSearchBar from '@shared/components/RoleSearchBar';
+import { clearActiveAccountAndSession, setupCrossTabSessionSync, syncSessionFromActiveAccount } from '@shared/utils/sessionSync';
 
 const renderIcon = (iconItem, props) => {
   if (!iconItem) return <LayoutDashboard {...props} />;
@@ -95,6 +96,15 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
   useEffect(() => {
     // Reserved for location.pathname based side effects
   }, [location.pathname]);
+
+  // 🛡️ Cross-tab Single Account Synchronization
+  useEffect(() => {
+    syncSessionFromActiveAccount();
+    const cleanup = setupCrossTabSessionSync(() => {
+      navigate('/login');
+    });
+    return cleanup;
+  }, [navigate]);
 
   const toggleTheme = () => {
     const nextDark = !isDarkMode;
@@ -392,7 +402,7 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
   }, [isProfileDropdownOpen]);
 
   const displayRole = userRole || (activeRole === 'hr' ? 'HR' : (role ? role.toUpperCase() : 'ADMIN'));
-  
+
   useEffect(() => {
     const fetchLatestProfile = async () => {
       if (!token) {
@@ -478,7 +488,6 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
           { name: 'Daily Tasks Board', path: `${prefix}/tasks`, icon: CheckSquare },
           { name: 'Daily Report', path: `${prefix}/daily-report`, icon: FileText },
           { name: 'Events Management', path: `${prefix}/events`, icon: Calendar },
-          { name: 'Apply Leave', path: `${prefix}/leave`, icon: ClipboardList },
           { name: 'Attendance', path: `${prefix}/attendance`, icon: Calendar },
           { name: 'Team Chat', path: `${prefix}/chat`, icon: MessageSquare },
           { name: 'Payroll', path: `${prefix}/payroll`, icon: Wallet },
@@ -493,7 +502,6 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
           { name: 'Dashboard', path: `${prefix}/attendance`, icon: LayoutDashboard },
           { name: 'Attendance', path: `${prefix}/attendance`, icon: Calendar },
           { name: 'Daily Report', path: `${prefix}/daily-report`, icon: FileText },
-          { name: 'Apply Leave', path: `${prefix}/leave`, icon: ClipboardList },
           { name: 'Team Chat', path: `${prefix}/chat`, icon: MessageSquare },
           { name: 'Create Task', path: `${prefix}/task-management/create`, icon: PlusCircle },
           { name: 'My Documents', path: `${prefix}/documents`, icon: FileText },
@@ -508,7 +516,6 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
           { name: 'Team Chat', path: `${prefix}/chat`, icon: MessageSquare },
           { name: 'Team Attendance', path: `${prefix}/attendance`, icon: Calendar },
           { name: 'Screenshots', path: `${prefix}/screenshots`, icon: Camera },
-          { name: 'Apply Leave', path: `${prefix}/leave`, icon: FileText },
         ];
       case 'admin':
       default:
@@ -518,7 +525,6 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
           { name: 'Daily Tasks Board', path: `${prefix}/tasks`, icon: CheckSquare },
           { name: 'Daily Report', path: `${prefix}/daily-report`, icon: FileText },
           { name: 'Events Management', path: `${prefix}/events`, icon: Calendar },
-          { name: 'Team Leave', path: `${prefix}/leave`, icon: ClipboardList },
           { name: 'Attendance', path: `${prefix}/attendance`, icon: Calendar },
           { name: 'Global Chat', path: `${prefix}/chat`, icon: MessageSquare },
           { name: 'Payroll', path: `${prefix}/payroll`, icon: Wallet },
@@ -539,7 +545,13 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
 
   const menuItems = rawMenuItems.filter(item => {
     const n = (item.name || '').toLowerCase();
-    return !n.includes('notification') && !n.includes('announcement');
+    const p = (item.path || '').toLowerCase();
+    return (
+      !n.includes('notification') &&
+      !n.includes('announcement') &&
+      !n.includes('leave') &&
+      !p.includes('/leave')
+    );
   });
 
   const getCategorizedMenuItems = (role) => {
@@ -568,12 +580,10 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
   };
 
   const handleLogout = () => {
+    clearActiveAccountAndSession();
     if (onLogout) {
       onLogout();
     } else {
-      sessionStorage.removeItem('token');
-      sessionStorage.removeItem('user');
-      sessionStorage.removeItem('role');
       navigate('/login');
     }
   };
@@ -586,6 +596,14 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
         const userObj = JSON.parse(storedUser);
         userObj.role = targetRole;
         sessionStorage.setItem('user', JSON.stringify(userObj));
+
+        // Sync role to activeAccount in localStorage
+        const activeRaw = localStorage.getItem('activeAccount');
+        if (activeRaw) {
+          const activeObj = JSON.parse(activeRaw);
+          activeObj.role = targetRole;
+          localStorage.setItem('activeAccount', JSON.stringify(activeObj));
+        }
       } catch (e) {
         console.error('Failed to sync user role in session:', e);
       }
@@ -1122,21 +1140,21 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
                       const lastSegment = currentSegments[currentSegments.length - 1] || '';
 
                       if (isDashboard) {
-                        isActive = location.pathname === '/' || 
-                                   location.pathname === '/dashboard' || 
-                                   corePath === '/' || 
-                                   corePath === '/dashboard' || 
-                                   lastSegment === 'dashboard' || 
-                                   lastSegment === activeRole;
+                        isActive = location.pathname === '/' ||
+                          location.pathname === '/dashboard' ||
+                          corePath === '/' ||
+                          corePath === '/dashboard' ||
+                          lastSegment === 'dashboard' ||
+                          lastSegment === activeRole;
                       } else {
                         const itemCore = '/' + item.path.split('/').filter(Boolean).filter(s => !['admin', 'hr', 'employee', 'manager'].includes(s)).join('/');
                         const isLeaveAlias = (corePath === '/leave' || corePath === '/leaves') && (itemCore === '/leave' || itemCore === '/leaves');
                         isActive = isLeaveAlias ||
-                                   (corePath !== '/' && itemCore !== '/' && corePath === itemCore) ||
-                                   (itemCore !== '/' && corePath.startsWith(itemCore + '/')) ||
-                                   location.pathname === item.path ||
-                                   (item.path !== '/' && location.pathname.startsWith(item.path + '/')) ||
-                                   (lastSegment && itemCore.endsWith('/' + lastSegment));
+                          (corePath !== '/' && itemCore !== '/' && corePath === itemCore) ||
+                          (itemCore !== '/' && corePath.startsWith(itemCore + '/')) ||
+                          location.pathname === item.path ||
+                          (item.path !== '/' && location.pathname.startsWith(item.path + '/')) ||
+                          (lastSegment && itemCore.endsWith('/' + lastSegment));
                       }
                       return (
                         <Link

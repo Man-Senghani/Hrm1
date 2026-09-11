@@ -1051,7 +1051,7 @@ const Chat = () => {
                       Settings
                     </button>
                     <div className="h-px bg-[#E6E8EA] dark:bg-[#38352e] my-1"></div>
-                    <button className="w-full text-left px-4 py-2.5 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 font-medium transition-colors border-none bg-transparent cursor-pointer" onClick={() => { sessionStorage.clear(); window.location.href = '/login'; }}>Log out</button>
+                    <button className="w-full text-left px-4 py-2.5 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 font-medium transition-colors border-none bg-transparent cursor-pointer" onClick={() => { localStorage.removeItem('activeAccount'); localStorage.removeItem('token'); sessionStorage.clear(); window.location.href = '/login'; }}>Log out</button>
                   </div>
                 </>
               )}

@@ -310,10 +310,24 @@ const buildEmployeeAttendanceHistory = async (userId) => {
           const { hours, minutes } = getTimeDetails(new Date(tt.endTime));
           clockOutStr = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
         }
-        if (typeof tt.activeTime === 'number' && tt.activeTime > 0) {
-          activeSecs = tt.activeTime;
-          hoursVal = parseFloat((tt.activeTime / 3600).toFixed(4));
+        let liveActive = Math.floor(tt.activeTime || 0);
+        let liveIdle = Math.floor(tt.idleTime || 0);
+        const isToday = dStr === todayStr;
+
+        if (isToday && tt.status === 'active' && tt.isRunning && tt.segmentStart) {
+          const elapsed = Math.floor((now.getTime() - new Date(tt.segmentStart).getTime()) / 1000);
+          liveActive += Math.max(0, elapsed);
+        } else if (isToday && (tt.status === 'idle' || tt.status === 'paused') && tt.idleStart) {
+          const idleElapsed = Math.floor((now.getTime() - new Date(tt.idleStart).getTime()) / 1000);
+          liveIdle += Math.max(0, idleElapsed);
         }
+
+        if (liveActive > 0) {
+          activeSecs = liveActive;
+          hoursVal = parseFloat((liveActive / 3600).toFixed(4));
+        }
+        tt.computedLiveActive = liveActive;
+        tt.computedLiveIdle = liveIdle;
       }
 
       if (!hoursVal || hoursVal === 0) {
@@ -340,8 +354,8 @@ const buildEmployeeAttendanceHistory = async (userId) => {
         totalHours: hoursVal,
         totalActiveTime: activeSecs,
         activeTime: activeSecs,
-        idleTime: tt?.idleTime || 0,
-        totalTime: ((activeSecs || 0) + (tt?.idleTime || 0)) || tt?.totalTime || 0,
+        idleTime: tt?.computedLiveIdle !== undefined ? tt.computedLiveIdle : (tt?.idleTime || 0),
+        totalTime: ((activeSecs || 0) + (tt?.computedLiveIdle !== undefined ? tt.computedLiveIdle : (tt?.idleTime || 0))) || tt?.totalTime || 0,
         sessions: tt?.sessions || [],
         startTime: tt?.startTime || existingAtt.checkInTime
       });
@@ -617,20 +631,43 @@ exports.getAttendance = async (req, res) => {
           });
 
           if (tt) {
+            if (tt.startTime && (!rec.checkInTime || !rec.clockIn || rec.clockIn === '--' || rec.clockIn === '--:--')) {
+              rec.checkInTime = rec.checkInTime || tt.startTime;
+              const { hours, minutes } = getTimeDetails(new Date(tt.startTime));
+              rec.clockIn = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+            }
             if (tt.endTime && (!rec.checkOutTime || new Date(tt.endTime) > new Date(rec.checkOutTime))) {
               rec.checkOutTime = tt.endTime;
               const { hours, minutes } = getTimeDetails(new Date(tt.endTime));
               rec.clockOut = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
             }
-            if (typeof tt.activeTime === 'number' && tt.activeTime > 0) {
-              rec.totalActiveTime = tt.activeTime;
-              rec.activeTime = tt.activeTime;
-              rec.totalHours = parseFloat((tt.activeTime / 3600).toFixed(4));
+
+            const now = new Date();
+            const formatLocalDate = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+            const curTodayStr = formatLocalDate(now);
+            const isToday = rec.date === curTodayStr;
+
+            let liveActive = Math.floor(tt.activeTime || 0);
+            let liveIdle = Math.floor(tt.idleTime || 0);
+
+            // 🕒 LIVE CALCULATION: If session is currently active today, dynamically add the ongoing running segment
+            if (isToday && tt.status === 'active' && tt.isRunning && tt.segmentStart) {
+              const elapsed = Math.floor((now.getTime() - new Date(tt.segmentStart).getTime()) / 1000);
+              liveActive += Math.max(0, elapsed);
+            } else if (isToday && (tt.status === 'idle' || tt.status === 'paused') && tt.idleStart) {
+              const idleElapsed = Math.floor((now.getTime() - new Date(tt.idleStart).getTime()) / 1000);
+              liveIdle += Math.max(0, idleElapsed);
             }
-            rec.idleTime = tt.idleTime || 0;
-            rec.totalTime = ((rec.activeTime || 0) + (tt.idleTime || 0)) || tt.totalTime || 0;
+
+            rec.totalActiveTime = liveActive;
+            rec.activeTime = liveActive;
+            rec.totalHours = parseFloat((liveActive / 3600).toFixed(4));
+            rec.idleTime = liveIdle;
+            rec.totalTime = liveActive + liveIdle;
             rec.sessions = tt.sessions || [];
             rec.startTime = tt.startTime || rec.checkInTime;
+            rec.sessionStatus = tt.status;
+            rec.isRunning = tt.isRunning;
           }
 
           // Fallback calculation: calculate duration between checkInTime and checkOutTime if totalHours is 0
@@ -1076,7 +1113,12 @@ exports.getMyYearlyStats = async (req, res) => {
     const now = new Date();
     let startDate, endDate;
 
-    if (period === 'week') {
+    if (period === 'today') {
+      startDate = new Date(now);
+      startDate.setHours(0, 0, 0, 0);
+      endDate = new Date(now);
+      endDate.setHours(23, 59, 59, 999);
+    } else if (period === 'week') {
       const currentDay = now.getDay();
       const mondayDiff = currentDay === 0 ? -6 : 1 - currentDay;
       startDate = new Date(now);
@@ -1241,7 +1283,12 @@ exports.getTeamStats = async (req, res) => {
     const now = new Date();
     let startDate, endDate;
 
-    if (period === 'week') {
+    if (period === 'today') {
+      startDate = new Date(now);
+      startDate.setHours(0, 0, 0, 0);
+      endDate = new Date(now);
+      endDate.setHours(23, 59, 59, 999);
+    } else if (period === 'week') {
       const currentDay = now.getDay();
       const mondayDiff = currentDay === 0 ? -6 : 1 - currentDay;
       startDate = new Date(now);

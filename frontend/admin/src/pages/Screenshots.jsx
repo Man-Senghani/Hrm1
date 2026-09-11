@@ -71,6 +71,30 @@ const Screenshots = () => {
   
   const token = sessionStorage.getItem('token');
   const role = sessionStorage.getItem('role');
+  const currentUserId = sessionStorage.getItem('userId');
+
+  const getCurrentUserName = () => {
+    try {
+      const userStr = sessionStorage.getItem('user');
+      if (userStr) {
+        const u = JSON.parse(userStr);
+        return (u.name || u.fullName || '').trim().toLowerCase();
+      }
+    } catch (e) {}
+    return '';
+  };
+
+  const isSelf = (s) => {
+    if (!s) return false;
+    const activeRole = (sessionStorage.getItem('role') || 'admin').toLowerCase();
+    if (activeRole === 'admin') return false; // Admin can inspect all records
+    const sUserId = (s.userId?._id || s.userId || '').toString();
+    if (currentUserId && sUserId === currentUserId.toString()) return true;
+    const curName = getCurrentUserName();
+    const sName = (s.employeeName || '').trim().toLowerCase();
+    if (curName && sName && sName === curName) return true;
+    return false;
+  };
 
   const fetchData = async () => {
     setLoading(true);
@@ -79,7 +103,8 @@ const Screenshots = () => {
         params: { role, userId: sessionStorage.getItem('userId') },
         headers: { Authorization: `Bearer ${token}` }
       });
-      setScreenshots(res.data);
+      const list = Array.isArray(res.data) ? res.data : [];
+      setScreenshots(list.filter(s => !isSelf(s)));
     } catch (err) {
       console.error('Fetch Screenshots Error:', err);
     } finally {
@@ -100,6 +125,7 @@ const Screenshots = () => {
     });
 
     socket.on('new_screenshot', (data) => {
+       if (isSelf(data)) return;
        setScreenshots(prev => [data, ...prev]);
     });
 
@@ -112,7 +138,11 @@ const Screenshots = () => {
   const getRoles = () => {
     const activeRole = (sessionStorage.getItem('role') || 'admin').toLowerCase();
     if (activeRole === 'manager') return ['employee'];
-    if (activeRole === 'hr') return ['hr', 'manager', 'employee'];
+    if (activeRole === 'hr') {
+      const r = ['employee', 'manager'];
+      if (screenshots.some(s => s.role === 'hr')) r.push('hr');
+      return r;
+    }
     return ['admin', 'hr', 'manager', 'employee'];
   };
 

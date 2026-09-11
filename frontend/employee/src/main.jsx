@@ -28,6 +28,10 @@ axios.interceptors.response.use(
   (error) => {
     if (error.response?.status === 401) {
       sessionStorage.clear();
+      try {
+        localStorage.removeItem('activeAccount');
+        localStorage.removeItem('token');
+      } catch (_) {}
       window.location.href = '/';
     }
     return Promise.reject(error);

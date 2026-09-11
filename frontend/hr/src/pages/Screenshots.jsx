@@ -71,6 +71,28 @@ const Screenshots = () => {
   
   const token = sessionStorage.getItem('token');
   const role = sessionStorage.getItem('role');
+  const currentUserId = sessionStorage.getItem('userId');
+
+  const getCurrentUserName = () => {
+    try {
+      const userStr = sessionStorage.getItem('user');
+      if (userStr) {
+        const u = JSON.parse(userStr);
+        return (u.name || u.fullName || '').trim().toLowerCase();
+      }
+    } catch (e) {}
+    return '';
+  };
+
+  const isSelf = (s) => {
+    if (!s) return false;
+    const sUserId = (s.userId?._id || s.userId || '').toString();
+    if (currentUserId && sUserId === currentUserId.toString()) return true;
+    const curName = getCurrentUserName();
+    const sName = (s.employeeName || '').trim().toLowerCase();
+    if (curName && sName && sName === curName) return true;
+    return false;
+  };
 
   const fetchData = async () => {
     setLoading(true);
@@ -79,7 +101,8 @@ const Screenshots = () => {
         params: { role, userId: sessionStorage.getItem('userId') },
         headers: { Authorization: `Bearer ${token}` }
       });
-      setScreenshots(res.data);
+      const list = Array.isArray(res.data) ? res.data : [];
+      setScreenshots(list.filter(s => !isSelf(s)));
     } catch (err) {
       console.error('Fetch Screenshots Error:', err);
     } finally {
@@ -100,6 +123,7 @@ const Screenshots = () => {
     });
 
     socket.on('new_screenshot', (data) => {
+       if (isSelf(data)) return;
        setScreenshots(prev => [data, ...prev]);
     });
 
@@ -110,7 +134,12 @@ const Screenshots = () => {
   }, [role]);
 
   const getRoles = () => {
-    return ['hr', 'manager', 'employee'];
+    // HR oversees employees and managers; only show HR folder if captures exist from other HR colleagues
+    const roles = ['employee', 'manager'];
+    if (screenshots.some(s => s.role === 'hr')) {
+      roles.push('hr');
+    }
+    return roles;
   };
 
   const getFilteredData = () => {

@@ -76,6 +76,7 @@ router.post('/upload', async (req, res) => {
 router.get('/all', async (req, res) => {
   try {
     const rawRole = (req.query.role || req.user?.role || '').toLowerCase();
+    const currentUserId = req.query.userId || req.user?._id || req.user?.id;
     
     let query = {};
     if (rawRole === 'employee') {
@@ -88,7 +89,24 @@ router.get('/all', async (req, res) => {
       query = {};
     }
 
-    const screenshots = await Screenshot.find(query).sort({ timestamp: -1 }).limit(150);
+    // Exclude supervisor's own screenshots from monitoring views
+    if (currentUserId && (rawRole === 'hr' || rawRole === 'manager')) {
+      const conditions = [{ userId: { $ne: currentUserId } }];
+      try {
+        const user = await User.findById(currentUserId).select('name fullName').lean();
+        if (user) {
+          const name = (user.name || user.fullName || '').trim();
+          if (name) {
+            conditions.push({ employeeName: { $ne: name } });
+          }
+        }
+      } catch (findErr) {
+        console.error('Error finding user in screenshot filter:', findErr);
+      }
+      query.$and = (query.$and || []).concat(conditions);
+    }
+
+    const screenshots = await Screenshot.find(query).sort({ timestamp: -1 }).limit(250);
     res.json(screenshots);
   } catch (err) {
     res.status(500).json({ message: 'Server Error' });

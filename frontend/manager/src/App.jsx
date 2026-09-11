@@ -19,6 +19,7 @@ import {
   Camera,
   FileText
 } from 'lucide-react';
+import { syncSessionFromActiveAccount, clearActiveAccountAndSession, setupCrossTabSessionSync } from '@shared/utils/sessionSync';
 
 const ManagerDashboard = lazy(() => import('./pages/ManagerDashboard'));
 const Employees = lazy(() => import('./pages/Employees'));
@@ -49,20 +50,28 @@ const RouteLoadingFallback = () => (
 );
 
 function App() {
+  syncSessionFromActiveAccount();
   const user = JSON.parse(sessionStorage.getItem('user') || '{}');
   const token = sessionStorage.getItem('token');
 
   React.useEffect(() => {
-    if (!token) {
-      window.location.href = '/';
+    syncSessionFromActiveAccount();
+    const currentToken = sessionStorage.getItem('token');
+    if (!currentToken) {
+      window.location.href = '/login';
     }
-  }, [token]);
+
+    const cleanup = setupCrossTabSessionSync(() => {
+      window.location.href = '/login';
+    });
+    return cleanup;
+  }, []);
 
   if (!token) return null;
 
   const handleLogout = () => {
-    sessionStorage.clear();
-    window.location.href = '/';
+    clearActiveAccountAndSession();
+    window.location.href = '/login';
   };
 
   const navItems = [

@@ -1014,12 +1014,12 @@ const Attendance = () => {
   const [error, setError] = useState(null);
   const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'));
   const [yearlyStats, setYearlyStats] = useState(null);
-  const [statsPeriod, setStatsPeriod] = useState('week'); // 'week' | 'month' | 'year'
+  const [statsPeriod, setStatsPeriod] = useState('today'); // 'today' | 'week' | 'month'
   const [periodStats, setPeriodStats] = useState(null);
-  const [chartPeriod, setChartPeriod] = useState('week');
+  const [chartPeriod, setChartPeriod] = useState('today');
   const [chartStats, setChartStats] = useState(null);
 
-  const [teamStatsPeriod, setTeamStatsPeriod] = useState('week');
+  const [teamStatsPeriod, setTeamStatsPeriod] = useState('today');
   const [teamStats, setTeamStats] = useState(null);
   const [teamStatsLoading, setTeamStatsLoading] = useState(false);
 
@@ -1121,6 +1121,7 @@ const Attendance = () => {
     fetchHolidays();
   }, []);
 
+  const [teamTick, setTeamTick] = useState(0);
   useEffect(() => {
     if (viewContext === 'employee') return;
 
@@ -1131,14 +1132,21 @@ const Attendance = () => {
         const res = await axios.get('/api/time/all', { headers: { Authorization: `Bearer ${token}` } });
         const raw = Array.isArray(res.data) ? res.data : [];
         const todayStr = getLocalYYYYMMDD(new Date());
-        const todaySessions = raw.filter(s => s.date === todayStr);
+        const fetchTs = Date.now();
+        const todaySessions = raw
+          .filter(s => s.date === todayStr)
+          .map(s => ({ ...s, _fetchedAt: fetchTs }));
         setTeamLiveSessions(todaySessions);
       } catch (e) { }
     };
 
     fetchTeamLive();
     const interval = setInterval(fetchTeamLive, 5000);
-    return () => clearInterval(interval);
+    const tickerInterval = setInterval(() => setTeamTick(t => t + 1), 1000);
+    return () => {
+      clearInterval(interval);
+      clearInterval(tickerInterval);
+    };
   }, [viewContext]);
 
   const todayRecord = useMemo(() => {
@@ -1230,6 +1238,8 @@ const Attendance = () => {
 
   // ── Combined Records (Attendance Documents + Active Live Sessions) ──
   const allCombinedRecords = useMemo(() => {
+    const nowTs = Date.now();
+
     const combined = records
       .filter(r => {
         const uRole = (r.user?.role || r.role || '').toLowerCase();
@@ -1245,13 +1255,28 @@ const Attendance = () => {
           return sEmpId && String(sEmpId) === String(uId) && sDateStr === rDateStr;
         });
         if (matched) {
+          let liveActive = typeof matched.activeTime === 'number' ? matched.activeTime : (r.activeTime || 0);
+          let liveIdle = typeof matched.idleTime === 'number' ? matched.idleTime : (r.idleTime || 0);
+
+          if (matched.status === 'active' && matched.isRunning && matched._fetchedAt) {
+            const elapsed = Math.floor((nowTs - matched._fetchedAt) / 1000);
+            liveActive += Math.max(0, elapsed);
+          } else if ((matched.status === 'idle' || matched.status === 'paused') && matched._fetchedAt) {
+            const elapsed = Math.floor((nowTs - matched._fetchedAt) / 1000);
+            liveIdle += Math.max(0, elapsed);
+          }
+
           return {
             ...r,
-            activeTime: matched.activeTime ?? r.activeTime,
-            totalActiveTime: matched.activeTime ?? r.totalActiveTime,
-            idleTime: matched.idleTime ?? r.idleTime,
-            inactiveTime: matched.idleTime ?? r.inactiveTime,
-            isRunning: matched.isRunning ?? r.isRunning
+            activeTime: liveActive,
+            totalActiveTime: liveActive,
+            idleTime: liveIdle,
+            inactiveTime: liveIdle,
+            totalTime: liveActive + liveIdle,
+            totalHours: liveActive ? parseFloat((liveActive / 3600).toFixed(4)) : r.totalHours,
+            sessionStatus: matched.status,
+            isRunning: matched.isRunning ?? r.isRunning,
+            status: (matched.status === 'paused' || matched.status === 'break') ? 'On Break' : ((matched.status === 'active') ? 'Present' : r.status)
           };
         }
         return r;
@@ -1275,6 +1300,17 @@ const Attendance = () => {
         });
 
         if (!exists) {
+          let liveActive = typeof s.activeTime === 'number' ? s.activeTime : 0;
+          let liveIdle = typeof s.idleTime === 'number' ? s.idleTime : 0;
+
+          if (s.status === 'active' && s.isRunning && s._fetchedAt) {
+            const elapsed = Math.floor((nowTs - s._fetchedAt) / 1000);
+            liveActive += Math.max(0, elapsed);
+          } else if ((s.status === 'idle' || s.status === 'paused') && s._fetchedAt) {
+            const elapsed = Math.floor((nowTs - s._fetchedAt) / 1000);
+            liveIdle += Math.max(0, elapsed);
+          }
+
           const cInTime = s.startTime ? new Date(s.startTime).toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false }) : '--:--';
           const cOutTime = s.endTime ? new Date(s.endTime).toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false }) : '--:--';
 
@@ -1287,11 +1323,13 @@ const Attendance = () => {
             clockOut: cOutTime,
             checkInTime: s.startTime,
             checkOutTime: s.endTime,
-            totalHours: s.activeTime ? (s.activeTime / 3600).toFixed(2) : 0,
-            activeTime: s.activeTime || 0,
-            totalActiveTime: s.activeTime || 0,
-            idleTime: s.idleTime || 0,
-            inactiveTime: s.idleTime || 0,
+            totalHours: liveActive ? (liveActive / 3600).toFixed(2) : 0,
+            activeTime: liveActive,
+            totalActiveTime: liveActive,
+            idleTime: liveIdle,
+            inactiveTime: liveIdle,
+            totalTime: liveActive + liveIdle,
+            sessionStatus: s.status,
             isRunning: s.isRunning,
             isLiveSession: true
           });
@@ -1300,7 +1338,7 @@ const Attendance = () => {
     });
 
     return combined;
-  }, [records, teamLiveSessions, todayStr]);
+  }, [records, teamLiveSessions, todayStr, teamTick]);
 
   const todayRecords = useMemo(() => {
     return allCombinedRecords.filter(r => {
@@ -2121,92 +2159,67 @@ const Attendance = () => {
         </div>
       </div>
 
-      {/* ── CONTEXT TOGGLE PILL BAR (MY ATTENDANCE / ALL EMPLOYEE ATTENDANCE) ── */}
-      {userRole !== 'employee' && (
-        <div className="bg-white dark:bg-[#0a1f1a] p-1 rounded-2xl border border-[#e2eae7] dark:border-[#133029] shadow-xs inline-flex items-center gap-1 w-fit">
-          <button
-            type="button"
-            onClick={() => setViewContext('employee')}
-            className={`px-6 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-              viewContext === 'employee'
-                ? 'bg-[#00a76b] text-white shadow-sm'
-                : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white'
-            }`}
-          >
-            My Attendance
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setViewContext('team')}
-            className={`px-6 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-              viewContext === 'team'
-                ? 'bg-[#00a76b] text-white shadow-sm'
-                : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white'
-            }`}
-          >
-            {userRole === 'manager' ? 'My Team Attendance' : 'All Employee Attendance'}
-          </button>
-        </div>
-      )}
-
-      {/* ── SUMMARY CARDS ── */}
-      <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
-        {(() => {
-          const empPresent = activeStats?.present || 0;
-          const empHalfDay = activeStats?.halfDay || 0;
-          const empAbsent = activeStats?.absent || 0;
-          const empLeave = activeStats?.leave || 0;
-          const empTotal = empPresent + empHalfDay + empAbsent + empLeave;
-          const empRate = empTotal > 0 ? Math.round(((empPresent + empHalfDay) / empTotal) * 100) : 0;
-
-          const cards = viewContext === 'employee' ? [
-            { label: 'Present', value: empPresent, icon: CheckCircle, color: 'text-emerald-600 dark:text-emerald-400', bgIcon: 'bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-100 dark:border-emerald-900/40', trend: `${empRate}%`, borderColor: '#10b981', glowColor: 'rgba(16, 185, 129, 0.45)' },
-            { label: 'Half Day', value: empHalfDay, icon: Sun, color: 'text-blue-600 dark:text-blue-400', bgIcon: 'bg-blue-50 dark:bg-blue-950/50 border border-blue-100 dark:border-blue-900/40', borderColor: '#3b82f6', glowColor: 'rgba(59, 130, 246, 0.45)' },
-            { label: 'On Leave', value: empLeave, icon: Calendar, color: 'text-purple-600 dark:text-purple-400', bgIcon: 'bg-purple-50 dark:bg-purple-950/50 border border-purple-100 dark:border-purple-900/40', borderColor: '#8b5cf6', glowColor: 'rgba(139, 92, 246, 0.45)' },
-            { label: 'Absent', value: empAbsent, icon: XCircle, color: 'text-red-600 dark:text-red-400', bgIcon: 'bg-rose-50 dark:bg-rose-950/50 border border-rose-100 dark:border-rose-900/40', borderColor: '#ef4444', glowColor: 'rgba(239, 68, 68, 0.45)' },
-          ] : [
-            { label: 'Present', value: teamStats?.present || 0, icon: CheckCircle, color: 'text-emerald-600 dark:text-emerald-400', bgIcon: 'bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-100 dark:border-emerald-900/40', trend: teamStats?.pct ? `${teamStats.pct}%` : '0%', borderColor: '#10b981', glowColor: 'rgba(16, 185, 129, 0.45)' },
-            { label: 'Half Day', value: teamStats?.halfDay || 0, icon: Sun, color: 'text-blue-600 dark:text-blue-400', bgIcon: 'bg-blue-50 dark:bg-blue-950/50 border border-blue-100 dark:border-blue-900/40', borderColor: '#3b82f6', glowColor: 'rgba(59, 130, 246, 0.45)' },
-            { label: 'On Leave', value: teamStats?.leave || 0, icon: Calendar, color: 'text-purple-600 dark:text-purple-400', bgIcon: 'bg-purple-50 dark:bg-purple-950/50 border border-purple-100 dark:border-purple-900/40', borderColor: '#8b5cf6', glowColor: 'rgba(139, 92, 246, 0.45)' },
-            { label: 'Absent', value: teamStats?.absent || 0, icon: XCircle, color: 'text-red-600 dark:text-red-400', bgIcon: 'bg-rose-50 dark:bg-rose-950/50 border border-rose-100 dark:border-rose-900/40', borderColor: '#ef4444', glowColor: 'rgba(239, 68, 68, 0.45)' },
-          ];
-
-          return cards.map((card, i) => {
-            const isHovered = hoveredSummaryIndex === i;
-            return (
-              <div
-                key={i}
-                onMouseEnter={() => setHoveredSummaryIndex(i)}
-                onMouseLeave={() => setHoveredSummaryIndex(null)}
-                style={{
-                  borderColor: isHovered ? card.borderColor : undefined
-                }}
-                className="flex items-center justify-between gap-2.5 px-4 py-2.5 rounded-2xl h-14 w-full transition-all duration-200 shadow-xs cursor-pointer border border-gray-200 dark:border-[#28251e] bg-white dark:bg-[#151c28]"
+      {/* ── CONTEXT TOGGLE PILL BAR (MY ATTENDANCE / ALL EMPLOYEE ATTENDANCE) & PERIOD TOGGLE (WEEK / MONTH / YEAR) ── */}
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div className="flex items-center gap-3">
+          {userRole !== 'employee' && (
+            <div className="bg-white dark:bg-[#0a1f1a] p-1 rounded-2xl border border-[#e2eae7] dark:border-[#133029] shadow-xs inline-flex items-center gap-1 w-fit">
+              <button
+                type="button"
+                onClick={() => setViewContext('employee')}
+                className={`px-6 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  viewContext === 'employee'
+                    ? 'bg-[#00a76b] text-white shadow-sm'
+                    : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white'
+                }`}
               >
-                <div className="flex items-center gap-2.5 overflow-hidden">
-                  <div className={`inline-flex p-1.5 rounded-lg shrink-0 ${card.bgIcon}`}>
-                    <card.icon size={16} strokeWidth={2.5} className={card.color} />
-                  </div>
-                  <div className="flex flex-col min-w-0">
-                    <span className="text-xs font-bold text-gray-900 dark:text-white uppercase tracking-wider truncate" title={card.label}>
-                      {card.label}
-                    </span>
-                    {card.trend && (
-                      <span className="text-[9.5px] font-extrabold text-emerald-600 dark:text-emerald-400 flex items-center gap-0.5">
-                        <ArrowUpRight size={9} /> {card.trend}
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <div className="shrink-0 pl-1 text-right">
-                  <h3 className={`text-xl font-black ${card.color} leading-none`}>{card.value}</h3>
-                </div>
-              </div>
-            );
-          });
-        })()}
+                My Attendance
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setViewContext('team')}
+                className={`px-6 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  viewContext === 'team'
+                    ? 'bg-[#00a76b] text-white shadow-sm'
+                    : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white'
+                }`}
+              >
+                {userRole === 'manager' ? 'My Team Attendance' : 'All Employee Attendance'}
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Right: Period Toggle (Today/Week/Month) - Only in Team Attendance */}
+        {viewContext !== 'employee' && (
+          <div className="bg-white dark:bg-[#0a1f1a] p-1 rounded-2xl border border-[#e2eae7] dark:border-[#133029] shadow-xs inline-flex items-center shrink-0">
+            {['today', 'week', 'month'].map((p) => {
+              const currentPeriod = teamStatsPeriod;
+              return (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => {
+                    setStatsPeriod(p);
+                    setTeamStatsPeriod(p);
+                    setChartPeriod(p);
+                  }}
+                  className={`px-5 py-2 rounded-xl text-xs font-bold uppercase transition-all cursor-pointer ${
+                    currentPeriod === p
+                      ? 'bg-[#00a76b] text-white shadow-sm'
+                      : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white'
+                  }`}
+                >
+                  {p}
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
+
+
 
       {/* ── ATTENDANCE RATE BANNER (Hidden for employee since it's company-wide) ── */}
       {viewContext !== 'employee' && (
@@ -2239,7 +2252,7 @@ const Attendance = () => {
         </Card>
       )}
 
-      {/* ── TOP SECTION: DYNAMIC GRID (Summary Cards | Upcoming Holidays | Attendance Calendar in One Line) ── */}
+      {/* ── TOP SECTION: DYNAMIC GRID (Summary Cards | Attendance Calendar in One Line) ── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         {/* Left Column: Current Session Time Tracker Card (only in My Attendance mode) */}
         {viewContext !== 'team' && (
@@ -2380,80 +2393,55 @@ const Attendance = () => {
           )}
         </div>
 
-        {/* Middle Column 2 (only in My Team Attendance mode): Upcoming Holidays Card */}
+        {/* Middle Column 2 (only in My Team Attendance mode): 4 Summary Cards */}
         {viewContext === 'team' && (
-          <Card className="h-full flex flex-col justify-between p-4 shadow-xs transition-colors duration-300 hover:!border-purple-500 dark:hover:!border-purple-400">
-            <div>
-              <div className="flex items-center justify-between mb-3.5">
-                <h3 className="text-base font-bold text-gray-900 dark:text-white tracking-tight">
-                  Upcoming Holidays
-                </h3>
-                <button
-                  type="button"
-                  onClick={() => setIsHolidaysDrawerOpen(true)}
-                  className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 hover:underline transition-colors cursor-pointer"
-                >
-                  View Calendar
-                </button>
-              </div>
+          <div className="flex flex-col justify-between gap-2">
+            {(() => {
+              const cards = [
+                { label: 'Present', value: teamStats?.present || 0, icon: CheckCircle, color: 'text-emerald-600 dark:text-emerald-400', bgIcon: 'bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-100 dark:border-emerald-900/40', trend: teamStats?.pct ? `${teamStats.pct}%` : '0%', borderColor: '#10b981' },
+                { label: 'Half Day', value: teamStats?.halfDay || 0, icon: Sun, color: 'text-blue-600 dark:text-blue-400', bgIcon: 'bg-blue-50 dark:bg-blue-950/50 border border-blue-100 dark:border-blue-900/40', borderColor: '#3b82f6' },
+                { label: 'On Leave', value: teamStats?.leave || 0, icon: Calendar, color: 'text-purple-600 dark:text-purple-400', bgIcon: 'bg-purple-50 dark:bg-purple-950/50 border border-purple-100 dark:border-purple-900/40', borderColor: '#8b5cf6' },
+                { label: 'Absent', value: teamStats?.absent || 0, icon: XCircle, color: 'text-red-600 dark:text-red-400', bgIcon: 'bg-rose-50 dark:bg-rose-950/50 border border-rose-100 dark:border-rose-900/40', borderColor: '#ef4444' },
+              ];
 
-              <div className="space-y-2">
-                {holidays.length > 0 ? (
-                  holidays
-                    .filter(h => {
-                      if (!h || !h.date || h.isActive === false) return false;
-                      const hDate = new Date(h.date);
-                      const today = new Date();
-                      today.setHours(0, 0, 0, 0);
-                      return !isNaN(hDate.getTime()) && hDate >= today;
-                    })
-                    .sort((a, b) => new Date(a.date) - new Date(b.date))
-                    .slice(0, 5)
-                    .map((h, idx) => {
-                      const hDate = new Date(h.date);
-                      const dateStr = hDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-                      const dayStr = hDate.toLocaleDateString('en-GB', { weekday: 'long' });
-
-                      const accentThemes = [
-                        { pillar: 'bg-purple-500 dark:bg-purple-400', iconBg: 'bg-purple-100 dark:bg-purple-950/70 text-purple-600 dark:text-purple-400', bg: 'bg-slate-50/90 dark:bg-[#162420]/80 hover:bg-purple-50/60 dark:hover:bg-[#1e322c]' },
-                        { pillar: 'bg-indigo-500 dark:bg-indigo-400', iconBg: 'bg-indigo-100 dark:bg-indigo-950/70 text-indigo-600 dark:text-indigo-400', bg: 'bg-slate-50/90 dark:bg-[#162420]/80 hover:bg-indigo-50/60 dark:hover:bg-[#1e322c]' },
-                        { pillar: 'bg-pink-500 dark:bg-pink-400', iconBg: 'bg-pink-100 dark:bg-pink-950/70 text-pink-600 dark:text-pink-400', bg: 'bg-slate-50/90 dark:bg-[#162420]/80 hover:bg-pink-50/60 dark:hover:bg-[#1e322c]' },
-                        { pillar: 'bg-emerald-500 dark:bg-emerald-400', iconBg: 'bg-emerald-100 dark:bg-emerald-950/70 text-emerald-600 dark:text-emerald-400', bg: 'bg-slate-50/90 dark:bg-[#162420]/80 hover:bg-emerald-50/60 dark:hover:bg-[#1e322c]' },
-                        { pillar: 'bg-amber-500 dark:bg-amber-400', iconBg: 'bg-amber-100 dark:bg-amber-950/70 text-amber-600 dark:text-amber-400', bg: 'bg-slate-50/90 dark:bg-[#162420]/80 hover:bg-amber-50/60 dark:hover:bg-[#1e322c]' }
-                      ];
-                      const theme = accentThemes[idx % accentThemes.length];
-
-                      return (
-                        <div
-                          key={idx}
-                          onClick={() => setIsHolidaysDrawerOpen(true)}
-                          className={`flex items-center justify-between py-2 px-3 rounded-xl transition-all duration-200 cursor-pointer hover:shadow-md hover:translate-x-0.5 ${theme.bg}`}
-                        >
-                          <div className="flex items-center gap-2.5">
-                            <div className={`w-1.5 h-6 rounded-full shrink-0 ${theme.pillar}`} />
-                            <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${theme.iconBg}`}>
-                              <Calendar size={14} />
-                            </div>
-                            <div>
-                              <h4 className="text-xs font-black text-gray-900 dark:text-white leading-tight">{dateStr}</h4>
-                              <p className="text-[9px] text-gray-500 dark:text-gray-400 leading-none mt-0.5">{dayStr}</p>
-                            </div>
-                          </div>
-                          <div className="font-bold text-xs text-gray-900 dark:text-white text-right">
-                            {h.name || h.title}
-                          </div>
-                        </div>
-                      );
-                    })
-                ) : (
-                  <div className="text-center py-6 text-gray-400 font-medium text-xs">
-                    No upcoming holidays
+              return cards.map((card, i) => {
+                const isHovered = hoveredSummaryIndex === i;
+                return (
+                  <div
+                    key={i}
+                    onMouseEnter={() => setHoveredSummaryIndex(i)}
+                    onMouseLeave={() => setHoveredSummaryIndex(null)}
+                    style={{
+                      borderColor: isHovered ? card.borderColor : undefined
+                    }}
+                    className="flex items-center justify-between gap-2.5 px-4 py-2.5 rounded-2xl flex-1 w-full transition-all duration-200 shadow-xs cursor-pointer border border-slate-200/80 dark:border-[#38352e] bg-white dark:bg-[#181612]"
+                  >
+                    <div className="flex items-center gap-2.5 overflow-hidden">
+                      <div className={`inline-flex p-1.5 rounded-lg shrink-0 ${card.bgIcon}`}>
+                        <card.icon size={16} strokeWidth={2.5} className={card.color} />
+                      </div>
+                      <div className="flex flex-col min-w-0">
+                        <span className="text-xs font-bold text-gray-900 dark:text-white uppercase tracking-wider truncate" title={card.label}>
+                          {card.label}
+                        </span>
+                        {card.trend && (
+                          <span className="text-[9.5px] font-extrabold text-emerald-600 dark:text-emerald-400 flex items-center gap-0.5">
+                            <ArrowUpRight size={9} /> {card.trend}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="shrink-0 pl-1 text-right">
+                      <h3 className={`text-xl font-black ${card.color} leading-none`}>{card.value}</h3>
+                    </div>
                   </div>
-                )}
-              </div>
-            </div>
-          </Card>
+                );
+              });
+            })()}
+          </div>
         )}
+
+
 
         {/* Right Column: Attendance Calendar */}
         <div className="flex flex-col">
@@ -2866,7 +2854,7 @@ const Attendance = () => {
                           const myId = currentLoggedInUser._id || currentLoggedInUser.id;
                           const recUserId = record.user?._id || record.user?.id || (typeof record.user === 'string' ? record.user : null);
                           const isMe = viewContext === 'employee' || (myId && recUserId && String(myId) === String(recUserId));
-                          const userLiveActive = isMe ? liveActiveSeconds : 0;
+                          const userLiveActive = isMe ? liveActiveSeconds : (record.activeTime || 0);
                           return getWorkingHours(cIn, cOut, record.totalHours, record, userLiveActive);
                         })()}
                       </span>
@@ -2878,7 +2866,7 @@ const Attendance = () => {
                           const myId = currentLoggedInUser._id || currentLoggedInUser.id;
                           const recUserId = record.user?._id || record.user?.id || (typeof record.user === 'string' ? record.user : null);
                           const isMe = viewContext === 'employee' || (myId && recUserId && String(myId) === String(recUserId));
-                          const userLiveIdle = isMe ? liveIdleSeconds : 0;
+                          const userLiveIdle = isMe ? liveIdleSeconds : (record.idleTime || 0);
                           return getInactiveTime(record, userLiveIdle);
                         })()}
                       </span>
@@ -2892,8 +2880,8 @@ const Attendance = () => {
                           const myId = currentLoggedInUser._id || currentLoggedInUser.id;
                           const recUserId = record.user?._id || record.user?.id || (typeof record.user === 'string' ? record.user : null);
                           const isMe = viewContext === 'employee' || (myId && recUserId && String(myId) === String(recUserId));
-                          const userLiveActive = isMe ? liveActiveSeconds : 0;
-                          const userLiveIdle = isMe ? liveIdleSeconds : 0;
+                          const userLiveActive = isMe ? liveActiveSeconds : (record.activeTime || 0);
+                          const userLiveIdle = isMe ? liveIdleSeconds : (record.idleTime || 0);
                           return getTotalHoursCombined(cIn, cOut, record.totalHours, record, userLiveActive, userLiveIdle);
                         })()}
                       </span>

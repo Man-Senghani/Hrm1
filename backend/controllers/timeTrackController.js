@@ -566,8 +566,62 @@ exports.getAllTime = async (req, res) => {
         employeeId: { $in: allowedIds },
         employeeRole: { $not: /admin/i }
       };
+    } else if (userRole === 'manager') {
+      const User = require('../models/User');
+      const Employee = require('../models/Employee');
+      const directUsers = await User.find({
+        role: { $nin: ['admin', 'hr', 'superadmin'] },
+        $or: [
+          { reportingManager: req.user.id },
+          { managerId: req.user.id }
+        ]
+      }).select('_id').lean();
+      const directIds = directUsers.map(u => u._id);
+
+      const empDocs = await Employee.find({
+        $or: [
+          { managerId: req.user.id },
+          { reportingManager: req.user.id }
+        ]
+      }).select('userId').lean();
+      const empIds = empDocs.filter(e => e.userId).map(e => e.userId);
+
+      let allowedIds = Array.from(new Set([...directIds.map(String), ...empIds.map(String)]));
+      if (allowedIds.length === 0) {
+        const unassigned = await User.find({
+          role: { $in: ['employee', 'staff'] },
+          reportingManager: { $in: [req.user.id, null, undefined] }
+        }).select('_id').lean();
+        allowedIds = unassigned.map(u => u._id.toString());
+      }
+      if (!allowedIds.includes(String(req.user.id))) {
+        allowedIds.push(String(req.user.id));
+      }
+      filter = { employeeId: { $in: allowedIds } };
     }
     const tracks = await TimeTrack.find(filter).sort({ date: -1 }).populate('employeeId', 'name fullName email role').lean();
+    
+    // 🕒 LIVE CALCULATION: Compute live active time for all team members for today
+    const now = new Date();
+    const curTodayStr = getToday();
+    for (const t of tracks) {
+      if (t.date === curTodayStr) {
+        let liveActive = Math.floor(t.activeTime || 0);
+        let liveIdle = Math.floor(t.idleTime || 0);
+
+        if (t.status === 'active' && t.isRunning && t.segmentStart) {
+          const elapsed = Math.floor((now.getTime() - new Date(t.segmentStart).getTime()) / 1000);
+          liveActive += Math.max(0, elapsed);
+        } else if ((t.status === 'idle' || t.status === 'paused') && t.idleStart) {
+          const idleElapsed = Math.floor((now.getTime() - new Date(t.idleStart).getTime()) / 1000);
+          liveIdle += Math.max(0, idleElapsed);
+        }
+        t.activeTime = liveActive;
+        t.idleTime = liveIdle;
+        t.totalTime = liveActive + liveIdle;
+      }
+    }
+
     const result = userRole === 'hr'
       ? tracks.filter(t => {
           const r = (t.employeeId?.role || t.employeeRole || '').toLowerCase();
