@@ -38,6 +38,32 @@ const dailyReportSchema = new mongoose.Schema({
     type: String,
     enum: ['Completed', 'In Progress', 'Pending', 'On Hold'],
     default: 'Completed'
+  },
+  batchId: {
+    type: String,
+    trim: true
+  },
+  projectEntries: [{
+    projectName: { type: String, trim: true },
+    workDescription: { type: String, trim: true },
+    hoursSpent: { type: Number, min: 0 },
+    status: {
+      type: String,
+      enum: ['Completed', 'In Progress', 'Pending', 'On Hold'],
+      default: 'Completed'
+    }
+  }],
+  editRequest: {
+    status: {
+      type: String,
+      enum: ['none', 'pending', 'approved', 'rejected'],
+      default: 'none'
+    },
+    reason: { type: String, trim: true, default: '' },
+    requestedAt: { type: Date },
+    reviewedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    reviewedAt: { type: Date },
+    reviewNote: { type: String, trim: true, default: '' }
   }
 }, { timestamps: true });
 
@@ -45,5 +71,6 @@ dailyReportSchema.index({ user: 1, reportDate: 1 });
 dailyReportSchema.index({ reportDate: 1 });
 dailyReportSchema.index({ status: 1 });
 dailyReportSchema.index({ department: 1 });
+dailyReportSchema.index({ batchId: 1 });
 
 module.exports = mongoose.model('DailyReport', dailyReportSchema);

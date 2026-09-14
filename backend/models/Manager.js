@@ -1,14 +1,11 @@
+// Deprecated: Manager records are unified under User and Employee models
 const mongoose = require('mongoose');
 
 const managerSchema = new mongoose.Schema({
   userId: { 
     type: mongoose.Schema.Types.ObjectId, 
-    ref: 'User', 
-    required: true,
-    unique: true 
-  },
-  teamSize: { type: Number, default: 0 },
-  department: { type: String, default: 'Operations' }
-}, { timestamps: true });
+    ref: 'User'
+  }
+}, { timestamps: true, strict: false });
 
-module.exports = mongoose.model('Manager', managerSchema);
+module.exports = mongoose.models.Manager || mongoose.model('Manager', managerSchema);

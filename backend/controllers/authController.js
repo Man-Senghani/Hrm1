@@ -1,7 +1,5 @@
 const User = require('../models/User');
 const Employee = require('../models/Employee');
-const HR = require('../models/HR');
-const Manager = require('../models/Manager');
 const jwt = require('jsonwebtoken');
 const mongoose = require('mongoose');
 
@@ -174,21 +172,12 @@ exports.getMe = async (req, res) => {
     // 👤 MASTER REGISTRY BRIDGE: Always fetch from the Employee model for personnel details using verified user._id
     const employeeData = await Employee.findOne({ userId: user._id }).populate('reportingManager', 'name email').lean();
 
-    // 🛰️ DYNAMIC SHADOW LOOKUP: Fetch role-specific metadata if needed
-    let roleMetadata = {};
-    if (user.role === 'hr') {
-      roleMetadata = await HR.findOne({ userId: user._id }).lean() || {};
-    } else if (user.role === 'manager') {
-      roleMetadata = await Manager.findOne({ userId: user._id }).lean() || {};
-    }
-
-    console.log(`[PROFILE TRACE] User: ${user.name || user.email} | Role: ${user.role} | Master Registry: ${!!employeeData} | Shadow: ${!!roleMetadata}`);
+    console.log(`[PROFILE TRACE] User: ${user.name || user.email} | Role: ${user.role} | Master Registry: ${!!employeeData}`);
 
     // Merge data - preserve the master User role and use registry data only for identity fields.
     const profile = {
       ...employeeData,
       ...user,
-      ...roleMetadata,
       role: user.role,
       fullName: employeeData?.fullName || user.fullName || user.name || '',
       name: user.name || employeeData?.fullName || '',

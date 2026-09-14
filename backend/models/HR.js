@@ -1,15 +1,11 @@
+// Deprecated: HR records are unified under User and Employee models
 const mongoose = require('mongoose');
 
 const hrSchema = new mongoose.Schema({
   userId: { 
     type: mongoose.Schema.Types.ObjectId, 
-    ref: 'User', 
-    required: true,
-    unique: true 
-  },
-  hrId: { type: String, unique: true },
-  department: { type: String, default: 'Human Resources' },
-  permissions: [{ type: String, default: 'manage_tasks' }]
-}, { timestamps: true });
+    ref: 'User'
+  }
+}, { timestamps: true, strict: false });
 
-module.exports = mongoose.model('HR', hrSchema);
+module.exports = mongoose.models.HR || mongoose.model('HR', hrSchema);

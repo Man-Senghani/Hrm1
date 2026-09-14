@@ -1,7 +1,5 @@
 const mongoose = require('mongoose');
 const User = require('../models/User');
-const HR = require('../models/HR');
-const Manager = require('../models/Manager');
 const Employee = require('../models/Employee');
 
 /**
@@ -75,30 +73,7 @@ exports.createNewUserAtomic = async (userData) => {
       });
       await employeeProfile.save();
 
-      let roleData = null;
-      const shadowBase = { userId: user._id, ...extraData };
-
-      switch (role.toLowerCase()) {
-        case 'hr':
-          roleData = new HR({ ...shadowBase, hrId: generatedId });
-          break;
-        case 'manager':
-          roleData = new Manager({ ...shadowBase });
-          break;
-        case 'employee':
-          // Profile already created above as base
-          roleData = employeeProfile;
-          break;
-        default:
-          // Admin or fallback
-          break;
-      }
-
-      if (roleData && role.toLowerCase() !== 'employee') {
-        await roleData.save();
-      }
-
-      return { user, roleData, employeeProfile };
+      return { user, employeeProfile };
     } catch (innerError) {
       // 🔙 Manual Rollback on System Failure
       await User.findByIdAndDelete(user._id);

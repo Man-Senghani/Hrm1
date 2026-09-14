@@ -15,8 +15,11 @@ const screenshotSchema = new mongoose.Schema({
   timestamp: {
     type: Date,
     default: Date.now,
-    expires: 259200 // 3 days in seconds (3 * 24 * 60 * 60)
+    expires: 604800 // 7 days (1 week) in seconds (7 * 24 * 60 * 60)
   }
 }, { timestamps: true });
+
+// Ensure cleanup index is updated for 7 days retention
+screenshotSchema.index({ timestamp: 1 }, { expireAfterSeconds: 604800 });
 
 module.exports = mongoose.model('Screenshot', screenshotSchema);

@@ -25,6 +25,16 @@ const attendanceSchema = new mongoose.Schema({
     type: String,
     enum: ['Present', 'Half Day', 'Leave', 'Absent'],
     default: 'Present'
+  },
+  clockIn: {
+    type: String // HH:MM format, set from attendanceController
+  },
+  clockOut: {
+    type: String // HH:MM format, set on checkout
+  },
+  autoCheckout: {
+    type: Boolean,
+    default: false // true when system auto-checked out the employee at 11:59 PM
   }
 }, { timestamps: true });
 

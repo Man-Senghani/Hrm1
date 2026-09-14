@@ -106,9 +106,39 @@ router.get('/all', async (req, res) => {
       query.$and = (query.$and || []).concat(conditions);
     }
 
-    const screenshots = await Screenshot.find(query).sort({ timestamp: -1 }).limit(250);
+    // 1. Date filter (if provided, query that exact date; otherwise query past 7 days)
+    if (req.query.date && /^\d{4}-\d{2}-\d{2}$/.test(req.query.date)) {
+      const startOfDay = new Date(`${req.query.date}T00:00:00.000Z`);
+      const endOfDay = new Date(`${req.query.date}T23:59:59.999Z`);
+      query.timestamp = { $gte: startOfDay, $lte: endOfDay };
+    } else {
+      // 7 days (1 week) retention window
+      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      query.timestamp = { $gte: sevenDaysAgo };
+    }
+
+    // 2. Specific employee filter if requested
+    if (req.query.employeeName) {
+      query.employeeName = req.query.employeeName;
+    }
+
+    // Unlimited retrieval (high ceiling of 10,000 to cover all captures without 250 cutoff)
+    const limit = req.query.limit ? parseInt(req.query.limit) : 10000;
+    const screenshots = await Screenshot.find(query).sort({ timestamp: -1 }).limit(limit);
+
+    // Sync TTL index to 7 days (604,800s) if MongoDB still has the old 3-day index
+    Screenshot.collection.indexes().then(indexes => {
+      const ttlIdx = indexes.find(i => i.key && i.key.timestamp === 1 && i.expireAfterSeconds !== undefined);
+      if (ttlIdx && ttlIdx.expireAfterSeconds !== 604800) {
+        Screenshot.collection.dropIndex(ttlIdx.name).then(() => {
+          Screenshot.collection.createIndex({ timestamp: 1 }, { expireAfterSeconds: 604800 });
+        }).catch(() => {});
+      }
+    }).catch(() => {});
+
     res.json(screenshots);
   } catch (err) {
+    console.error('Fetch Screenshots Error:', err);
     res.status(500).json({ message: 'Server Error' });
   }
 });

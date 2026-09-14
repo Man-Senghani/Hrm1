@@ -6,13 +6,23 @@ const {
   getMyReports,
   getAllReports,
   getProjectList,
+  addProject,
+  editProject,
+  deleteProject,
+  reorderProjects,
   getReportById,
   updateReport,
-  deleteReport
+  deleteReport,
+  requestEditAccess,
+  reviewEditAccess
 } = require('../controllers/dailyReportController');
 
-// Project list endpoint
+// Project list and management endpoints
 router.get('/projects', protect, getProjectList);
+router.post('/projects', protect, authorize('admin', 'hr', 'manager'), addProject);
+router.put('/projects/reorder', protect, authorize('admin', 'hr', 'manager'), reorderProjects);
+router.put('/projects', protect, authorize('admin', 'hr', 'manager'), editProject);
+router.delete('/projects', protect, authorize('admin', 'hr', 'manager'), deleteProject);
 
 // Employee own reports endpoint
 router.get('/me', protect, getMyReports);
@@ -27,5 +37,9 @@ router.post('/', protect, createReport);
 router.get('/:id', protect, getReportById);
 router.put('/:id', protect, updateReport);
 router.delete('/:id', protect, deleteReport);
+
+// Edit access request & review workflows
+router.post('/:id/request-edit', protect, requestEditAccess);
+router.put('/:id/review-edit', protect, authorize('admin', 'hr', 'manager'), reviewEditAccess);
 
 module.exports = router;

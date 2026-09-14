@@ -97,8 +97,10 @@ const Screenshots = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
+      const params = { role, userId: sessionStorage.getItem('userId') };
+      if (filterDate) params.date = filterDate;
       const res = await axios.get('/api/screenshot/all', {
-        params: { role, userId: sessionStorage.getItem('userId') },
+        params,
         headers: { Authorization: `Bearer ${token}` }
       });
       const list = Array.isArray(res.data) ? res.data : [];
@@ -112,7 +114,9 @@ const Screenshots = () => {
 
   useEffect(() => {
     fetchData();
+  }, [role, filterDate]);
 
+  useEffect(() => {
     // 📡 REAL-TIME SYNC ENGINE
     const socket = io(window.location.origin, {
        transports: ['websocket']

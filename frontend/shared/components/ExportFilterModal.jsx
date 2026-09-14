@@ -8,7 +8,7 @@ import {
   SlidersHorizontal, 
   FileSpreadsheet, 
   FileText, 
-  FileCode2, 
+  FileDown, 
   CheckSquare, 
   Square, 
   Filter,
@@ -25,7 +25,7 @@ const getLocalYYYYMMDD = (d) => {
 
 const getItemDateString = (item) => {
   if (!item) return '';
-  const raw = item.date || item.checkInTime || item.createdAt;
+  const raw = item.date || item.reportDate || item.checkInTime || item.createdAt;
   if (!raw) return '';
   if (typeof raw === 'string') {
     return raw.split('T')[0];
@@ -137,7 +137,7 @@ const StylishFilterSelect = ({ label, value, options, onChange }) => {
 /**
  * Universal Export Filter Modal
  * Allows users to choose data scope, in-modal filters, which columns/fields to include,
- * and the output format (CSV, Excel/XLSX, JSON) before downloading.
+ * and the output format (CSV, Excel/XLSX, PDF) before downloading.
  */
 const ExportFilterModal = ({
   isOpen,
@@ -176,7 +176,7 @@ const ExportFilterModal = ({
 
   // State
   const [dataScope, setDataScope] = useState(hasFilterDifference ? 'filtered' : 'all');
-  const [selectedFormat, setSelectedFormat] = useState('csv'); // 'csv' | 'xlsx' | 'json'
+  const [selectedFormat, setSelectedFormat] = useState('csv'); // 'csv' | 'xlsx' | 'pdf'
   const [selectedColumnKeys, setSelectedColumnKeys] = useState(() => 
     columns.filter(c => c.defaultSelected !== false).map(c => c.key)
   );
@@ -272,6 +272,240 @@ const ExportFilterModal = ({
     }
   };
 
+  // PDF Export Document Generator
+  const exportToPDF = (activeCols, records, filename, reportTitle) => {
+    const orientation = activeCols.length > 5 ? 'landscape' : 'portrait';
+    const timestamp = new Date().toLocaleString('en-US', {
+      dateStyle: 'medium',
+      timeStyle: 'short'
+    });
+
+    const escapeHtml = (val) => {
+      if (val === null || val === undefined) return '-';
+      return String(val)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    };
+
+    const headersHtml = activeCols
+      .map(col => `<th style="padding: 9px 10px; font-weight: 700; text-align: left; font-size: 10.5px; color: #ffffff; background-color: #00a76b; border: 1px solid #00915c; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap;">${escapeHtml(col.label)}</th>`)
+      .join('');
+
+    const rowsHtml = records
+      .map((item, idx) => {
+        const bg = idx % 2 === 0 ? '#ffffff' : '#f8fafc';
+        const cells = activeCols
+          .map(col => {
+            const raw = col.getValue ? col.getValue(item) : (item[col.key] ?? '');
+            const valStr = raw === null || raw === undefined || raw === '' ? '-' : String(raw);
+            const isStatus = String(col.label || col.key).toLowerCase().includes('status');
+            let content = escapeHtml(valStr);
+            if (isStatus && valStr !== '-') {
+              const lower = valStr.toLowerCase();
+              let badgeColor = '#00a76b';
+              let badgeBg = '#ecfdf5';
+              let badgeBorder = '#a7f3d0';
+              if (lower.includes('absent') || lower.includes('fail') || lower.includes('inactive')) {
+                badgeColor = '#ef4444';
+                badgeBg = '#fef2f2';
+                badgeBorder = '#fecaca';
+              } else if (lower.includes('half') || lower.includes('pending') || lower.includes('late')) {
+                badgeColor = '#f59e0b';
+                badgeBg = '#fffbeb';
+                badgeBorder = '#fde68a';
+              } else if (lower.includes('leave')) {
+                badgeColor = '#3b82f6';
+                badgeBg = '#eff6ff';
+                badgeBorder = '#bfdbfe';
+              }
+              content = `<span style="display: inline-block; padding: 2px 8px; border-radius: 9999px; font-size: 10px; font-weight: 600; color: ${badgeColor}; background-color: ${badgeBg}; border: 1px solid ${badgeBorder};">${escapeHtml(valStr)}</span>`;
+            }
+            return `<td style="padding: 8px 10px; font-size: 11px; color: #1f2937; border: 1px solid #e2e8f0; background-color: ${bg}; vertical-align: middle;">${content}</td>`;
+          })
+          .join('');
+        return `<tr style="page-break-inside: avoid;">${cells}</tr>`;
+      })
+      .join('');
+
+    const htmlContent = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>${escapeHtml(filename)}</title>
+  <style>
+    @page {
+      size: ${orientation};
+      margin: 12mm 10mm;
+    }
+    * {
+      box-sizing: border-box;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      color: #1e293b;
+      background: #ffffff;
+      margin: 0;
+      padding: 16px;
+      -webkit-font-smoothing: antialiased;
+    }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      padding-bottom: 12px;
+      border-bottom: 2px solid #00a76b;
+      margin-bottom: 14px;
+    }
+    .brand {
+      font-size: 22px;
+      font-weight: 800;
+      color: #00a76b;
+      letter-spacing: -0.5px;
+    }
+    .brand span {
+      color: #0f172a;
+      font-weight: 700;
+    }
+    .title {
+      font-size: 14px;
+      font-weight: 700;
+      color: #334155;
+      margin-top: 3px;
+    }
+    .meta {
+      text-align: right;
+      font-size: 11px;
+      color: #64748b;
+      line-height: 1.5;
+    }
+    .meta-badge {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 9999px;
+      background: #ecfdf5;
+      color: #065f46;
+      border: 1px solid #a7f3d0;
+      font-weight: 700;
+      font-size: 11px;
+      margin-bottom: 4px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      page-break-inside: auto;
+      margin-top: 6px;
+    }
+    thead {
+      display: table-header-group;
+    }
+    tfoot {
+      display: table-footer-group;
+    }
+    tr {
+      page-break-inside: avoid;
+      page-break-after: auto;
+    }
+    .footer {
+      margin-top: 18px;
+      padding-top: 10px;
+      border-top: 1px solid #e2e8f0;
+      display: flex;
+      justify-content: space-between;
+      font-size: 10px;
+      color: #94a3b8;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div>
+      <div class="brand">Fluid<span>HR</span></div>
+      <div class="title">${escapeHtml(reportTitle || 'Data Export Report')}</div>
+    </div>
+    <div class="meta">
+      <div class="meta-badge">${records.length} Records • ${activeCols.length} Columns</div>
+      <div>Generated: ${timestamp}</div>
+    </div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>${headersHtml}</tr>
+    </thead>
+    <tbody>
+      ${rowsHtml}
+    </tbody>
+  </table>
+
+  <div class="footer">
+    <div>FluidHR System • Confidential Export Document</div>
+    <div>Total: ${records.length} records</div>
+  </div>
+</body>
+</html>`;
+
+    // Render in hidden iframe and trigger native print-to-PDF
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = '0';
+    iframe.setAttribute('title', 'FluidHR Export PDF');
+    document.body.appendChild(iframe);
+
+    try {
+      const frameDoc = iframe.contentWindow.document;
+      frameDoc.open();
+      frameDoc.write(htmlContent);
+      frameDoc.close();
+
+      setTimeout(() => {
+        try {
+          iframe.contentWindow.focus();
+          iframe.contentWindow.print();
+        } catch (printErr) {
+          console.error('Iframe print error, falling back to window.open:', printErr);
+          const printWindow = window.open('', '_blank');
+          if (printWindow) {
+            printWindow.document.write(htmlContent);
+            printWindow.document.close();
+            printWindow.focus();
+            printWindow.print();
+          }
+        } finally {
+          setTimeout(() => {
+            try {
+              if (document.body.contains(iframe)) {
+                document.body.removeChild(iframe);
+              }
+            } catch (e) {}
+          }, 2000);
+        }
+      }, 300);
+    } catch (e) {
+      console.error('PDF export error:', e);
+      const printWindow = window.open('', '_blank');
+      if (printWindow) {
+        printWindow.document.write(htmlContent);
+        printWindow.document.close();
+        printWindow.focus();
+        printWindow.print();
+      }
+      try {
+        if (document.body.contains(iframe)) {
+          document.body.removeChild(iframe);
+        }
+      } catch (err) {}
+    }
+  };
+
   // Perform export
   const handleTriggerExport = () => {
     if (recordsToExport.length === 0) {
@@ -294,23 +528,9 @@ const ExportFilterModal = ({
       return;
     }
 
-    // Default CSV / JSON download logic
-    if (selectedFormat === 'json') {
-      const exportObjects = recordsToExport.map(item => {
-        const obj = {};
-        activeCols.forEach(col => {
-          obj[col.label] = col.getValue ? col.getValue(item) : (item[col.key] ?? '');
-        });
-        return obj;
-      });
-
-      const jsonString = `data:text/json;charset=utf-8,${encodeURIComponent(JSON.stringify(exportObjects, null, 2))}`;
-      const link = document.createElement('a');
-      link.setAttribute('href', jsonString);
-      link.setAttribute('download', `${filename}.json`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+    // Export according to chosen format
+    if (selectedFormat === 'pdf') {
+      exportToPDF(activeCols, recordsToExport, filename, title);
     } else {
       // CSV and Excel (using UTF-8 BOM CSV which Excel seamlessly opens without encoding issues)
       const headers = activeCols.map(c => c.label);
@@ -654,15 +874,15 @@ const ExportFilterModal = ({
 
               <button
                 type="button"
-                onClick={() => setSelectedFormat('json')}
+                onClick={() => setSelectedFormat('pdf')}
                 className={`flex flex-col items-center justify-center py-3 px-2 rounded-xl border transition-all cursor-pointer gap-1.5 ${
-                  selectedFormat === 'json'
+                  selectedFormat === 'pdf'
                     ? 'border-[#00a76b] bg-emerald-50/60 dark:bg-emerald-950/30 text-[#00a76b] font-bold ring-1 ring-[#00a76b]'
                     : 'border-gray-200 dark:border-[#1a332b] bg-white dark:bg-[#11221d] text-gray-600 dark:text-gray-400 hover:bg-gray-50'
                 }`}
               >
-                <FileCode2 size={18} />
-                <span className="text-xs">JSON (.json)</span>
+                <FileDown size={18} />
+                <span className="text-xs">PDF (.pdf)</span>
               </button>
             </div>
           </div>

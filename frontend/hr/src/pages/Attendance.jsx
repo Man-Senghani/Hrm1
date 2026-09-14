@@ -1225,6 +1225,160 @@ const Attendance = () => {
     return '--';
   }, [liveActiveSeconds, todayLiveStatus, todayRecord]);
 
+  // ── Calculate Total Weekly Worked Hours (Mon - Fri / Sun) for Current User ──
+  const weeklyWorkedHoursData = useMemo(() => {
+    const now = new Date();
+    const currentDay = now.getDay();
+    const mondayDiff = currentDay === 0 ? -6 : 1 - currentDay;
+    const monday = new Date(now);
+    monday.setDate(now.getDate() + mondayDiff);
+    monday.setHours(0, 0, 0, 0);
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+    sunday.setHours(23, 59, 59, 999);
+
+    const monStr = getLocalYYYYMMDD(monday);
+    const sunStr = getLocalYYYYMMDD(sunday);
+    const todayStr = getLocalYYYYMMDD(now);
+
+    const currentLoggedInUser = JSON.parse(sessionStorage.getItem('user') || '{}');
+    const myId = currentLoggedInUser._id || currentLoggedInUser.id;
+
+    let totalSeconds = 0;
+    let hasTodaySeconds = false;
+
+    (records || []).forEach(r => {
+      const uId = r.user?._id || r.user?.id || (typeof r.user === 'string' ? r.user : r._id);
+      if (myId && uId && String(uId) !== String(myId)) return;
+
+      const rDate = r.date ? String(r.date).split('T')[0] : '';
+      if (rDate >= monStr && rDate <= sunStr) {
+        if (rDate === todayStr) {
+          hasTodaySeconds = true;
+          if (liveActiveSeconds > 0) {
+            totalSeconds += liveActiveSeconds;
+          } else if (todayLiveStatus?.activeTime && typeof todayLiveStatus.activeTime === 'number' && todayLiveStatus.activeTime > 0) {
+            totalSeconds += todayLiveStatus.activeTime;
+          } else if (r.totalActiveTime && typeof r.totalActiveTime === 'number' && r.totalActiveTime > 0) {
+            totalSeconds += r.totalActiveTime;
+          } else if (r.activeTime && typeof r.activeTime === 'number' && r.activeTime > 0) {
+            totalSeconds += r.activeTime;
+          } else {
+            const cIn = r.clockIn || r.clock_in || r.checkInTime;
+            const cOut = r.clockOut || r.clock_out || r.checkOutTime;
+            const inMins = parseTimeToMins(cIn);
+            const outMins = parseTimeToMins(cOut);
+            if (inMins !== null && outMins !== null && outMins > inMins) {
+              totalSeconds += (outMins - inMins) * 60;
+            } else if (r.totalHours && !isNaN(parseFloat(r.totalHours))) {
+              totalSeconds += parseFloat(r.totalHours) * 3600;
+            }
+          }
+        } else {
+          if (r.totalActiveTime && typeof r.totalActiveTime === 'number' && r.totalActiveTime > 0) {
+            totalSeconds += r.totalActiveTime;
+          } else if (r.activeTime && typeof r.activeTime === 'number' && r.activeTime > 0) {
+            totalSeconds += r.activeTime;
+          } else {
+            const cIn = r.clockIn || r.clock_in || r.checkInTime;
+            const cOut = r.clockOut || r.clock_out || r.checkOutTime;
+            const inMins = parseTimeToMins(cIn);
+            const outMins = parseTimeToMins(cOut);
+            if (inMins !== null && outMins !== null && outMins > inMins) {
+              totalSeconds += (outMins - inMins) * 60;
+            } else if (r.totalHours && !isNaN(parseFloat(r.totalHours))) {
+              totalSeconds += parseFloat(r.totalHours) * 3600;
+            }
+          }
+        }
+      }
+    });
+
+    if (!hasTodaySeconds) {
+      if (liveActiveSeconds > 0) {
+        totalSeconds += liveActiveSeconds;
+      } else if (todayLiveStatus?.activeTime && typeof todayLiveStatus.activeTime === 'number' && todayLiveStatus.activeTime > 0) {
+        totalSeconds += todayLiveStatus.activeTime;
+      }
+    }
+
+    const totalHoursDecimal = totalSeconds / 3600;
+    const h = Math.floor(totalSeconds / 3600);
+    const m = Math.floor((totalSeconds % 3600) / 60);
+    const targetHours = 42.5; // 8.5 * 5
+
+    return {
+      formatted: `${h}h ${m}m`,
+      decimal: totalHoursDecimal.toFixed(1),
+      targetHours: 42.5,
+      targetFormula: '8.5 * 5',
+      percentage: Math.min(100, Math.round((totalHoursDecimal / targetHours) * 100))
+    };
+  }, [records, liveActiveSeconds, todayLiveStatus]);
+
+  // ── Calculate Team Weekly Worked Hours (Mon - Fri / Sun) ──
+  const teamWeeklyWorkedHoursData = useMemo(() => {
+    const now = new Date();
+    const currentDay = now.getDay();
+    const mondayDiff = currentDay === 0 ? -6 : 1 - currentDay;
+    const monday = new Date(now);
+    monday.setDate(now.getDate() + mondayDiff);
+    monday.setHours(0, 0, 0, 0);
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+    sunday.setHours(23, 59, 59, 999);
+
+    const monStr = getLocalYYYYMMDD(monday);
+    const sunStr = getLocalYYYYMMDD(sunday);
+
+    let totalSeconds = 0;
+    const empSet = new Set();
+
+    (records || []).forEach(r => {
+      const uId = r.user?._id || r.user?.id || (typeof r.user === 'string' ? r.user : r._id);
+      if (uId) empSet.add(String(uId));
+
+      const rDate = r.date ? String(r.date).split('T')[0] : '';
+      if (rDate >= monStr && rDate <= sunStr) {
+        if (r.totalActiveTime && typeof r.totalActiveTime === 'number' && r.totalActiveTime > 0) {
+          totalSeconds += r.totalActiveTime;
+        } else if (r.activeTime && typeof r.activeTime === 'number' && r.activeTime > 0) {
+          totalSeconds += r.activeTime;
+        } else {
+          const cIn = r.clockIn || r.clock_in || r.checkInTime;
+          const cOut = r.clockOut || r.clock_out || r.checkOutTime;
+          const inMins = parseTimeToMins(cIn);
+          const outMins = parseTimeToMins(cOut);
+          if (inMins !== null && outMins !== null && outMins > inMins) {
+            totalSeconds += (outMins - inMins) * 60;
+          } else if (r.totalHours && !isNaN(parseFloat(r.totalHours))) {
+            totalSeconds += parseFloat(r.totalHours) * 3600;
+          }
+        }
+      }
+    });
+
+    (teamLiveSessions || []).forEach(s => {
+      if (s.activeTime && typeof s.activeTime === 'number' && s.activeTime > 0) {
+        totalSeconds += s.activeTime;
+      }
+    });
+
+    const empCount = Math.max(1, empSet.size);
+    const totalHoursDecimal = totalSeconds / 3600;
+    const h = Math.floor(totalSeconds / 3600);
+    const m = Math.floor((totalSeconds % 3600) / 60);
+    const targetHours = empCount * 42.5;
+
+    return {
+      formatted: `${h}h ${m}m`,
+      decimal: totalHoursDecimal.toFixed(1),
+      targetHours: targetHours.toFixed(0),
+      empCount,
+      percentage: Math.min(100, Math.round((totalHoursDecimal / targetHours) * 100))
+    };
+  }, [records, teamLiveSessions]);
+
   const [periodStatsMap, setPeriodStatsMap] = useState({});
 
   const activeStats = useMemo(() => {
@@ -2261,14 +2415,14 @@ const Attendance = () => {
           </div>
         )}
 
-        {/* Middle Column: 3 Summary Cards (In Between Current Session & Calendar) */}
+        {/* Middle Column: Summary Cards (In Between Current Session & Calendar) */}
         <div className="flex flex-col justify-between gap-2">
           {viewContext === 'team' ? (
             <>
               {/* Card 1: Present Today */}
-              <div className="py-3.5 px-5 rounded-2xl bg-white dark:bg-[#181612] border border-slate-200/80 dark:border-[#38352e] hover:!border-[#10b981] dark:hover:!border-[#34d399] transition-colors duration-300 flex items-center gap-6 sm:gap-8 shadow-xs group flex-1">
-                <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
-                  <Users size={18} />
+              <div className="py-2.5 sm:py-3 px-4 sm:px-5 rounded-2xl bg-white dark:bg-[#181612] border border-slate-200/80 dark:border-[#38352e] hover:!border-[#10b981] dark:hover:!border-[#34d399] transition-colors duration-300 flex items-center gap-4 sm:gap-6 shadow-xs group flex-1">
+                <div className="w-9 sm:w-10 h-9 sm:h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                  <Users size={17} />
                 </div>
                 <div>
                   <div className="flex items-center gap-1.5 mb-0.5">
@@ -2278,7 +2432,7 @@ const Attendance = () => {
                     </span>
                   </div>
                   <div className="flex items-baseline gap-2">
-                    <span className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
+                    <span className="text-lg sm:text-xl font-black text-slate-900 dark:text-white tracking-tight">
                       {teamPresentCount}
                     </span>
                     <span className="text-[10px] font-extrabold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-md">
@@ -2289,9 +2443,9 @@ const Attendance = () => {
               </div>
 
               {/* Card 2: Current Live */}
-              <div className="py-3.5 px-5 rounded-2xl bg-white dark:bg-[#181612] border border-slate-200/80 dark:border-[#38352e] hover:!border-[#3b82f6] dark:hover:!border-[#60a5fa] transition-colors duration-300 flex items-center gap-6 sm:gap-8 shadow-xs group flex-1">
-                <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
-                  <Activity size={18} />
+              <div className="py-2.5 sm:py-3 px-4 sm:px-5 rounded-2xl bg-white dark:bg-[#181612] border border-slate-200/80 dark:border-[#38352e] hover:!border-[#3b82f6] dark:hover:!border-[#60a5fa] transition-colors duration-300 flex items-center gap-4 sm:gap-6 shadow-xs group flex-1">
+                <div className="w-9 sm:w-10 h-9 sm:h-10 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
+                  <Activity size={17} />
                 </div>
                 <div>
                   <div className="flex items-center gap-1.5 mb-0.5">
@@ -2301,7 +2455,7 @@ const Attendance = () => {
                     </span>
                   </div>
                   <div className="flex items-baseline gap-2">
-                    <span className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
+                    <span className="text-lg sm:text-xl font-black text-slate-900 dark:text-white tracking-tight">
                       {teamCurrentLiveCount}
                     </span>
                     <span className="text-[10px] font-extrabold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 px-2 py-0.5 rounded-md">
@@ -2312,9 +2466,9 @@ const Attendance = () => {
               </div>
 
               {/* Card 3: On Break */}
-              <div className="py-3.5 px-5 rounded-2xl bg-white dark:bg-[#181612] border border-slate-200/80 dark:border-[#38352e] hover:!border-[#f59e0b] dark:hover:!border-[#fbbf24] transition-colors duration-300 flex items-center gap-6 sm:gap-8 shadow-xs group flex-1">
-                <div className="w-10 h-10 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
-                  <Coffee size={18} />
+              <div className="py-2.5 sm:py-3 px-4 sm:px-5 rounded-2xl bg-white dark:bg-[#181612] border border-slate-200/80 dark:border-[#38352e] hover:!border-[#f59e0b] dark:hover:!border-[#fbbf24] transition-colors duration-300 flex items-center gap-4 sm:gap-6 shadow-xs group flex-1">
+                <div className="w-9 sm:w-10 h-9 sm:h-10 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
+                  <Coffee size={17} />
                 </div>
                 <div>
                   <div className="flex items-center gap-1.5 mb-0.5">
@@ -2324,7 +2478,7 @@ const Attendance = () => {
                     </span>
                   </div>
                   <div className="flex items-baseline gap-2">
-                    <span className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
+                    <span className="text-lg sm:text-xl font-black text-slate-900 dark:text-white tracking-tight">
                       {teamOnBreakCount}
                     </span>
                     <span className="text-[10px] font-extrabold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded-md">
@@ -2333,13 +2487,36 @@ const Attendance = () => {
                   </div>
                 </div>
               </div>
+
+              {/* Card 4: Total Hours */}
+              <div className="py-2.5 sm:py-3 px-4 sm:px-5 rounded-2xl bg-white dark:bg-[#181612] border border-slate-200/80 dark:border-[#38352e] hover:!border-purple-500 dark:hover:!border-purple-400 transition-colors duration-300 flex items-center gap-3.5 sm:gap-4 shadow-xs group flex-1">
+                <div className="w-9 sm:w-10 h-9 sm:h-10 rounded-xl bg-purple-500 text-white shadow-md shadow-purple-500/30 flex items-center justify-center shrink-0">
+                  <Timer size={16} strokeWidth={2.2} />
+                </div>
+                <div>
+                  <div className="flex items-center gap-1.5 mb-0.5">
+                    <span className="w-2 h-2 rounded-full bg-purple-500" />
+                    <span className="text-[10px] font-extrabold text-slate-400 dark:text-[#829e92] uppercase tracking-wider">
+                      Total Hours
+                    </span>
+                  </div>
+                  <div className="flex items-baseline gap-1.5">
+                    <p className="text-lg sm:text-xl font-black text-purple-600 dark:text-purple-400 tracking-tight font-mono">
+                      {teamWeeklyWorkedHoursData.formatted}
+                    </p>
+                    <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500">
+                      / {teamWeeklyWorkedHoursData.targetHours} hrs
+                    </span>
+                  </div>
+                </div>
+              </div>
             </>
           ) : (
             <>
               {/* Card 1: Check-in Time */}
-              <div className="py-3.5 px-5 rounded-2xl bg-white dark:bg-[#181612] border border-slate-200/80 dark:border-[#38352e] hover:!border-[#10b981] dark:hover:!border-[#34d399] transition-colors duration-300 flex items-center gap-4 sm:gap-5 shadow-xs group flex-1">
-                <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
-                  <Clock size={18} />
+              <div className="py-2.5 sm:py-3 px-4 sm:px-5 rounded-2xl bg-white dark:bg-[#181612] border border-slate-200/80 dark:border-[#38352e] hover:!border-[#10b981] dark:hover:!border-[#34d399] transition-colors duration-300 flex items-center gap-3.5 sm:gap-4 shadow-xs group flex-1">
+                <div className="w-9 sm:w-10 h-9 sm:h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                  <Clock size={17} />
                 </div>
                 <div>
                   <div className="flex items-center gap-1.5 mb-0.5">
@@ -2348,16 +2525,16 @@ const Attendance = () => {
                       Check-In Time
                     </span>
                   </div>
-                  <p className="text-xl font-black text-emerald-600 dark:text-emerald-400 tracking-tight font-mono">
+                  <p className="text-lg sm:text-xl font-black text-emerald-600 dark:text-emerald-400 tracking-tight font-mono">
                     {todayCheckInDisplay}
                   </p>
                 </div>
               </div>
 
               {/* Card 2: Check-out Time */}
-              <div className="py-3.5 px-5 rounded-2xl bg-white dark:bg-[#181612] border border-slate-200/80 dark:border-[#38352e] hover:!border-[#3b82f6] dark:hover:!border-[#60a5fa] transition-colors duration-300 flex items-center gap-4 sm:gap-5 shadow-xs group flex-1">
-                <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
-                  <Square size={17} />
+              <div className="py-2.5 sm:py-3 px-4 sm:px-5 rounded-2xl bg-white dark:bg-[#181612] border border-slate-200/80 dark:border-[#38352e] hover:!border-[#3b82f6] dark:hover:!border-[#60a5fa] transition-colors duration-300 flex items-center gap-3.5 sm:gap-4 shadow-xs group flex-1">
+                <div className="w-9 sm:w-10 h-9 sm:h-10 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
+                  <Square size={16} />
                 </div>
                 <div>
                   <div className="flex items-center gap-1.5 mb-0.5">
@@ -2366,27 +2543,50 @@ const Attendance = () => {
                       Check-Out Time
                     </span>
                   </div>
-                  <p className="text-xl font-black text-blue-600 dark:text-blue-400 tracking-tight font-mono">
+                  <p className="text-lg sm:text-xl font-black text-blue-600 dark:text-blue-400 tracking-tight font-mono">
                     {todayCheckOutDisplay}
                   </p>
                 </div>
               </div>
 
-              {/* Card 3: Total Hours */}
-              <div className="py-3.5 px-5 rounded-2xl bg-white dark:bg-[#181612] border border-slate-200/80 dark:border-[#38352e] hover:!border-[#f59e0b] dark:hover:!border-[#fbbf24] transition-colors duration-300 flex items-center gap-4 sm:gap-5 shadow-xs group flex-1">
-                <div className="w-10 h-10 rounded-xl bg-amber-500 text-white shadow-md shadow-amber-500/30 flex items-center justify-center shrink-0">
+              {/* Card 3: Today's Hours */}
+              <div className="py-2.5 sm:py-3 px-4 sm:px-5 rounded-2xl bg-white dark:bg-[#181612] border border-slate-200/80 dark:border-[#38352e] hover:!border-[#f59e0b] dark:hover:!border-[#fbbf24] transition-colors duration-300 flex items-center gap-3.5 sm:gap-4 shadow-xs group flex-1">
+                <div className="w-9 sm:w-10 h-9 sm:h-10 rounded-xl bg-amber-500 text-white shadow-md shadow-amber-500/30 flex items-center justify-center shrink-0">
                   <Clock size={16} strokeWidth={2.2} />
                 </div>
                 <div>
                   <div className="flex items-center gap-1.5 mb-0.5">
                     <span className="w-2 h-2 rounded-full bg-amber-500" />
                     <span className="text-[10px] font-extrabold text-slate-400 dark:text-[#829e92] uppercase tracking-wider">
+                      Today's Hours
+                    </span>
+                  </div>
+                  <p className="text-lg sm:text-xl font-black text-amber-600 dark:text-amber-400 tracking-tight font-mono">
+                    {todayTotalHoursDisplay}
+                  </p>
+                </div>
+              </div>
+
+              {/* Card 4: Total Hours */}
+              <div className="py-2.5 sm:py-3 px-4 sm:px-5 rounded-2xl bg-white dark:bg-[#181612] border border-slate-200/80 dark:border-[#38352e] hover:!border-purple-500 dark:hover:!border-purple-400 transition-colors duration-300 flex items-center gap-3.5 sm:gap-4 shadow-xs group flex-1">
+                <div className="w-9 sm:w-10 h-9 sm:h-10 rounded-xl bg-purple-500 text-white shadow-md shadow-purple-500/30 flex items-center justify-center shrink-0">
+                  <Timer size={16} strokeWidth={2.2} />
+                </div>
+                <div>
+                  <div className="flex items-center gap-1.5 mb-0.5">
+                    <span className="w-2 h-2 rounded-full bg-purple-500" />
+                    <span className="text-[10px] font-extrabold text-slate-400 dark:text-[#829e92] uppercase tracking-wider">
                       Total Hours
                     </span>
                   </div>
-                  <p className="text-xl font-black text-amber-600 dark:text-amber-400 tracking-tight font-mono">
-                    {todayTotalHoursDisplay}
-                  </p>
+                  <div className="flex items-baseline gap-1.5">
+                    <p className="text-lg sm:text-xl font-black text-purple-600 dark:text-purple-400 tracking-tight font-mono">
+                      {weeklyWorkedHoursData.formatted}
+                    </p>
+                    <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500">
+                      / 42.5 hrs
+                    </span>
+                  </div>
                 </div>
               </div>
             </>

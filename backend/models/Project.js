@@ -41,6 +41,10 @@ const projectSchema = new mongoose.Schema({
   endDate: {
     type: Date
   },
+  orderIndex: {
+    type: Number,
+    default: 0
+  },
   createdAt: {
     type: Date,
     default: Date.now
