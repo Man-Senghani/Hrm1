@@ -6,7 +6,8 @@ import {
   Camera, Search, Calendar, User, 
   Filter, RefreshCw, Download, ExternalLink,
   ChevronLeft, ChevronRight, LayoutGrid, List as ListIcon,
-  Trash2, Eye, X, Folder, Users, Shield, History, ArrowLeft, Check
+  Trash2, Eye, X, Folder, Users, Shield, History, ArrowLeft, Check,
+  ArrowUp, ArrowDown, SlidersHorizontal
 } from 'lucide-react';
 import { API_BASE_URL, getImageUrl } from '@shared/services/api';
 
@@ -15,6 +16,12 @@ const getLocalISODate = (date = new Date()) => {
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const day = String(date.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
+};
+
+const getYesterdayISODate = () => {
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  return getLocalISODate(d);
 };
 
 const formatDDMMYYYY = (dateStr) => {
@@ -37,16 +44,32 @@ const formatDDMMYYYY = (dateStr) => {
 
 const Screenshots = () => {
   const [screenshots, setScreenshots] = useState([]);
+  const [employeesList, setEmployeesList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filterDate, setFilterDate] = useState('');
   const filterUser = '';
   const [searchEmployeeName, setSearchEmployeeName] = useState('');
   const [viewMode, setViewMode] = useState('grid'); // grid, list
+  const [sortOrder, setSortOrder] = useState('asc'); // 'asc' = starting capture first (default), 'desc' = latest capture first
   const [selectedImage, setSelectedImage] = useState(null);
   const [selectedImageData, setSelectedImageData] = useState(null);
-  const [navigationPath, setNavigationPath] = useState([]); // ['role', 'name']
+  const [navigationPath, setNavigationPath] = useState([]); // [employeeName]
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [currentCalendarMonth, setCurrentCalendarMonth] = useState(new Date());
+
+  // Level 0 Employee Folder Filters
+  const [showFolderFilterModal, setShowFolderFilterModal] = useState(false);
+  const [folderFilterRole, setFolderFilterRole] = useState('all'); // 'all', 'employee', 'hr', 'manager'
+  const [folderFilterDate, setFolderFilterDate] = useState('all'); // 'all', 'today', 'yesterday', 'last7days'
+  const [folderFilterActivity, setFolderFilterActivity] = useState('all'); // 'all', 'active', 'inactive'
+  const [folderSortBy, setFolderSortBy] = useState('name-asc'); // 'name-asc', 'name-desc', 'captures-desc', 'captures-asc'
+
+  const activeFolderFiltersCount = [
+    folderFilterRole !== 'all',
+    folderFilterDate !== 'all',
+    folderFilterActivity !== 'all',
+    folderSortBy !== 'name-asc'
+  ].filter(Boolean).length;
 
   const generateCalendarDays = (monthDate) => {
     const year = monthDate.getFullYear();
@@ -98,13 +121,26 @@ const Screenshots = () => {
     setLoading(true);
     try {
       const params = { role, userId: sessionStorage.getItem('userId') };
-      if (filterDate) params.date = filterDate;
-      const res = await axios.get('/api/screenshot/all', {
-        params,
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      const list = Array.isArray(res.data) ? res.data : [];
+      if (filterDate && filterDate !== 'all') params.date = filterDate;
+
+      const [resScreenshots, resEmployees] = await Promise.all([
+        axios.get('/api/screenshot/all', {
+          params,
+          headers: { Authorization: `Bearer ${token}` }
+        }),
+        axios.get('/api/employees', {
+          headers: { Authorization: `Bearer ${token}` }
+        }).catch((err) => {
+          console.warn('Failed to load employee directory:', err);
+          return { data: [] };
+        })
+      ]);
+
+      const list = Array.isArray(resScreenshots.data) ? resScreenshots.data : [];
       setScreenshots(list.filter(s => !isSelf(s)));
+
+      const emps = Array.isArray(resEmployees.data) ? resEmployees.data : [];
+      setEmployeesList(emps);
     } catch (err) {
       console.error('Fetch Screenshots Error:', err);
     } finally {
@@ -137,34 +173,143 @@ const Screenshots = () => {
     };
   }, [role]);
 
-  const getRoles = () => {
-    return ['employee'];
+  // Aggregate employee list directly for display
+  const getEmployeeFolders = () => {
+    const map = new Map();
+
+    // 1. Add all team employees
+    employeesList.forEach(emp => {
+      const name = emp.fullName || emp.name || emp.userId?.name;
+      if (name && !isSelf({ employeeName: name, userId: emp.userId })) {
+        const empRole = (emp.role || emp.userId?.role || 'employee').toLowerCase();
+        if (empRole !== 'admin' && empRole !== 'hr') {
+          const trimmedName = name.trim();
+          map.set(trimmedName.toLowerCase(), {
+            id: emp._id,
+            name: trimmedName,
+            role: empRole,
+            gender: emp.gender || emp.userId?.gender || '',
+            designation: emp.designation || '',
+            department: emp.department || '',
+            profileImage: emp.profileImage || emp.userId?.profile || null,
+            totalCaptures: screenshots.filter(s => (s.employeeName || '').trim().toLowerCase() === trimmedName.toLowerCase()).length
+          });
+        }
+      }
+    });
+
+    // 2. Also ensure any person who has screenshots is included
+    screenshots.forEach(s => {
+      const name = (s.employeeName || '').trim();
+      if (name && !isSelf(s) && !map.has(name.toLowerCase())) {
+        map.set(name.toLowerCase(), {
+          id: s.userId?._id || s.userId || name,
+          name,
+          role: (s.role || 'employee').toLowerCase(),
+          gender: s.gender || s.userId?.gender || '',
+          designation: '',
+          department: '',
+          profileImage: null,
+          totalCaptures: screenshots.filter(x => (x.employeeName || '').trim().toLowerCase() === name.toLowerCase()).length
+        });
+      }
+    });
+
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
+  };
+
+  const getFilteredEmployeeFolders = () => {
+    let list = getEmployeeFolders();
+
+    // 1. Text search
+    if (searchEmployeeName.trim()) {
+      const q = searchEmployeeName.toLowerCase().trim();
+      list = list.filter(emp =>
+        emp.name.toLowerCase().includes(q) ||
+        emp.designation.toLowerCase().includes(q) ||
+        emp.department.toLowerCase().includes(q)
+      );
+    }
+
+    // 2. Role filter
+    if (folderFilterRole !== 'all') {
+      list = list.filter(emp => (emp.role || '').toLowerCase() === folderFilterRole.toLowerCase());
+    }
+
+    // 3. Date window filter (adjusts totalCaptures according to date window)
+    if (folderFilterDate !== 'all') {
+      list = list.map(emp => {
+        const trimmedName = (emp.name || '').trim().toLowerCase();
+        const capturesInWindow = screenshots.filter(s => {
+          if ((s.employeeName || '').trim().toLowerCase() !== trimmedName) return false;
+          if (folderFilterDate === 'today') {
+            return getLocalISODate(new Date(s.timestamp)) === getLocalISODate();
+          }
+          if (folderFilterDate === 'yesterday') {
+            return getLocalISODate(new Date(s.timestamp)) === getYesterdayISODate();
+          }
+          if (folderFilterDate === 'last7days') {
+            const t = new Date(s.timestamp).getTime();
+            return t >= Date.now() - 7 * 24 * 60 * 60 * 1000;
+          }
+          return true;
+        }).length;
+        return { ...emp, totalCaptures: capturesInWindow };
+      });
+    }
+
+    // 4. Activity status filter
+    if (folderFilterActivity === 'active') {
+      list = list.filter(emp => emp.totalCaptures > 0);
+    } else if (folderFilterActivity === 'inactive') {
+      list = list.filter(emp => emp.totalCaptures === 0);
+    }
+
+    // 5. Sorting
+    list.sort((a, b) => {
+      if (folderSortBy === 'name-asc') return a.name.localeCompare(b.name);
+      if (folderSortBy === 'name-desc') return b.name.localeCompare(a.name);
+      if (folderSortBy === 'captures-desc') return b.totalCaptures - a.totalCaptures;
+      if (folderSortBy === 'captures-asc') return a.totalCaptures - b.totalCaptures;
+      return 0;
+    });
+
+    return list;
   };
 
   const getFilteredData = () => {
     let data = screenshots;
     if (navigationPath.length > 0) {
-      data = data.filter(s => s.role === navigationPath[0]);
-    }
-    if (navigationPath.length > 1) {
-      data = data.filter(s => s.employeeName === navigationPath[1]);
+      data = data.filter(s => (s.employeeName || '').trim().toLowerCase() === navigationPath[0].trim().toLowerCase());
     }
     
     // Apply search filters on top of navigation
-    return data.filter(s => {
+    data = data.filter(s => {
       const matchesUser = s.employeeName?.toLowerCase().includes(filterUser.toLowerCase());
-      const matchesDate = filterDate ? s.timestamp.startsWith(filterDate) : true;
+      let matchesDate = true;
+      if (filterDate === 'last7days') {
+        const captureTime = new Date(s.timestamp).getTime();
+        const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+        matchesDate = captureTime >= sevenDaysAgo;
+      } else if (filterDate && filterDate !== 'all') {
+        const captureLocalDate = getLocalISODate(new Date(s.timestamp));
+        matchesDate = captureLocalDate === filterDate || (s.timestamp && s.timestamp.startsWith(filterDate));
+      }
       return matchesUser && matchesDate;
+    });
+
+    return [...data].sort((a, b) => {
+      const tA = new Date(a.timestamp).getTime();
+      const tB = new Date(b.timestamp).getTime();
+      return sortOrder === 'asc' ? tA - tB : tB - tA;
     });
   };
 
   const filtered = getFilteredData();
 
-  // Helper to count entries in a folder
-  const countInFolder = (type, value) => {
-    if (type === 'role') return screenshots.filter(s => s.role === value).length;
-    if (type === 'name') return screenshots.filter(s => s.role === navigationPath[0] && s.employeeName === value).length;
-    return 0;
+  // Helper to count entries for an employee
+  const countInFolder = (name) => {
+    return screenshots.filter(s => (s.employeeName || '').trim().toLowerCase() === (name || '').trim().toLowerCase()).length;
   };
 
   // Helper for single download (bypasses cross-origin issue)
@@ -241,8 +386,8 @@ const Screenshots = () => {
       await Promise.all(downloadPromises);
 
       const content = await zip.generateAsync({ type: 'blob' });
-      const dateStr = filterDate || getLocalISODate();
-      const zipFilename = `Screenshots-${navigationPath[1] || 'All'}-${dateStr}.zip`;
+      const dateStr = filterDate === 'last7days' ? 'last-7-days' : (filterDate && filterDate !== 'all') ? filterDate : getLocalISODate();
+      const zipFilename = `Screenshots-${navigationPath[0] || 'All'}-${dateStr}.zip`;
       
       const link = document.createElement('a');
       link.href = URL.createObjectURL(content);
@@ -261,11 +406,12 @@ const Screenshots = () => {
     const now = new Date();
     if (type === 'today') setFilterDate(getLocalISODate(now));
     if (type === 'yesterday') {
-      const yesterday = new Date(now);
-      yesterday.setDate(yesterday.getDate() - 1);
-      setFilterDate(getLocalISODate(yesterday));
+      setFilterDate(getYesterdayISODate());
     }
-    if (type === 'all') setFilterDate('');
+    if (type === 'last7days') {
+      setFilterDate('last7days');
+    }
+    if (type === 'all') setFilterDate('all');
   };
 
   const openImageModal = (item) => {
@@ -354,7 +500,7 @@ const Screenshots = () => {
 
         {/* Right Side: Filters & Action Buttons */}
         <div className="flex flex-wrap items-center gap-3">
-          {navigationPath.length === (role === 'manager' ? 1 : 2) && (
+          {navigationPath.length === 1 && (
             <>
               {/* Custom Date Picker Dropdown */}
               <div className="relative">
@@ -363,7 +509,13 @@ const Screenshots = () => {
                   className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white dark:bg-[#1a1714] border border-slate-200 dark:border-[#38352e] hover:border-[#00a76b] text-xs font-semibold text-slate-800 dark:text-slate-200 transition-all shadow-xs cursor-pointer"
                 >
                   <Calendar size={14} className="text-[#00a76b]" />
-                  <span>{filterDate ? formatDDMMYYYY(filterDate) : 'dd-mm-yyyy'}</span>
+                  <span>
+                    {filterDate === 'last7days' 
+                      ? 'Last 7 Days' 
+                      : filterDate && filterDate !== 'all' 
+                        ? formatDDMMYYYY(filterDate) 
+                        : 'dd-mm-yyyy'}
+                  </span>
                   <ChevronRight size={12} className={`text-slate-400 transform transition-transform ${showDatePicker ? 'rotate-90' : ''}`} />
                 </button>
 
@@ -406,8 +558,15 @@ const Screenshots = () => {
                     <div className="grid grid-cols-7 gap-1">
                       {generateCalendarDays(currentCalendarMonth).map((day, idx) => {
                         const isCurrentMonth = day.getMonth() === currentCalendarMonth.getMonth();
-                        const isSelected = filterDate && new Date(filterDate).toDateString() === day.toDateString();
+                        const isSelected = filterDate && filterDate !== 'last7days' && filterDate !== 'all' && new Date(filterDate).toDateString() === day.toDateString();
                         const isToday = new Date().toDateString() === day.toDateString();
+                        const isDayInLast7Days = () => {
+                          const now = new Date();
+                          const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6);
+                          const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+                          return day >= start && day <= end;
+                        };
+                        const isIn7DaysRange = filterDate === 'last7days' && isDayInLast7Days();
                         const isDisabled = day > new Date();
                         return (
                           <button
@@ -418,14 +577,16 @@ const Screenshots = () => {
                               setFilterDate(getLocalISODate(day));
                               setShowDatePicker(false);
                             }}
-                            className={`text-xs font-semibold py-1.5 rounded-lg transition-all ${
+                            className={`text-xs font-semibold py-1.5 rounded-lg transition-all cursor-pointer ${
                               isSelected 
                                 ? 'bg-[#00a76b] text-white shadow-xs' 
-                                : isToday
-                                  ? 'bg-emerald-50 dark:bg-emerald-950/60 text-[#00a76b] border border-emerald-300 dark:border-emerald-700'
-                                  : isCurrentMonth 
-                                    ? 'text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800' 
-                                    : 'text-slate-400 opacity-40 hover:bg-slate-100 dark:hover:bg-slate-800'
+                                : isIn7DaysRange
+                                  ? 'bg-emerald-100 dark:bg-emerald-950/80 text-[#00a76b] font-bold border border-emerald-300 dark:border-emerald-700'
+                                  : isToday
+                                    ? 'bg-emerald-50 dark:bg-emerald-950/60 text-[#00a76b] border border-emerald-300 dark:border-emerald-700'
+                                    : isCurrentMonth 
+                                      ? 'text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800' 
+                                      : 'text-slate-400 opacity-40 hover:bg-slate-100 dark:hover:bg-slate-800'
                             } ${isDisabled ? 'opacity-20 cursor-not-allowed' : ''}`}
                           >
                             {day.getDate()}
@@ -438,20 +599,30 @@ const Screenshots = () => {
                       <button 
                         onClick={(e) => {
                           e.stopPropagation();
-                          setFilterDate('');
+                          setQuickDate('all');
                           setShowDatePicker(false);
                         }}
-                        className="text-rose-500 hover:underline"
+                        className="text-rose-500 hover:underline cursor-pointer"
                       >
                         Clear
                       </button>
                       <button 
                         onClick={(e) => {
                           e.stopPropagation();
-                          setFilterDate(getLocalISODate());
+                          setQuickDate('last7days');
                           setShowDatePicker(false);
                         }}
-                        className="text-[#00a76b] hover:underline"
+                        className="text-[#00a76b] font-bold hover:underline cursor-pointer"
+                      >
+                        Last 7 Days
+                      </button>
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setQuickDate('today');
+                          setShowDatePicker(false);
+                        }}
+                        className="text-slate-700 dark:text-slate-300 hover:text-[#00a76b] hover:underline cursor-pointer"
                       >
                         Today
                       </button>
@@ -505,7 +676,7 @@ const Screenshots = () => {
       </div>
 
       {/* ── 3. QUICK DATE FILTER PILLS ── */}
-      {navigationPath.length === (role === 'manager' ? 1 : 2) && (
+      {navigationPath.length === 1 && (
         <div className="flex items-center gap-2">
           <button 
             onClick={() => setQuickDate('today')}
@@ -515,13 +686,19 @@ const Screenshots = () => {
           </button>
           <button 
             onClick={() => setQuickDate('yesterday')}
-            className={`px-4 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${filterDate === new Date(Date.now() - 86400000).toISOString().split('T')[0] ? 'bg-[#00a76b] text-white shadow-xs' : 'bg-white dark:bg-[#111c18] border border-slate-200 dark:border-[#38352e] text-slate-600 dark:text-slate-300 hover:border-[#00a76b]'}`}
+            className={`px-4 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${filterDate === getYesterdayISODate() ? 'bg-[#00a76b] text-white shadow-xs' : 'bg-white dark:bg-[#111c18] border border-slate-200 dark:border-[#38352e] text-slate-600 dark:text-slate-300 hover:border-[#00a76b]'}`}
           >
             Yesterday
           </button>
           <button 
+            onClick={() => setQuickDate('last7days')}
+            className={`px-4 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${filterDate === 'last7days' ? 'bg-[#00a76b] text-white shadow-xs' : 'bg-white dark:bg-[#111c18] border border-slate-200 dark:border-[#38352e] text-slate-600 dark:text-slate-300 hover:border-[#00a76b]'}`}
+          >
+            Last 7 Days
+          </button>
+          <button 
             onClick={() => setQuickDate('all')}
-            className={`px-4 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${!filterDate ? 'bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 shadow-xs' : 'bg-white dark:bg-[#111c18] border border-slate-200 dark:border-[#38352e] text-slate-600 dark:text-slate-300 hover:border-[#00a76b]'}`}
+            className={`px-4 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${!filterDate || filterDate === 'all' ? 'bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 shadow-xs' : 'bg-white dark:bg-[#111c18] border border-slate-200 dark:border-[#38352e] text-slate-600 dark:text-slate-300 hover:border-[#00a76b]'}`}
           >
             View All
           </button>
@@ -536,78 +713,189 @@ const Screenshots = () => {
         </div>
       ) : (
         <>
-          {/* LEVEL 0: ROLE FOLDERS */}
+          {/* LEVEL 0: DIRECT EMPLOYEE LIST */}
           {navigationPath.length === 0 && (
-            <div className="flex flex-wrap gap-4">
-              {getRoles().map(r => (
-                <div 
-                  key={r} 
-                  onClick={() => setNavigationPath([r])}
-                  className="w-full sm:w-56 bg-white dark:bg-[#111c18] border border-slate-200/80 dark:border-[#38352e] rounded-xl p-4 shadow-xs hover:shadow-md hover:border-[#00a76b] hover:-translate-y-0.5 transition-all cursor-pointer flex flex-col items-center text-center group"
-                >
-                  <div className="w-12 h-12 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-[#00a76b] flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
-                    <Folder size={24} />
+            <div className="space-y-4">
+              {/* Employee search & summary bar */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="relative max-w-sm w-full">
+                  <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                  <input 
+                    type="text" 
+                    placeholder="Search employee folder..." 
+                    value={searchEmployeeName}
+                    onChange={(e) => setSearchEmployeeName(e.target.value)}
+                    className="w-full h-10 pl-10 pr-4 bg-white dark:bg-[#1a1714] border border-slate-200 dark:border-[#38352e] rounded-xl text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-[#00a76b] shadow-xs"
+                  />
+                </div>
+
+                <div className="flex items-center gap-3">
+                  {/* Filter Button */}
+                  <button
+                    type="button"
+                    onClick={() => setShowFolderFilterModal(true)}
+                    className={`flex items-center gap-2 px-3.5 py-2 rounded-xl border text-xs font-bold transition-all shadow-xs cursor-pointer ${
+                      activeFolderFiltersCount > 0
+                        ? 'bg-emerald-50 dark:bg-emerald-950/60 border-[#00a76b] text-[#00a76b]'
+                        : 'bg-white dark:bg-[#1a1714] border border-slate-200 dark:border-[#38352e] hover:border-[#00a76b] text-slate-700 dark:text-slate-200'
+                    }`}
+                  >
+                    <Filter size={14} className={activeFolderFiltersCount > 0 ? "text-[#00a76b]" : "text-slate-400"} />
+                    <span>Filter</span>
+                    {activeFolderFiltersCount > 0 && (
+                      <span className="w-5 h-5 rounded-full bg-[#00a76b] text-white text-[10px] flex items-center justify-center font-bold">
+                        {activeFolderFiltersCount}
+                      </span>
+                    )}
+                  </button>
+
+                  <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                    {getFilteredEmployeeFolders().length} Employees
                   </div>
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900 dark:text-white mb-0.5">
-                    {r} Folders
-                  </h3>
-                  <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
-                    {countInFolder('role', r)} Total Captures
+                </div>
+              </div>
+
+              {/* Active Filter Badges */}
+              {activeFolderFiltersCount > 0 && (
+                <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                  <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Active Filters:</span>
+                  {folderFilterRole !== 'all' && (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-[11px] font-bold text-[#00a76b]">
+                      Role: {folderFilterRole.toUpperCase()}
+                      <button type="button" onClick={() => setFolderFilterRole('all')} className="hover:text-rose-500 cursor-pointer"><X size={12} /></button>
+                    </span>
+                  )}
+                  {folderFilterDate !== 'all' && (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-[11px] font-bold text-[#00a76b]">
+                      Date: {folderFilterDate === 'last7days' ? 'Last 7 Days' : folderFilterDate.charAt(0).toUpperCase() + folderFilterDate.slice(1)}
+                      <button type="button" onClick={() => setFolderFilterDate('all')} className="hover:text-rose-500 cursor-pointer"><X size={12} /></button>
+                    </span>
+                  )}
+                  {folderFilterActivity !== 'all' && (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-[11px] font-bold text-[#00a76b]">
+                      Status: {folderFilterActivity === 'active' ? 'With Captures' : 'Zero Captures'}
+                      <button type="button" onClick={() => setFolderFilterActivity('all')} className="hover:text-rose-500 cursor-pointer"><X size={12} /></button>
+                    </span>
+                  )}
+                  {folderSortBy !== 'name-asc' && (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-[11px] font-bold text-[#00a76b]">
+                      Sort: {folderSortBy === 'name-desc' ? 'Z to A' : folderSortBy === 'captures-desc' ? 'Most Captures' : 'Fewest Captures'}
+                      <button type="button" onClick={() => setFolderSortBy('name-asc')} className="hover:text-rose-500 cursor-pointer"><X size={12} /></button>
+                    </span>
+                  )}
+                  <button 
+                    type="button" 
+                    onClick={() => {
+                      setFolderFilterRole('all');
+                      setFolderFilterDate('all');
+                      setFolderFilterActivity('all');
+                      setFolderSortBy('name-asc');
+                    }}
+                    className="text-[11px] font-bold text-rose-500 hover:underline ml-1 cursor-pointer"
+                  >
+                    Clear all
+                  </button>
+                </div>
+              )}
+
+              {getFilteredEmployeeFolders().length === 0 ? (
+                <div className="py-20 text-center bg-white dark:bg-[#111c18] border border-slate-200/80 dark:border-[#38352e] rounded-2xl">
+                  <Users size={36} className="mx-auto mb-3 text-slate-300 dark:text-slate-600" />
+                  <p className="text-xs font-bold text-slate-700 dark:text-slate-300">No employee folders found</p>
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    {searchEmployeeName || activeFolderFiltersCount > 0 ? 'Try adjusting your search query or filter options' : 'No employee records or activity captures found'}
                   </p>
                 </div>
-              ))}
-            </div>
-          )}
-
-          {/* LEVEL 1: EMPLOYEE NAME FOLDERS */}
-          {navigationPath.length === 1 && (
-            <div className="space-y-4">
-              {/* Employee search bar */}
-              <div className="relative max-w-sm">
-                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                <input 
-                  type="text" 
-                  placeholder="Search employee folder..." 
-                  value={searchEmployeeName}
-                  onChange={(e) => setSearchEmployeeName(e.target.value)}
-                  className="w-full h-10 pl-10 pr-4 bg-white dark:bg-[#1a1714] border border-slate-200 dark:border-[#38352e] rounded-xl text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-[#00a76b] shadow-xs"
-                />
-              </div>
-
-              <div className="flex flex-wrap gap-4">
-                {[...new Set(screenshots
-                  .filter(s => s.role === navigationPath[0])
-                  .map(s => s.employeeName))]
-                  .filter(name => name?.toLowerCase().includes(searchEmployeeName.toLowerCase()))
-                  .map(name => (
-                    <div 
-                      key={name} 
-                      onClick={() => setNavigationPath([navigationPath[0], name])}
-                      className="w-full sm:w-60 bg-white dark:bg-[#111c18] border border-slate-200/80 dark:border-[#38352e] rounded-xl p-3.5 shadow-xs hover:shadow-md hover:border-[#00a76b] hover:-translate-y-0.5 transition-all cursor-pointer flex items-center gap-3 group"
-                    >
-                      <div className="w-9 h-9 rounded-lg bg-slate-900 dark:bg-emerald-950/60 text-white dark:text-[#00a76b] flex items-center justify-center font-bold text-xs shadow-xs shrink-0 group-hover:scale-105 transition-transform">
-                        {name?.[0]}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <h3 className="text-xs font-bold text-slate-900 dark:text-white truncate mb-0.5">{name}</h3>
-                        <div className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-500 dark:text-slate-400">
-                          <History size={12} className="text-[#00a76b]" />
-                          {countInFolder('name', name) || screenshots.filter(s => s.employeeName === name).length} Captures
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                  {getFilteredEmployeeFolders()
+                    .map(emp => (
+                      <div 
+                        key={emp.name} 
+                        onClick={() => {
+                          setNavigationPath([emp.name]);
+                          if (folderFilterDate !== 'all') {
+                            setQuickDate(folderFilterDate);
+                          }
+                        }}
+                        className="bg-white dark:bg-[#111c18] border border-slate-200/80 dark:border-[#38352e] rounded-xl p-4 shadow-xs hover:shadow-md hover:border-[#00a76b] hover:-translate-y-0.5 transition-all cursor-pointer flex items-center gap-3.5 group"
+                      >
+                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-50 to-emerald-100 dark:from-emerald-950/60 dark:to-emerald-900/30 text-[#00a76b] dark:text-[#10b981] flex items-center justify-center font-extrabold text-base shadow-xs shrink-0 group-hover:scale-105 transition-transform border border-emerald-200/80 dark:border-emerald-800/40 select-none">
+                          {emp.name?.trim()?.[0]?.toUpperCase() || 'E'}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-1 mb-0.5">
+                            <h3 className="text-xs font-bold text-slate-900 dark:text-white truncate group-hover:text-[#00a76b] transition-colors">
+                              {emp.name}
+                            </h3>
+                            <span className="text-[9.5px] uppercase font-bold px-1.5 py-0.5 rounded bg-slate-100 dark:bg-[#1a1714] text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-800 shrink-0">
+                              {emp.role}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+                            <History size={12} className="text-[#00a76b]" />
+                            <span>{emp.totalCaptures} Captures</span>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
-              </div>
+                    ))}
+                </div>
+              )}
             </div>
           )}
 
-          {/* LEVEL 2: ACTUAL SCREENSHOTS (Visible when a person is selected) */}
-          {navigationPath.length === 2 && (
-            <>
+          {/* LEVEL 1: ACTUAL SCREENSHOTS FOR SELECTED EMPLOYEE */}
+          {navigationPath.length === 1 && (
+            <div className="space-y-4">
+              {/* Back to employee list banner & Ascending/Descending sort controls */}
+              <div className="flex items-center justify-between gap-3">
+                <button
+                  onClick={() => setNavigationPath([])}
+                  className="flex items-center gap-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 hover:text-[#00a76b] dark:hover:text-[#00a76b] transition-colors cursor-pointer"
+                >
+                  <ArrowLeft size={14} /> Back to Employees
+                </button>
+                <div className="flex items-center gap-1 bg-slate-100 dark:bg-[#1a1714] p-1 rounded-xl border border-slate-200/80 dark:border-[#38352e] shadow-xs">
+                  <button
+                    type="button"
+                    onClick={() => setSortOrder('asc')}
+                    className={`flex items-center gap-1.5 px-3 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                      sortOrder === 'asc'
+                        ? 'bg-[#00a76b] text-white shadow-xs'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                    title="Starting / earliest captures first (Ascending)"
+                  >
+                    <ArrowUp size={13} />
+                    <span>Ascending</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSortOrder('desc')}
+                    className={`flex items-center gap-1.5 px-3 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                      sortOrder === 'desc'
+                        ? 'bg-[#00a76b] text-white shadow-xs'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                    title="Latest captures first (Descending)"
+                  >
+                    <ArrowDown size={13} />
+                    <span>Descending</span>
+                  </button>
+                </div>
+              </div>
+
               {filtered.length === 0 ? (
-                <div className="py-28 text-center">
+                <div className="py-28 text-center bg-white dark:bg-[#111c18] border border-slate-200/80 dark:border-[#38352e] rounded-2xl">
                   <Camera size={40} className="mx-auto mb-3 text-slate-300 dark:text-slate-600" />
-                  <p className="text-xs font-bold text-slate-500 dark:text-slate-400">No screenshots found for {navigationPath[1]}</p>
+                  <p className="text-xs font-bold text-slate-700 dark:text-slate-300">No screenshots found for {navigationPath[0]}</p>
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    {filterDate === 'last7days' 
+                      ? 'No captures found in the last 7 days' 
+                      : filterDate && filterDate !== 'all' 
+                        ? `No captures found on ${formatDDMMYYYY(filterDate)}` 
+                        : 'No activity captures logged yet'}
+                  </p>
                 </div>
               ) : viewMode === 'grid' ? (
                 <div className="space-y-8">
@@ -618,7 +906,11 @@ const Screenshots = () => {
                       groups[d].push(s);
                       return groups;
                     }, {})
-                  ).map(([date, group]) => (
+                  ).sort(([, groupA], [, groupB]) => {
+                    const timeA = new Date(groupA[0]?.timestamp || 0).getTime();
+                    const timeB = new Date(groupB[0]?.timestamp || 0).getTime();
+                    return sortOrder === 'asc' ? timeA - timeB : timeB - timeA;
+                  }).map(([date, group]) => (
                     <div key={date} className="space-y-4">
                       {/* Date Header */}
                       <div className="flex items-center gap-3">
@@ -729,9 +1021,198 @@ const Screenshots = () => {
                   </div>
                 </div>
               )}
-            </>
+            </div>
           )}
         </>
+      )}
+
+      {/* ── FOLDER FILTER RIGHT-SIDE DRAWER ── */}
+      {showFolderFilterModal && createPortal(
+        <div 
+          className="fixed inset-0 z-[99999] flex justify-end bg-slate-900/50 dark:bg-black/60 backdrop-blur-xs transition-opacity duration-300 animate-fade-in"
+          onClick={() => setShowFolderFilterModal(false)}
+        >
+          <div 
+            className="bg-white dark:bg-[#111c18] h-full w-full max-w-md shadow-2xl border-l border-slate-200 dark:border-[#38352e] flex flex-col justify-between animate-in slide-in-from-right duration-300"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Drawer Header */}
+            <div className="flex items-center justify-between px-6 py-5 border-b border-slate-100 dark:border-slate-800 shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-[#00a76b] flex items-center justify-center font-bold shadow-xs">
+                  <SlidersHorizontal size={17} />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">Filter Employees</h3>
+                  <p className="text-[11px] text-slate-400">Filter folders by role, activity, and date</p>
+                </div>
+              </div>
+              <button 
+                type="button"
+                onClick={() => setShowFolderFilterModal(false)}
+                className="w-8 h-8 rounded-xl flex items-center justify-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                title="Close drawer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Drawer Body (Scrollable) */}
+            <div className="flex-1 p-6 space-y-6 overflow-y-auto custom-scrollbar">
+              {/* 1. Employee Role */}
+              <div>
+                <div className="flex items-center justify-between mb-2.5">
+                  <label className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                    Employee Role
+                  </label>
+                  {folderFilterRole !== 'all' && (
+                    <span className="text-[10px] font-bold text-[#00a76b] capitalize">{folderFilterRole}</span>
+                  )}
+                </div>
+                <div className="grid grid-cols-4 gap-2">
+                  {['all', 'employee', 'hr', 'manager'].map((r) => (
+                    <button
+                      key={r}
+                      type="button"
+                      onClick={() => setFolderFilterRole(r)}
+                      className={`py-2.5 px-2 rounded-xl text-xs font-bold text-center capitalize transition-all cursor-pointer ${
+                        folderFilterRole === r
+                          ? 'bg-[#00a76b] text-white shadow-xs'
+                          : 'bg-slate-50 dark:bg-[#1a1714] border border-slate-200/80 dark:border-[#38352e] text-slate-600 dark:text-slate-300 hover:border-[#00a76b]'
+                      }`}
+                    >
+                      {r === 'all' ? 'All Roles' : r}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* 2. Activity Date Window */}
+              <div>
+                <div className="flex items-center justify-between mb-2.5">
+                  <label className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                    Activity Date Window
+                  </label>
+                  {folderFilterDate !== 'all' && (
+                    <span className="text-[10px] font-bold text-[#00a76b]">
+                      {folderFilterDate === 'last7days' ? 'Last 7 Days' : folderFilterDate}
+                    </span>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { key: 'all', label: 'All Time' },
+                    { key: 'today', label: 'Today' },
+                    { key: 'yesterday', label: 'Yesterday' },
+                    { key: 'last7days', label: 'Last 7 Days' }
+                  ].map((item) => (
+                    <button
+                      key={item.key}
+                      type="button"
+                      onClick={() => setFolderFilterDate(item.key)}
+                      className={`py-2.5 px-3 rounded-xl text-xs font-bold text-center transition-all cursor-pointer ${
+                        folderFilterDate === item.key
+                          ? 'bg-[#00a76b] text-white shadow-xs'
+                          : 'bg-slate-50 dark:bg-[#1a1714] border border-slate-200/80 dark:border-[#38352e] text-slate-600 dark:text-slate-300 hover:border-[#00a76b]'
+                      }`}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* 3. Activity Status */}
+              <div>
+                <div className="flex items-center justify-between mb-2.5">
+                  <label className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                    Activity Status
+                  </label>
+                  {folderFilterActivity !== 'all' && (
+                    <span className="text-[10px] font-bold text-[#00a76b]">
+                      {folderFilterActivity === 'active' ? 'With Captures' : 'Zero Captures'}
+                    </span>
+                  )}
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { key: 'all', label: 'All Status' },
+                    { key: 'active', label: 'With Captures' },
+                    { key: 'inactive', label: 'Zero Captures' }
+                  ].map((item) => (
+                    <button
+                      key={item.key}
+                      type="button"
+                      onClick={() => setFolderFilterActivity(item.key)}
+                      className={`py-2.5 px-2 rounded-xl text-xs font-bold text-center transition-all cursor-pointer ${
+                        folderFilterActivity === item.key
+                          ? 'bg-[#00a76b] text-white shadow-xs'
+                          : 'bg-slate-50 dark:bg-[#1a1714] border border-slate-200/80 dark:border-[#38352e] text-slate-600 dark:text-slate-300 hover:border-[#00a76b]'
+                      }`}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* 4. Sort Order */}
+              <div>
+                <div className="flex items-center justify-between mb-2.5">
+                  <label className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                    Sort By
+                  </label>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { key: 'name-asc', label: 'Name (A to Z)' },
+                    { key: 'name-desc', label: 'Name (Z to A)' },
+                    { key: 'captures-desc', label: 'Most Captures' },
+                    { key: 'captures-asc', label: 'Fewest Captures' }
+                  ].map((item) => (
+                    <button
+                      key={item.key}
+                      type="button"
+                      onClick={() => setFolderSortBy(item.key)}
+                      className={`py-2.5 px-3 rounded-xl text-xs font-bold text-left transition-all cursor-pointer ${
+                        folderSortBy === item.key
+                          ? 'bg-[#00a76b] text-white shadow-xs'
+                          : 'bg-slate-50 dark:bg-[#1a1714] border border-slate-200/80 dark:border-[#38352e] text-slate-600 dark:text-slate-300 hover:border-[#00a76b]'
+                      }`}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Drawer Footer */}
+            <div className="flex items-center justify-between px-6 py-4 bg-slate-50 dark:bg-[#162722]/50 border-t border-slate-100 dark:border-slate-800 shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  setFolderFilterRole('all');
+                  setFolderFilterDate('all');
+                  setFolderFilterActivity('all');
+                  setFolderSortBy('name-asc');
+                }}
+                className="text-xs font-bold text-rose-500 hover:text-rose-600 dark:hover:text-rose-400 cursor-pointer"
+              >
+                Reset All Filters
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowFolderFilterModal(false)}
+                className="px-6 py-2.5 rounded-xl bg-[#00a76b] hover:bg-[#008f5b] text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
+              >
+                Apply & View ({getFilteredEmployeeFolders().length})
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
 
       {/* ── 5. FULLSCREEN PHOTO PREVIEW PORTAL MODAL ── */}
@@ -775,7 +1256,10 @@ const Screenshots = () => {
           </button>
 
           {/* Modal Container */}
-          <div className="relative max-w-5xl w-full bg-white dark:bg-[#0c1815] border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-2xl flex flex-col gap-4 z-10">
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className="relative max-w-5xl w-full bg-white dark:bg-[#0c1815] border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-2xl flex flex-col gap-4 z-10"
+          >
             {/* Modal Header */}
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
               <div className="flex items-center gap-3">

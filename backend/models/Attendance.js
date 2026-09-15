@@ -11,6 +11,7 @@ const attendanceSchema = new mongoose.Schema({
     required: true
   },
   checkInTime: {
+
     type: Date,
     required: true
   },

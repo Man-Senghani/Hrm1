@@ -174,29 +174,55 @@ exports.overrideCheckout = async (req, res) => {
   try {
     const { userId } = req.params;
     const targetUserId = userId || req.user.id;
-    const today = new Date().toISOString().split('T')[0];
+    const now = new Date();
+    const formatLocalDate = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const todayLocal = formatLocalDate(now);
+    const todayIso = now.toISOString().split('T')[0];
 
-    const attendance = await Attendance.findOne({ user: targetUserId, date: today });
+    const attendance = await Attendance.findOne({ 
+      user: targetUserId, 
+      date: { $in: [todayLocal, todayIso] } 
+    }).sort({ createdAt: -1 });
+
     if (!attendance) {
       return res.status(404).json({ message: 'No attendance record found for today to override.' });
     }
 
-    // Clear checkout time
+    // 1. Fully clear all checkout indicators on Attendance
     attendance.checkOutTime = null;
+    attendance.clockOut = null;
+    attendance.autoCheckout = false;
     await attendance.save();
 
-    // Reopen TimeTrack session
+    // 2. Reopen TimeTrack sessions and clear stale endTime
     try {
       const TimeTrack = require('../models/TimeTrack');
-      let session = await TimeTrack.findOne({ employeeId: targetUserId, date: today }).sort({ createdAt: -1 });
+      
+      // Clear endTime and reactivate all time tracking records for today for this user
+      await TimeTrack.updateMany(
+        { employeeId: targetUserId, date: { $in: [todayLocal, todayIso] } },
+        { 
+          $set: { 
+            endTime: null, 
+            status: 'active', 
+            isRunning: true, 
+            lastHeartbeat: now 
+          } 
+        }
+      );
 
-      const now = new Date();
+      let session = await TimeTrack.findOne({ 
+        employeeId: targetUserId, 
+        date: { $in: [todayLocal, todayIso] } 
+      }).sort({ createdAt: -1 });
+
       if (session) {
         session.status = 'active';
         session.isRunning = true;
         session.endTime = null;
         session.segmentStart = now;
         session.lastHeartbeat = now;
+        if (!Array.isArray(session.sessions)) session.sessions = [];
         session.sessions.push({ start: now });
         await session.save();
 
@@ -305,14 +331,17 @@ const buildEmployeeAttendanceHistory = async (userId) => {
       let effectiveCheckOutTime = existingAtt.checkOutTime;
 
       if (tt) {
-        if (tt.endTime && (!effectiveCheckOutTime || new Date(tt.endTime) > new Date(effectiveCheckOutTime))) {
+        const isToday = dStr === todayStr;
+        if (isToday && (tt.status === 'active' || tt.isRunning || !tt.endTime || !existingAtt.checkOutTime)) {
+          effectiveCheckOutTime = null;
+          clockOutStr = '--';
+        } else if (tt.endTime && (!effectiveCheckOutTime || new Date(tt.endTime) > new Date(effectiveCheckOutTime))) {
           effectiveCheckOutTime = tt.endTime;
           const { hours, minutes } = getTimeDetails(new Date(tt.endTime));
           clockOutStr = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
         }
         let liveActive = Math.floor(tt.activeTime || 0);
         let liveIdle = Math.floor(tt.idleTime || 0);
-        const isToday = dStr === todayStr;
 
         if (isToday && tt.status === 'active' && tt.isRunning && tt.segmentStart) {
           const elapsed = Math.floor((now.getTime() - new Date(tt.segmentStart).getTime()) / 1000);
@@ -636,16 +665,19 @@ exports.getAttendance = async (req, res) => {
               const { hours, minutes } = getTimeDetails(new Date(tt.startTime));
               rec.clockIn = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
             }
-            if (tt.endTime && (!rec.checkOutTime || new Date(tt.endTime) > new Date(rec.checkOutTime))) {
+            const now = new Date();
+            const formatLocalDate = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+            const curTodayStr = formatLocalDate(now);
+            const isToday = rec.date === curTodayStr || rec.date === now.toISOString().split('T')[0];
+
+            if (isToday && (tt.status === 'active' || tt.isRunning || !tt.endTime || !rec.checkOutTime)) {
+              rec.checkOutTime = null;
+              rec.clockOut = null;
+            } else if (tt.endTime && (!rec.checkOutTime || new Date(tt.endTime) > new Date(rec.checkOutTime))) {
               rec.checkOutTime = tt.endTime;
               const { hours, minutes } = getTimeDetails(new Date(tt.endTime));
               rec.clockOut = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
             }
-
-            const now = new Date();
-            const formatLocalDate = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-            const curTodayStr = formatLocalDate(now);
-            const isToday = rec.date === curTodayStr;
 
             let liveActive = Math.floor(tt.activeTime || 0);
             let liveIdle = Math.floor(tt.idleTime || 0);

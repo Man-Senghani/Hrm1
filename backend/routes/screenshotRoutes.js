@@ -108,11 +108,14 @@ router.get('/all', async (req, res) => {
 
     // 1. Date filter (if provided, query that exact date; otherwise query past 7 days)
     if (req.query.date && /^\d{4}-\d{2}-\d{2}$/.test(req.query.date)) {
-      const startOfDay = new Date(`${req.query.date}T00:00:00.000Z`);
-      const endOfDay = new Date(`${req.query.date}T23:59:59.999Z`);
+      const baseDate = new Date(`${req.query.date}T00:00:00.000Z`);
+      const startOfDay = new Date(baseDate.getTime() - 14 * 60 * 60 * 1000);
+      const endOfDay = new Date(baseDate.getTime() + (24 + 14) * 60 * 60 * 1000);
       query.timestamp = { $gte: startOfDay, $lte: endOfDay };
+    } else if (req.query.date === 'all') {
+      // Return all available captures without date restriction
     } else {
-      // 7 days (1 week) retention window
+      // 'last7days' or default: 7 days (1 week) retention window
       const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
       query.timestamp = { $gte: sevenDaysAgo };
     }

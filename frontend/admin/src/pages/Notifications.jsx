@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import axios from 'axios';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Bell, Send, Loader2, Users, Briefcase, UserCheck, ChevronDown, Trash2, Edit2, RefreshCw, X, Plus, ExternalLink } from 'lucide-react';
@@ -299,9 +300,15 @@ const Notifications = () => {
       <div className="w-full">
 
         {/* ── SEND ANNOUNCEMENT MODAL ── */}
-        {role !== 'employee' && isModalOpen && (
-          <div className="fixed top-[70px] right-0 bottom-0 left-0 z-[140] flex justify-end bg-black/40 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setIsModalOpen(false)}>
-            <div className="bg-white border-l border-[#eceae3] shadow-2xl w-full max-w-[380px] h-full overflow-y-auto relative animate-in slide-in-from-right duration-300" onClick={e => e.stopPropagation()}>
+        {role !== 'employee' && isModalOpen && createPortal(
+          <div 
+            className="fixed inset-0 z-[99999] flex justify-end bg-slate-900/50 dark:bg-black/60 backdrop-blur-sm animate-in fade-in duration-200" 
+            onClick={() => setIsModalOpen(false)}
+          >
+            <div 
+              className="bg-white dark:bg-[#111c18] border-l border-[#eceae3] dark:border-[#1a2d29] shadow-2xl w-full max-w-[380px] h-full overflow-y-auto relative animate-in slide-in-from-right duration-300" 
+              onClick={e => e.stopPropagation()}
+            >
               <button 
                 onClick={() => setIsModalOpen(false)}
                 className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center bg-gray-100 hover:bg-gray-200 rounded-full transition-colors z-10 cursor-pointer border-none outline-none"
@@ -554,7 +561,8 @@ const Notifications = () => {
               )}
             </form>
             </div>
-          </div>
+          </div>,
+          document.body
         )}
 
         {/* ── NOTIFICATIONS LIST ── */}
@@ -758,9 +766,9 @@ const Notifications = () => {
       </div>
 
       {/* ── ANNOUNCEMENT / PERSONAL NOTIFICATION DETAIL MODAL ── */}
-      {selectedNotif && (
+      {selectedNotif && createPortal(
         <div 
-          className="fixed inset-0 z-[150] flex items-center justify-center bg-black/50 backdrop-blur-xs p-4 animate-in fade-in duration-200"
+          className="fixed inset-0 z-[99999] flex items-center justify-center bg-slate-900/50 dark:bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200"
           onClick={() => setSelectedNotif(null)}
         >
           <div 
@@ -806,7 +814,8 @@ const Notifications = () => {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

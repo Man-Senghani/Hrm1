@@ -22,7 +22,8 @@ import {
   Camera,
   MapPin,
   Phone,
-  FileText
+  FileText,
+  Download
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
@@ -187,7 +188,8 @@ const CreateUser = () => {
     setImgError(false);
     if (localFile) {
       const blobUrl = URL.createObjectURL(localFile);
-      setPreviewDoc({ title, url: blobUrl });
+      const isPdf = localFile.type === 'application/pdf' || localFile.name?.toLowerCase().endsWith('.pdf');
+      setPreviewDoc({ title, url: blobUrl, isPdf });
     } else {
       toast.error(`No ${title} document uploaded yet.`);
     }
@@ -316,9 +318,10 @@ const CreateUser = () => {
     const file = e.target.files[0];
     if (!file) return;
 
-    const validTypes = ['image/jpeg', 'image/jpg', 'image/png'];
-    if (!validTypes.includes(file.type)) {
-      toast.error(`Invalid format for ${documentName}. Please upload a JPG or PNG image.`, {
+    const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'application/pdf'];
+    const isPdf = file.type === 'application/pdf' || file.name?.toLowerCase().endsWith('.pdf');
+    if (!validTypes.includes(file.type) && !isPdf) {
+      toast.error(`Invalid format for ${documentName}. Please upload a JPG, PNG, or PDF document.`, {
         style: { background: '#ff4f00', color: '#fff', fontWeight: 'bold' }
       });
       e.target.value = '';
@@ -997,7 +1000,7 @@ const CreateUser = () => {
                   <Fingerprint size={18} className="text-[#00a76b]" />
                   <h3 className="text-base font-bold text-slate-900 dark:text-white tracking-tight">Identity Verification Documents</h3>
                 </div>
-                <span className="text-[11px] text-slate-400 font-semibold">Accepted formats: JPG, PNG</span>
+                <span className="text-[11px] text-slate-400 font-semibold">Accepted formats: JPG, PNG, PDF</span>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -1013,7 +1016,7 @@ const CreateUser = () => {
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate group-hover:text-[#00a76b] transition-colors">Adharcard</p>
-                      <p className="text-[10px] text-slate-400 font-semibold">{adharFile ? 'Attached' : ''}</p>
+                      <p className="text-[10px] text-slate-400 font-semibold">{adharFile ? (adharFile.type === 'application/pdf' || adharFile.name?.toLowerCase().endsWith('.pdf') ? 'PDF Attached' : 'Attached') : ''}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
@@ -1029,7 +1032,7 @@ const CreateUser = () => {
                     )}
                     <label className="h-9 text-xs bg-slate-900 hover:bg-[#00a76b] dark:bg-[#25201b] dark:hover:bg-[#00a76b] text-white font-bold rounded-lg cursor-pointer flex items-center justify-center transition-colors w-full">
                       {adharFile ? 'Change File' : 'Upload File'}
-                      <input type="file" className="hidden" accept=".jpg,.jpeg,.png,image/jpeg,image/png" onChange={(e) => handleDocumentChange(e, setAdharFile, 'Adharcard')} />
+                      <input type="file" className="hidden" accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf" onChange={(e) => handleDocumentChange(e, setAdharFile, 'Adharcard')} />
                     </label>
                   </div>
                 </div>
@@ -1046,7 +1049,7 @@ const CreateUser = () => {
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate group-hover:text-[#00a76b] transition-colors">Bank Details</p>
-                      <p className="text-[10px] text-slate-400 font-semibold">{bankFile ? 'Attached' : ''}</p>
+                      <p className="text-[10px] text-slate-400 font-semibold">{bankFile ? (bankFile.type === 'application/pdf' || bankFile.name?.toLowerCase().endsWith('.pdf') ? 'PDF Attached' : 'Attached') : ''}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
@@ -1062,7 +1065,7 @@ const CreateUser = () => {
                     )}
                     <label className="h-9 text-xs bg-slate-900 hover:bg-[#00a76b] dark:bg-[#25201b] dark:hover:bg-[#00a76b] text-white font-bold rounded-lg cursor-pointer flex items-center justify-center transition-colors w-full">
                       {bankFile ? 'Change File' : 'Upload File'}
-                      <input type="file" className="hidden" accept=".jpg,.jpeg,.png,image/jpeg,image/png" onChange={(e) => handleDocumentChange(e, setBankFile, 'Bank Details')} />
+                      <input type="file" className="hidden" accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf" onChange={(e) => handleDocumentChange(e, setBankFile, 'Bank Details')} />
                     </label>
                   </div>
                 </div>
@@ -1079,7 +1082,7 @@ const CreateUser = () => {
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate group-hover:text-[#00a76b] transition-colors">PAN Card</p>
-                      <p className="text-[10px] text-slate-400 font-semibold">{panFile ? 'Attached' : ''}</p>
+                      <p className="text-[10px] text-slate-400 font-semibold">{panFile ? (panFile.type === 'application/pdf' || panFile.name?.toLowerCase().endsWith('.pdf') ? 'PDF Attached' : 'Attached') : ''}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
@@ -1095,7 +1098,7 @@ const CreateUser = () => {
                     )}
                     <label className="h-9 text-xs bg-slate-900 hover:bg-[#00a76b] dark:bg-[#25201b] dark:hover:bg-[#00a76b] text-white font-bold rounded-lg cursor-pointer flex items-center justify-center transition-colors w-full">
                       {panFile ? 'Change File' : 'Upload File'}
-                      <input type="file" className="hidden" accept=".jpg,.jpeg,.png,image/jpeg,image/png" onChange={(e) => handleDocumentChange(e, setPanFile, 'PAN Card')} />
+                      <input type="file" className="hidden" accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf" onChange={(e) => handleDocumentChange(e, setPanFile, 'PAN Card')} />
                     </label>
                   </div>
                 </div>
@@ -1178,11 +1181,11 @@ const CreateUser = () => {
             </div>
 
             <div className="flex-1 w-full flex items-center justify-center overflow-auto p-4 bg-black/40 rounded-2xl">
-              {(previewDoc.url.toLowerCase().endsWith('.pdf') || previewDoc.url.startsWith('data:application/pdf')) ? (
+              {(previewDoc.isPdf || previewDoc.url.toLowerCase().endsWith('.pdf') || previewDoc.url.startsWith('data:application/pdf')) ? (
                 <iframe
                   src={previewDoc.url}
                   title={previewDoc.title}
-                  className="w-full h-full rounded-xl border border-slate-700"
+                  className="w-full h-full rounded-xl border border-slate-700 bg-white"
                 />
               ) : !imgError ? (
                 <img

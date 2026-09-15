@@ -2992,13 +2992,13 @@ const Attendance = () => {
                     : record.checkInTime);
                 const hasCheckedIn = !!rawIn && rawIn !== '--' && rawIn !== '--:--' && formatTime12h(rawIn) !== '--:--';
 
-                const rawOut = (record.clockOut && record.clockOut !== '--' && record.clockOut !== '--:--')
+                const isSessionRunning = !!(record.isRunning || record.isLiveActive || record.sessionStatus === 'active');
+                const rawOut = (isToday && isSessionRunning) ? null : ((record.clockOut && record.clockOut !== '--' && record.clockOut !== '--:--')
                   ? record.clockOut
                   : ((record.clock_out && record.clock_out !== '--' && record.clock_out !== '--:--')
                     ? record.clock_out
-                    : record.checkOutTime);
+                    : record.checkOutTime));
                 const hasCheckedOutTime = !!rawOut && rawOut !== '--' && rawOut !== '--:--' && formatTime12h(rawOut) !== '--:--';
-                const isSessionRunning = !!(record.isRunning || record.isLiveActive);
 
                 // Show override ONLY if the user was present, checked in, and has completed checkout today
                 const hasCheckedOut = !isAbsentOrLeave && hasCheckedIn && hasCheckedOutTime && !isSessionRunning;
@@ -3042,7 +3042,7 @@ const Attendance = () => {
                     <td className="px-3 py-1.5 border-r border-[#e2eae7] dark:border-[#133029]">
                       <div className="flex items-center gap-1 text-[11.5px] font-semibold text-slate-700 dark:text-slate-300">
                         <LogOut size={11.5} className="text-red-400" />
-                        {formatTime12h(record.clockOut || record.clock_out || record.checkOutTime)}
+                        {formatTime12h(rawOut)}
                       </div>
                     </td>
                     <td className="px-3 py-1.5 border-r border-[#e2eae7] dark:border-[#133029]">

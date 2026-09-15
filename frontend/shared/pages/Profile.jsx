@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { API_BASE_URL, getImageUrl } from '@shared/services/api';
-import { Eye, Shield, Lock, FileText, Upload, Trash2, Check, RefreshCw, Plus, Edit2, Save, X, Camera } from 'lucide-react';
+import { Eye, Shield, Lock, FileText, Upload, Trash2, Check, RefreshCw, Plus, Edit2, Save, X, Camera, Download } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import toast from 'react-hot-toast';
 
@@ -120,13 +120,12 @@ const Profile = () => {
       'image/jpeg',
       'image/jpg',
       'image/png',
-      'image/webp',
-      'application/msword',
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+      'image/webp'
     ];
 
-    if (!allowedTypes.includes(file.type)) {
-      toast.error('Please select a valid document format (PDF, JPG, PNG, DOC, DOCX).');
+    const isPdf = file.type === 'application/pdf' || file.name?.toLowerCase().endsWith('.pdf');
+    if (!allowedTypes.includes(file.type) && !isPdf) {
+      toast.error('Please select a valid document format (JPG, PNG, or PDF).');
       return;
     }
 
@@ -333,7 +332,10 @@ const Profile = () => {
 
           {/* VERIFIED DOCUMENTS VAULT */}
           <div className="verdant-card" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-            <h3 style={{ fontSize: 15, fontWeight: 700, color: isDark ? '#fff' : '#3b3e3c', marginBottom: 24, marginTop: 0 }}>Verified Documents Vault</h3>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+              <h3 style={{ fontSize: 15, fontWeight: 700, color: isDark ? '#fff' : '#3b3e3c', margin: 0 }}>Verified Documents Vault</h3>
+              <span style={{ fontSize: 11, color: isDark ? '#a3b3af' : '#8c918f', fontWeight: 600 }}>Accepted formats: JPG, PNG, PDF</span>
+            </div>
             <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', flex: 1, gap: 16 }}>
 
               {/* Adharcard Display */}
@@ -357,7 +359,7 @@ const Profile = () => {
                     <label className="verdant-btn-outline" style={{ fontSize: 12, padding: '8px 16px', height: 'auto', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
                       {uploadingDocType === 'adharCard' ? <RefreshCw size={14} className="animate-spin" /> : <Upload size={14} />}
                       {adharCard ? 'Replace' : 'Upload'}
-                      <input type="file" accept="image/*,.pdf" style={{ display: 'none' }} onChange={(e) => handleDocumentUpload('adharCard', e.target.files[0])} disabled={uploadingDocType !== null} />
+                      <input type="file" accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf" style={{ display: 'none' }} onChange={(e) => handleDocumentUpload('adharCard', e.target.files[0])} disabled={uploadingDocType !== null} />
                     </label>
                   )}
                 </div>
@@ -384,7 +386,7 @@ const Profile = () => {
                     <label className="verdant-btn-outline" style={{ fontSize: 12, padding: '8px 16px', height: 'auto', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
                       {uploadingDocType === 'bankDetails' ? <RefreshCw size={14} className="animate-spin" /> : <Upload size={14} />}
                       {bankDetails ? 'Replace' : 'Upload'}
-                      <input type="file" accept="image/*,.pdf" style={{ display: 'none' }} onChange={(e) => handleDocumentUpload('bankDetails', e.target.files[0])} disabled={uploadingDocType !== null} />
+                      <input type="file" accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf" style={{ display: 'none' }} onChange={(e) => handleDocumentUpload('bankDetails', e.target.files[0])} disabled={uploadingDocType !== null} />
                     </label>
                   )}
                 </div>
@@ -411,7 +413,7 @@ const Profile = () => {
                     <label className="verdant-btn-outline" style={{ fontSize: 12, padding: '8px 16px', height: 'auto', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
                       {uploadingDocType === 'panCard' ? <RefreshCw size={14} className="animate-spin" /> : <Upload size={14} />}
                       {panCard ? 'Replace' : 'Upload'}
-                      <input type="file" accept="image/*,.pdf" style={{ display: 'none' }} onChange={(e) => handleDocumentUpload('panCard', e.target.files[0])} disabled={uploadingDocType !== null} />
+                      <input type="file" accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf" style={{ display: 'none' }} onChange={(e) => handleDocumentUpload('panCard', e.target.files[0])} disabled={uploadingDocType !== null} />
                     </label>
                   )}
                 </div>
@@ -536,7 +538,7 @@ const Profile = () => {
             <div 
               onClick={(e) => e.stopPropagation()}
               className={`relative w-full ${
-                viewingDoc.url.toLowerCase().includes('.pdf')
+                (viewingDoc.url.toLowerCase().includes('.pdf') || viewingDoc.url.startsWith('data:application/pdf'))
                   ? 'max-w-4xl h-[85vh]'
                   : 'max-w-2xl h-[580px] max-h-[90vh]'
               } flex flex-col bg-white dark:bg-[#162722] border border-slate-200 dark:border-[#1a2d29] rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 cursor-default`}
@@ -552,7 +554,7 @@ const Profile = () => {
                       {viewingDoc.name || 'Image Preview'}
                     </h4>
                     <p className="text-[11px] font-medium text-slate-400 dark:text-slate-500">
-                      {viewingDoc.url.toLowerCase().includes('.pdf') ? 'Document Viewer' : 'Photo Viewer'}
+                      {(viewingDoc.url.toLowerCase().includes('.pdf') || viewingDoc.url.startsWith('data:application/pdf')) ? 'Document Viewer' : 'Photo Viewer'}
                     </p>
                   </div>
                 </div>
@@ -562,11 +564,12 @@ const Profile = () => {
                     href={viewingDoc.url}
                     target="_blank"
                     rel="noreferrer"
+                    download={viewingDoc.name}
                     className="p-2 px-3 rounded-xl bg-slate-100 dark:bg-[#111c18] hover:bg-slate-200 dark:hover:bg-[#1a2d29] text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white text-xs font-bold transition-colors flex items-center gap-1.5"
-                    title="Open Original in New Tab"
+                    title="Open / Download Document"
                   >
-                    <Eye size={14} />
-                    <span className="hidden sm:inline">Open Original</span>
+                    <Download size={14} />
+                    <span className="hidden sm:inline">Open / Download</span>
                   </a>
                   <button
                     type="button"
@@ -581,7 +584,7 @@ const Profile = () => {
 
               {/* Box Viewport: Uniform dimensions for all images (small or large) */}
               <div className="flex-1 w-full p-4 sm:p-6 flex items-center justify-center overflow-hidden bg-slate-950/[0.03] dark:bg-black/40 relative">
-                {viewingDoc.url.toLowerCase().includes('.pdf') ? (
+                {(viewingDoc.url.toLowerCase().includes('.pdf') || viewingDoc.url.startsWith('data:application/pdf')) ? (
                   <iframe 
                     src={viewingDoc.url} 
                     title={viewingDoc.name}
