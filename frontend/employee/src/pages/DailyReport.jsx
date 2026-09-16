@@ -330,7 +330,8 @@ const DailyReport = () => {
   // Filters
   const [filterProject, setFilterProject] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
-  const [filterDate, setFilterDate] = useState('');
+  const [filterStartDate, setFilterStartDate] = useState('');
+  const [filterEndDate, setFilterEndDate] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
 
   // Fetch project list options
@@ -352,13 +353,11 @@ const DailyReport = () => {
   const fetchMyReports = useCallback(async () => {
     setLoadingReports(true);
     try {
-      const params = {};
+      const params = { limit: 1000 };
       if (filterProject !== 'all') params.projectName = filterProject;
       if (filterStatus !== 'all') params.status = filterStatus;
-      if (filterDate) {
-        params.startDate = filterDate;
-        params.endDate = filterDate;
-      }
+      if (filterStartDate) params.startDate = filterStartDate;
+      if (filterEndDate) params.endDate = filterEndDate;
       if (searchQuery.trim()) params.search = searchQuery.trim();
 
       const res = await api.get('/daily-reports/me', { params });
@@ -371,7 +370,7 @@ const DailyReport = () => {
     } finally {
       setLoadingReports(false);
     }
-  }, [filterProject, filterStatus, filterDate, searchQuery]);
+  }, [filterProject, filterStatus, filterStartDate, filterEndDate, searchQuery]);
 
   useEffect(() => {
     fetchProjects();
@@ -467,8 +466,8 @@ const DailyReport = () => {
     (formData.selectedProjects || []).forEach(p => {
       const tasks = formData.projectTasks?.[p] || [];
       if (tasks.length === 0) {
-        errors[`${p}_0_hoursSpent`] = `Please enter hours spent for ${p}`;
-        errors[`${p}_0_workDescription`] = `Please describe work done for ${p}`;
+        errors[`${p}_0_hoursSpent`] = 'Please enter hours spent';
+        errors[`${p}_0_workDescription`] = 'Please describe work done';
         return;
       }
 
@@ -476,15 +475,15 @@ const DailyReport = () => {
         const hrs = parseFloat(t.hoursSpent);
         const taskLabel = tasks.length > 1 ? ` (Task ${tIdx + 1})` : '';
         if (!t.hoursSpent || String(t.hoursSpent).trim() === '') {
-          errors[`${p}_${tIdx}_hoursSpent`] = `Please enter hours spent for ${p}${taskLabel}`;
+          errors[`${p}_${tIdx}_hoursSpent`] = `Please enter hours spent${taskLabel}`;
         } else if (isNaN(hrs) || hrs <= 0) {
-          errors[`${p}_${tIdx}_hoursSpent`] = `Hours for ${p}${taskLabel} must be greater than 0`;
+          errors[`${p}_${tIdx}_hoursSpent`] = `Hours${taskLabel} must be greater than 0`;
         } else if (hrs > 24) {
-          errors[`${p}_${tIdx}_hoursSpent`] = `Hours for ${p}${taskLabel} cannot exceed 24 hours`;
+          errors[`${p}_${tIdx}_hoursSpent`] = `Hours${taskLabel} cannot exceed 24 hours`;
         }
 
         if (!t.workDescription || !t.workDescription.trim()) {
-          errors[`${p}_${tIdx}_workDescription`] = `Please describe work done for ${p}${taskLabel}`;
+          errors[`${p}_${tIdx}_workDescription`] = `Please describe work done${taskLabel}`;
         }
       });
     });
@@ -636,18 +635,20 @@ const DailyReport = () => {
         }
       }
 
-      // 4. Date Filter
-      if (filterDate) {
-        const repDateStr = rep.reportDate ? rep.reportDate.split('T')[0] : '';
-        const targetDateStr = filterDate.split('T')[0];
-        if (repDateStr !== targetDateStr) {
-          return false;
-        }
+      // 4. Date Range Filter
+      const repDateStr = rep.reportDate ? rep.reportDate.split('T')[0] : '';
+      if (filterStartDate) {
+        const targetStart = filterStartDate.split('T')[0];
+        if (repDateStr && repDateStr < targetStart) return false;
+      }
+      if (filterEndDate) {
+        const targetEnd = filterEndDate.split('T')[0];
+        if (repDateStr && repDateStr > targetEnd) return false;
       }
 
       return true;
     });
-  }, [myReports, searchQuery, filterProject, filterStatus, filterDate]);
+  }, [myReports, searchQuery, filterProject, filterStatus, filterStartDate, filterEndDate]);
 
   // Compute summary stats for filtered reports
   const completedCount = filteredReports.filter(r => r.status === 'Completed').length;
@@ -744,12 +745,13 @@ const DailyReport = () => {
           </div>
 
           <div className="flex items-center gap-3">
-            {(filterProject !== 'all' || filterStatus !== 'all' || filterDate) && (
+            {(filterProject !== 'all' || filterStatus !== 'all' || filterStartDate || filterEndDate) && (
               <button
                 onClick={() => {
                   setFilterProject('all');
                   setFilterStatus('all');
-                  setFilterDate('');
+                  setFilterStartDate('');
+                  setFilterEndDate('');
                 }}
                 className="text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer"
               >
@@ -767,7 +769,7 @@ const DailyReport = () => {
         </div>
 
         {/* Filters */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 my-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 my-4">
           {/* Project Filter */}
           <CustomSelect
             options={[
@@ -789,12 +791,37 @@ const DailyReport = () => {
             iconMap={STATUS_ICONS}
           />
 
-          {/* Date Filter */}
-          <CustomDatePicker
-            name="filterDate"
-            value={filterDate}
-            onChange={(e) => setFilterDate(e.target.value)}
-          />
+          {/* Start Date Filter */}
+          <div className="relative">
+            <CustomDatePicker
+              name="filterStartDate"
+              value={filterStartDate}
+              onChange={(e) => setFilterStartDate(e.target.value)}
+              placeholder="Start Date"
+            />
+          </div>
+
+          {/* End Date Filter */}
+          <div className="relative flex items-center gap-1.5">
+            <div className="flex-1 min-w-0">
+              <CustomDatePicker
+                name="filterEndDate"
+                value={filterEndDate}
+                onChange={(e) => setFilterEndDate(e.target.value)}
+                placeholder="End Date"
+              />
+            </div>
+            {(filterStartDate || filterEndDate) && (
+              <button
+                type="button"
+                onClick={() => { setFilterStartDate(''); setFilterEndDate(''); }}
+                className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-xl transition-colors shrink-0 cursor-pointer"
+                title="Clear date range"
+              >
+                <X size={15} />
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Reports History Table */}
@@ -1049,9 +1076,6 @@ const DailyReport = () => {
                   <h3 className="text-base font-extrabold text-slate-900 dark:text-white">
                     {editingReport ? 'Edit Daily Work Update' : 'Daily Work Update'}
                   </h3>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                    {editingReport ? 'Modify your task progress, hours, or status.' : 'Task progress & working hours for today.'}
-                  </p>
                 </div>
               </div>
               <button
@@ -1071,11 +1095,10 @@ const DailyReport = () => {
               <form id="dailyReportDrawerForm" onSubmit={handleSubmit} noValidate className="space-y-4">
                 {/* 1. Date */}
                 <div>
-                  <div className="flex items-center justify-between mb-1.5">
+                  <div className="mb-1.5">
                     <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider">
                       Date <span className="text-red-500">*</span>
                     </label>
-                    <span className="text-[10px] text-slate-400 dark:text-slate-500">Past 7 days only (Max 2/day)</span>
                   </div>
                   <CustomDatePicker
                     name="reportDate"
@@ -1112,13 +1135,10 @@ const DailyReport = () => {
 
                 {/* 2. Project Name Multi-Select */}
                 <div>
-                  <div className="flex items-center justify-between mb-1.5">
+                  <div className="mb-1.5">
                     <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider">
-                      Project Name(s) <span className="text-red-500">*</span>
+                      Project Name <span className="text-red-500">*</span>
                     </label>
-                    <span className="text-[10px] text-slate-400 dark:text-slate-500">
-                      Multi-select enabled
-                    </span>
                   </div>
                   <MultiProjectSelect
                     options={projectOptions
@@ -1126,7 +1146,7 @@ const DailyReport = () => {
                       .filter(Boolean)}
                     value={formData.selectedProjects || []}
                     onChange={handleProjectsChange}
-                    placeholder="Select project(s)..."
+                    placeholder="Select project..."
                     canManage={false}
                   />
                   {formErrors.projects && (

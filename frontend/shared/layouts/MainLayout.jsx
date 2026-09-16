@@ -97,13 +97,26 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
     // Reserved for location.pathname based side effects
   }, [location.pathname]);
 
-  // 🛡️ Cross-tab Single Account Synchronization
+  // 🛡️ Cross-tab Single Account Synchronization & Back-button logout guard
   useEffect(() => {
     syncSessionFromActiveAccount();
+    const handleAuthCheck = () => {
+      const currentToken = sessionStorage.getItem('token') || localStorage.getItem('token');
+      if (!currentToken) {
+        window.location.replace('/login');
+      }
+    };
+    handleAuthCheck();
+    window.addEventListener('pageshow', handleAuthCheck);
+    window.addEventListener('popstate', handleAuthCheck);
     const cleanup = setupCrossTabSessionSync(() => {
-      navigate('/login');
+      window.location.replace('/login');
     });
-    return cleanup;
+    return () => {
+      window.removeEventListener('pageshow', handleAuthCheck);
+      window.removeEventListener('popstate', handleAuthCheck);
+      cleanup();
+    };
   }, [navigate]);
 
   const toggleTheme = () => {
@@ -599,10 +612,9 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
   const handleLogout = () => {
     clearActiveAccountAndSession();
     if (onLogout) {
-      onLogout();
-    } else {
-      navigate('/login');
+      try { onLogout(); } catch (_) {}
     }
+    window.location.replace('/login');
   };
 
   const handleRoleSwitch = (targetRole) => {
@@ -833,7 +845,7 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
           </div>
 
           {/* Center Search Bar */}
-          <div className="flex-1 flex justify-start md:justify-center px-2 md:px-8">
+          <div className="flex-1 flex justify-start px-2 md:px-8">
             <RoleSearchBar activeRole={activeRole} />
           </div>
 

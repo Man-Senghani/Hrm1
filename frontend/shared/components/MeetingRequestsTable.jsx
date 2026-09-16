@@ -6,6 +6,7 @@ import {
   Search, Filter, RefreshCw, ChevronLeft, ChevronRight, Check, X,
   FileText, Plus, MessageSquare, ShieldCheck, UserCheck, Timer
 } from 'lucide-react';
+import CustomDatePicker from './CustomDatePicker';
 
 const STATUS_BADGES = {
   pending: {
@@ -52,12 +53,13 @@ const MeetingRequestsTable = ({
   const [rejectRemarks, setRejectRemarks] = useState('');
   const [rejectSubmitting, setRejectSubmitting] = useState(false);
 
+  // New Request Modal (for logged-in user)
   const [isNewRequestOpen, setIsNewRequestOpen] = useState(false);
   const [newReason, setNewReason] = useState('');
   const [newMinutes, setNewMinutes] = useState('');
-  const [newDate, setNewDate] = useState(() => new Date().toISOString().split('T')[0]);
-  const [newSubmitting, setNewSubmitting] = useState(false);
+  const [newDate, setNewDate] = useState(new Date().toISOString().split('T')[0]);
   const [availableInactiveMins, setAvailableInactiveMins] = useState(null);
+  const [newSubmitting, setNewSubmitting] = useState(false);
 
   const isReviewer = ['admin', 'hr', 'manager'].includes(userRole.toLowerCase());
 
@@ -94,7 +96,7 @@ const MeetingRequestsTable = ({
     fetchRequests();
   }, [fetchRequests]);
 
-  // Check URL query param: ?action=new-offline-request
+  // 🔗 Auto-open New Request drawer if ?action=new-offline-request is in the URL
   useEffect(() => {
     try {
       const urlParams = new URLSearchParams(window.location.search);
@@ -111,10 +113,42 @@ const MeetingRequestsTable = ({
   const fetchTodayInactiveCap = async (dateStr) => {
     try {
       const token = sessionStorage.getItem('token');
-      const res = await axios.get(`/api/time/date/${dateStr}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      const idleSec = res.data?.idleTime || 0;
+      const currentUser = JSON.parse(sessionStorage.getItem('user') || '{}');
+      const activeUserId = currentUserId || currentUser._id || currentUser.id;
+
+      let idleSec = 0;
+      const todayStr = new Date().toISOString().split('T')[0];
+
+      // 1. If date is today, check live /api/time/status first for authoritative live idle time
+      if (dateStr === todayStr) {
+        try {
+          const statusRes = await axios.get('/api/time/status', {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          if (statusRes.data && statusRes.data.idleTime !== undefined) {
+            idleSec = Number(statusRes.data.idleTime) || 0;
+          }
+        } catch (_) {}
+      }
+
+      // 2. Query /api/time/date/:date (handles both array and single-object returns)
+      if (idleSec === 0 || dateStr !== todayStr) {
+        const res = await axios.get(`/api/time/date/${dateStr}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (Array.isArray(res.data)) {
+          const myRec = res.data.find(r => {
+            const empId = r.employeeId?._id || r.employeeId?.id || r.employeeId;
+            return String(empId) === String(activeUserId);
+          });
+          if (myRec) {
+            idleSec = Math.max(idleSec, Number(myRec.idleTime) || 0);
+          }
+        } else if (res.data && typeof res.data === 'object') {
+          idleSec = Math.max(idleSec, Number(res.data.idleTime) || 0);
+        }
+      }
+
       setAvailableInactiveMins(Math.floor(idleSec / 60));
     } catch (err) {
       setAvailableInactiveMins(null);
@@ -529,7 +563,7 @@ const MeetingRequestsTable = ({
       {reviewModalRequest && (
         <div
           onClick={() => setReviewModalRequest(null)}
-          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4"
+          className="fixed inset-0 z-[99999] bg-slate-900/60 dark:bg-black/75 backdrop-blur-md flex items-center justify-center p-4"
         >
           <div
             onClick={(e) => e.stopPropagation()}
@@ -635,7 +669,7 @@ const MeetingRequestsTable = ({
       {rejectModalRequest && (
         <div
           onClick={() => setRejectModalRequest(null)}
-          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4"
+          className="fixed inset-0 z-[99999] bg-slate-900/60 dark:bg-black/75 backdrop-blur-md flex items-center justify-center p-4"
         >
           <div
             onClick={(e) => e.stopPropagation()}
@@ -696,7 +730,7 @@ const MeetingRequestsTable = ({
       {isNewRequestOpen && (
         <div
           onClick={() => setIsNewRequestOpen(false)}
-          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex justify-end animate-in fade-in duration-200"
+          className="fixed inset-0 z-[99999] bg-slate-900/60 dark:bg-black/75 backdrop-blur-md flex justify-end animate-in fade-in duration-200"
         >
           <div
             onClick={(e) => e.stopPropagation()}
@@ -727,24 +761,29 @@ const MeetingRequestsTable = ({
                   <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-200 mb-1.5">
                     Meeting Date
                   </label>
-                  <input
-                    type="date"
-                    value={newDate}
-                    onChange={(e) => {
-                      setNewDate(e.target.value);
-                      fetchTodayInactiveCap(e.target.value);
-                    }}
-                    className="w-full px-3.5 py-2 text-xs rounded-xl border border-[#cbd5e1] dark:border-[#133029] bg-white dark:bg-[#071e17] text-slate-800 dark:text-white focus:ring-2 focus:ring-emerald-500/30 outline-none"
-                  />
+                  <div className="relative">
+                    <CustomDatePicker
+                      name="meetingDate"
+                      value={newDate}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setNewDate(val);
+                        fetchTodayInactiveCap(val);
+                      }}
+                      placeholder="Select Meeting Date"
+                      className="w-full"
+                      maxDate={new Date().toISOString().split('T')[0]}
+                    />
+                  </div>
                 </div>
 
                 {/* Inactive Time Banner (Mockup Style) */}
-                <div className="p-3 rounded-xl bg-amber-50/80 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-800/50 flex items-center justify-between text-xs">
+                <div className="p-3.5 rounded-xl bg-amber-50/80 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-800/50 flex items-center justify-between text-xs">
                   <div className="flex items-center gap-2">
                     <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
                     <span className="font-bold text-amber-800 dark:text-amber-300">Recorded Inactive Time:</span>
                   </div>
-                  <span className="font-mono font-black text-amber-700 dark:text-amber-400">
+                  <span className="font-mono font-black text-amber-700 dark:text-amber-400 text-sm">
                     {availableInactiveMins !== null ? `${availableInactiveMins} Mins` : 'Calculating...'}
                   </span>
                 </div>
@@ -763,21 +802,61 @@ const MeetingRequestsTable = ({
                 </div>
 
                 <div>
-                  <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-200 mb-1.5">
-                    Duration in Minutes
-                  </label>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-200">
+                      Duration in Minutes
+                    </label>
+                    {availableInactiveMins !== null && availableInactiveMins > 0 && (
+                      <span className="text-[10.5px] font-bold text-amber-700 dark:text-amber-400">
+                        Max: {availableInactiveMins} mins
+                      </span>
+                    )}
+                  </div>
                   <input
                     type="number"
                     min="1"
-                    max={availableInactiveMins !== null ? availableInactiveMins : 480}
+                    max={availableInactiveMins !== null && availableInactiveMins > 0 ? availableInactiveMins : 480}
                     placeholder="e.g. 30"
                     value={newMinutes}
                     onChange={(e) => setNewMinutes(e.target.value)}
-                    className="w-full px-3.5 py-2 text-xs rounded-xl border border-[#cbd5e1] dark:border-[#133029] bg-white dark:bg-[#071e17] text-slate-800 dark:text-white focus:ring-2 focus:ring-emerald-500/30 outline-none"
+                    className="w-full px-3.5 py-2.5 text-xs rounded-xl border border-[#cbd5e1] dark:border-[#133029] bg-white dark:bg-[#071e17] text-slate-800 dark:text-white focus:ring-2 focus:ring-emerald-500/30 outline-none font-semibold"
                   />
+
+                  {/* 🚀 Quick Fill Preset Buttons */}
+                  {availableInactiveMins !== null && availableInactiveMins > 0 && (
+                    <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                      <span className="text-[10.5px] font-semibold text-slate-400 dark:text-[#829e92]">Quick Fill:</span>
+                      {[15, 30, 45, 60].filter(m => m <= availableInactiveMins).map(m => (
+                        <button
+                          key={m}
+                          type="button"
+                          onClick={() => setNewMinutes(String(m))}
+                          className={`px-2.5 py-1 text-[11px] font-bold rounded-lg border transition-all cursor-pointer ${
+                            Number(newMinutes) === m
+                              ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                              : 'bg-slate-100 dark:bg-[#133029] text-slate-700 dark:text-slate-300 border-[#cbd5e1] dark:border-[#1a3d34] hover:border-emerald-500'
+                          }`}
+                        >
+                          {m}m
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => setNewMinutes(String(availableInactiveMins))}
+                        className={`px-2.5 py-1 text-[11px] font-bold rounded-lg border transition-all cursor-pointer ${
+                          Number(newMinutes) === availableInactiveMins
+                            ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                            : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800/60 hover:bg-emerald-100'
+                        }`}
+                      >
+                        Full ({availableInactiveMins}m)
+                      </button>
+                    </div>
+                  )}
+
                   <p className="text-[11px] text-slate-400 dark:text-[#829e92] mt-1.5">
                     {availableInactiveMins !== null && availableInactiveMins > 0
-                      ? `Cannot exceed ${availableInactiveMins} mins`
+                      ? `Cannot exceed your recorded inactive time (${availableInactiveMins} mins).`
                       : 'Capped at your recorded inactive time.'}
                   </p>
                 </div>

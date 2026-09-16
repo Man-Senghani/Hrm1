@@ -253,6 +253,30 @@ function applyServerState(data) {
     return;
   }
 
+  if (serverStatus === 'on_leave' || data?.isOnLeave) {
+    status = 'ON_LEAVE';
+    isIdle = false;
+    isSessionRunning = false;
+    stopPolling();
+    stopHeartbeat();
+    stopScreenshotLoop();
+    stopIdleReminderLoop();
+    activeSeconds = 0;
+    inactiveSeconds = 0;
+    const pill = document.getElementById('leave-type-pill');
+    if (pill) {
+      const typeStr = data.leaveTypeName || data.leaveType || 'Approved Leave';
+      pill.innerText = `${typeStr.toUpperCase()} ACTIVE`;
+    }
+    const descText = document.getElementById('on-leave-desc-text');
+    if (descText && data.message) {
+      descText.innerText = data.message;
+    }
+    updateDisplay();
+    updateUI();
+    return;
+  }
+
   if (!data?.hasActiveSession && serverStatus !== 'active' && serverStatus !== 'idle' && serverStatus !== 'paused') {
     // Only transition to OFFLINE if we are not actively in a session locally
     if (status === 'ACTIVE' && isSessionRunning) {
@@ -582,13 +606,30 @@ function setControlState(currentStatus) {
   const controlMatrix = document.querySelector('.control-matrix');
   const timerDisplay = document.querySelector('.timer-display');
   const completedSection = document.getElementById('checkout-completed-section');
+  const onLeaveSection = document.getElementById('on-leave-section');
   const alertEl = document.getElementById('desktop-alert');
 
   if (!startBtn || !pauseBtn || !resumeBtn || !binaryControls) return;
 
+  if (currentStatus === 'ON_LEAVE') {
+    // 🏖️ EMPLOYEE ON APPROVED LEAVE TODAY:
+    // Hide tracking controls and active timer, display On Leave notice card
+    if (controlMatrix) controlMatrix.style.display = 'none';
+    if (timerDisplay) timerDisplay.style.display = 'none';
+    if (alertEl) alertEl.style.display = 'none';
+    if (completedSection) completedSection.style.display = 'none';
+    if (onLeaveSection) onLeaveSection.style.display = 'flex';
+    if (statusEl) {
+      statusEl.innerText = 'ON LEAVE';
+      statusEl.className = 'status-badge status-on-leave';
+    }
+    return;
+  }
+
   if (currentStatus === 'COMPLETED') {
     // 🛡️ WORKDAY COMPLETED / CHECKED OUT:
     // Hide ALL control buttons (START, PAUSE, RESUME, CHECK OUT, LOGOUT) and the active timer
+    if (onLeaveSection) onLeaveSection.style.display = 'none';
     if (controlMatrix) controlMatrix.style.display = 'none';
     if (timerDisplay) timerDisplay.style.display = 'none';
     if (alertEl) alertEl.style.display = 'none';
@@ -601,6 +642,7 @@ function setControlState(currentStatus) {
   }
 
   // Active / Offline / Paused states: restore standard layout
+  if (onLeaveSection) onLeaveSection.style.display = 'none';
   if (completedSection) completedSection.style.display = 'none';
   if (controlMatrix) controlMatrix.style.display = 'block';
   if (timerDisplay) timerDisplay.style.display = 'flex';
@@ -1194,6 +1236,7 @@ document.getElementById('close-btn')?.addEventListener('click', () => window.ele
 document.getElementById('web-auth-btn')?.addEventListener('click', redirectToWebLogin);
 document.getElementById('logout-btn')?.addEventListener('click', logout);
 document.getElementById('completed-logout-btn')?.addEventListener('click', logout);
+document.getElementById('leave-logout-btn')?.addEventListener('click', logout);
 document.getElementById('auth-minimize-btn')?.addEventListener('click', () => window.electronAPI.minimizeApp());
 document.getElementById('auth-close-btn')?.addEventListener('click', () => window.electronAPI.closeApp());
 

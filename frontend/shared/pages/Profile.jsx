@@ -246,8 +246,8 @@ const Profile = () => {
 
 
   return (
-    <div style={{ fontFamily: "'Poppins', -apple-system, sans-serif", background: isDark ? '#08100e' : '#f9fdfc', minHeight: 'calc(100vh - 56px)', color: isDark ? '#cbd5e1' : '#3b3e3c', width: '100%', boxSizing: 'border-box', transition: 'background-color 0.3s ease, color 0.3s ease' }}>
-      <div style={{ width: '100%', maxWidth: '100%', padding: '32px 32px 60px', boxSizing: 'border-box' }}>
+    <div style={{ fontFamily: "'Poppins', -apple-system, sans-serif", width: '100%', boxSizing: 'border-box' }}>
+      <div style={{ width: '100%', maxWidth: '100%', padding: '0 0 32px', boxSizing: 'border-box' }}>
 
         {/* Alerts are handled via toast notifications */}
 
@@ -334,7 +334,6 @@ const Profile = () => {
           <div className="verdant-card" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
               <h3 style={{ fontSize: 15, fontWeight: 700, color: isDark ? '#fff' : '#3b3e3c', margin: 0 }}>Verified Documents Vault</h3>
-              <span style={{ fontSize: 11, color: isDark ? '#a3b3af' : '#8c918f', fontWeight: 600 }}>Accepted formats: JPG, PNG, PDF</span>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', flex: 1, gap: 16 }}>
 

@@ -20,7 +20,8 @@ import {
   FileText,
   Download,
   Edit3,
-  X
+  X,
+  RefreshCw
 } from 'lucide-react';
 import { getImageUrl } from '@shared/services/api';
 
@@ -96,7 +97,7 @@ const EmployeeDetail = () => {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full border-3 border-emerald-500/20 border-t-[#00a76b] animate-spin" />
+          <RefreshCw size={24} className="animate-spin text-emerald-500" />
           <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">Scanning Registry...</span>
         </div>
       </div>

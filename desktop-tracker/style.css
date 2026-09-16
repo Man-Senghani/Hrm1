@@ -104,6 +104,52 @@ body {
     -webkit-app-region: no-drag;
 }
 
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.header-request-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 10px;
+    height: 27px;
+    background: linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%);
+    color: #ffffff;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 9999px;
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(37, 99, 235, 0.35);
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    outline: none;
+    -webkit-app-region: no-drag;
+}
+
+.header-request-btn .icon {
+    font-size: 13px !important;
+    line-height: 1;
+}
+
+.header-request-btn .btn-text {
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+    line-height: 1;
+}
+
+.header-request-btn:hover {
+    background: linear-gradient(135deg, #1D4ED8 0%, #1E40AF 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.45);
+}
+
+.header-request-btn:active {
+    transform: translateY(0) scale(0.97);
+    box-shadow: 0 1px 4px rgba(37, 99, 235, 0.25);
+}
+
 .desktop-alert {
     display: flex;
     align-items: center;
@@ -152,6 +198,99 @@ body {
 .status-badge.idle, .status-badge.status-idle { color: var(--accent-gold); background: rgba(245, 158, 11, 0.15); }
 .status-badge.paused, .status-badge.status-paused { color: var(--danger); background: rgba(239, 68, 68, 0.15); }
 .status-badge.status-completed { color: #00a76b; background: rgba(0, 167, 107, 0.12); border: 1px solid rgba(0, 167, 107, 0.25); }
+.status-badge.status-on-leave { color: #eab308; background: rgba(234, 179, 8, 0.12); border: 1px solid rgba(234, 179, 8, 0.3); }
+
+.on-leave-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 28px 12px 20px;
+    margin: auto 0;
+    -webkit-app-region: no-drag;
+    animation: fadeInCard 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.on-leave-icon-wrapper {
+    width: 68px;
+    height: 68px;
+    border-radius: 50%;
+    background: rgba(234, 179, 8, 0.12);
+    border: 2px solid rgba(234, 179, 8, 0.35);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #eab308;
+    margin-bottom: 14px;
+    box-shadow: 0 10px 24px rgba(234, 179, 8, 0.18);
+}
+
+.on-leave-icon-wrapper .material-symbols-outlined {
+    font-size: 36px;
+}
+
+.on-leave-title {
+    font-size: 15px;
+    font-weight: 800;
+    letter-spacing: 1.2px;
+    color: var(--text-white);
+    margin-bottom: 8px;
+    text-transform: uppercase;
+}
+
+.on-leave-badge-container {
+    margin-bottom: 12px;
+}
+
+.leave-type-pill {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    color: #eab308;
+    background: rgba(234, 179, 8, 0.12);
+    border: 1px solid rgba(234, 179, 8, 0.25);
+}
+
+.on-leave-desc {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-gray);
+    line-height: 1.5;
+    margin-bottom: 18px;
+    max-width: 270px;
+}
+
+.on-leave-info-box {
+    background: rgba(0, 0, 0, 0.03);
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    border-radius: 14px;
+    padding: 12px 14px;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    text-align: left;
+    max-width: 290px;
+}
+
+.on-leave-info-box .info-icon {
+    font-size: 18px;
+    color: #eab308;
+    flex-shrink: 0;
+    margin-top: 1px;
+}
+
+.on-leave-info-text {
+    font-size: 11px;
+    font-weight: 500;
+    line-height: 1.5;
+    color: var(--text-white);
+    margin: 0;
+}
 
 .checkout-completed-card {
     display: flex;

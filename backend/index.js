@@ -318,7 +318,7 @@ const LOGIN_INDEX = path.join(LOGIN_DIST, 'index.html');
 
 if (fs.existsSync(LOGIN_INDEX)) {
   app.use(express.static(LOGIN_DIST, staticOptions));
-  app.get(['/', '/login', '/forgot-password', '/reset-password'], (req, res) => {
+  app.get(['/', '/login', '/forgot-password', '/reset-password', '/reset-password/:token', '/reset-password/*'], (req, res) => {
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.sendFile(LOGIN_INDEX);
   });
@@ -327,6 +327,12 @@ if (fs.existsSync(LOGIN_INDEX)) {
 // 🔄 Fallback handler for unhandled browser navigation (non-API GET requests like /daily-report)
 app.use((req, res, next) => {
   if (req.method === 'GET' && !req.path.startsWith('/api/') && !req.path.startsWith('/uploads/')) {
+    if (req.path.startsWith('/reset-password') || req.path.startsWith('/forgot-password') || req.path.startsWith('/login')) {
+      if (fs.existsSync(LOGIN_INDEX)) {
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+        return res.sendFile(LOGIN_INDEX);
+      }
+    }
     const employeeIndex = path.join(__dirname, '../frontend/employee/dist/index.html');
     if (fs.existsSync(employeeIndex)) {
       res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');

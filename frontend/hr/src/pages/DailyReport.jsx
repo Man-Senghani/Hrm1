@@ -355,7 +355,8 @@ const DailyReportHR = () => {
   const [mySearch, setMySearch] = useState('');
   const [myProjectFilter, setMyProjectFilter] = useState('all');
   const [myStatusFilter, setMyStatusFilter] = useState('all');
-  const [myDateFilter, setMyDateFilter] = useState('');
+  const [myStartDateFilter, setMyStartDateFilter] = useState('');
+  const [myEndDateFilter, setMyEndDateFilter] = useState('');
 
   // Pagination
   const [page, setPage] = useState(1);
@@ -451,13 +452,11 @@ const DailyReportHR = () => {
   const fetchMyReports = useCallback(async () => {
     setLoadingMyReports(true);
     try {
-      const params = {};
+      const params = { limit: 1000 };
       if (myProjectFilter !== 'all') params.projectName = myProjectFilter;
       if (myStatusFilter !== 'all') params.status = myStatusFilter;
-      if (myDateFilter) {
-        params.startDate = myDateFilter;
-        params.endDate = myDateFilter;
-      }
+      if (myStartDateFilter) params.startDate = myStartDateFilter;
+      if (myEndDateFilter) params.endDate = myEndDateFilter;
       if (mySearch.trim()) params.search = mySearch.trim();
 
       const res = await api.get('/daily-reports/me', { params });
@@ -469,7 +468,7 @@ const DailyReportHR = () => {
     } finally {
       setLoadingMyReports(false);
     }
-  }, [myProjectFilter, myStatusFilter, myDateFilter, mySearch]);
+  }, [myProjectFilter, myStatusFilter, myStartDateFilter, myEndDateFilter, mySearch]);
 
   useEffect(() => {
     fetchProjects();
@@ -591,8 +590,8 @@ const DailyReportHR = () => {
     (formData.selectedProjects || []).forEach(p => {
       const tasks = formData.projectTasks?.[p] || [];
       if (tasks.length === 0) {
-        errors[`${p}_0_hoursSpent`] = `Please enter hours spent for ${p}`;
-        errors[`${p}_0_workDescription`] = `Please describe work done for ${p}`;
+        errors[`${p}_0_hoursSpent`] = 'Please enter hours spent';
+        errors[`${p}_0_workDescription`] = 'Please describe work done';
         return;
       }
 
@@ -600,15 +599,15 @@ const DailyReportHR = () => {
         const hrs = parseFloat(t.hoursSpent);
         const taskLabel = tasks.length > 1 ? ` (Task ${tIdx + 1})` : '';
         if (!t.hoursSpent || String(t.hoursSpent).trim() === '') {
-          errors[`${p}_${tIdx}_hoursSpent`] = `Please enter hours spent for ${p}${taskLabel}`;
+          errors[`${p}_${tIdx}_hoursSpent`] = `Please enter hours spent${taskLabel}`;
         } else if (isNaN(hrs) || hrs <= 0) {
-          errors[`${p}_${tIdx}_hoursSpent`] = `Hours for ${p}${taskLabel} must be greater than 0`;
+          errors[`${p}_${tIdx}_hoursSpent`] = `Hours${taskLabel} must be greater than 0`;
         } else if (hrs > 24) {
-          errors[`${p}_${tIdx}_hoursSpent`] = `Hours for ${p}${taskLabel} cannot exceed 24 hours`;
+          errors[`${p}_${tIdx}_hoursSpent`] = `Hours${taskLabel} cannot exceed 24 hours`;
         }
 
         if (!t.workDescription || !t.workDescription.trim()) {
-          errors[`${p}_${tIdx}_workDescription`] = `Please describe work done for ${p}${taskLabel}`;
+          errors[`${p}_${tIdx}_workDescription`] = `Please describe work done${taskLabel}`;
         }
       });
     });
@@ -892,21 +891,25 @@ const DailyReportHR = () => {
       if (myStatusFilter !== 'all' && (rep.status || '').toLowerCase() !== myStatusFilter.toLowerCase()) {
         return false;
       }
-      if (myDateFilter) {
-        const repDateStr = rep.reportDate ? rep.reportDate.split('T')[0] : '';
-        const targetDateStr = myDateFilter.split('T')[0];
-        if (repDateStr !== targetDateStr) return false;
+      const repDateStr = rep.reportDate ? rep.reportDate.split('T')[0] : '';
+      if (myStartDateFilter) {
+        const targetStart = myStartDateFilter.split('T')[0];
+        if (repDateStr && repDateStr < targetStart) return false;
+      }
+      if (myEndDateFilter) {
+        const targetEnd = myEndDateFilter.split('T')[0];
+        if (repDateStr && repDateStr > targetEnd) return false;
       }
       return true;
     });
-  }, [myReports, mySearch, myProjectFilter, myStatusFilter, myDateFilter]);
+  }, [myReports, mySearch, myProjectFilter, myStatusFilter, myStartDateFilter, myEndDateFilter]);
 
   const [myPage, setMyPage] = useState(1);
   const myTotalPages = Math.ceil(filteredMyReports.length / PAGE_SIZE) || 1;
 
   useEffect(() => {
     setMyPage(1);
-  }, [mySearch, myProjectFilter, myStatusFilter, myDateFilter]);
+  }, [mySearch, myProjectFilter, myStatusFilter, myStartDateFilter, myEndDateFilter]);
 
   const paginatedMyReports = useMemo(() => {
     const start = (myPage - 1) * PAGE_SIZE;
@@ -1073,7 +1076,7 @@ const DailyReportHR = () => {
             </div>
 
             {/* My Reports Filters */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 my-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 my-4">
               <CustomSelect
                 options={[
                   { label: 'All Projects', value: 'all' },
@@ -1093,11 +1096,35 @@ const DailyReportHR = () => {
                 iconMap={STATUS_ICONS}
               />
 
-              <CustomDatePicker
-                name="myDateFilter"
-                value={myDateFilter}
-                onChange={(e) => setMyDateFilter(e.target.value)}
-              />
+              <div className="relative">
+                <CustomDatePicker
+                  name="myStartDateFilter"
+                  value={myStartDateFilter}
+                  onChange={(e) => setMyStartDateFilter(e.target.value)}
+                  placeholder="Start Date"
+                />
+              </div>
+
+              <div className="relative flex items-center gap-1.5">
+                <div className="flex-1 min-w-0">
+                  <CustomDatePicker
+                    name="myEndDateFilter"
+                    value={myEndDateFilter}
+                    onChange={(e) => setMyEndDateFilter(e.target.value)}
+                    placeholder="End Date"
+                  />
+                </div>
+                {(myStartDateFilter || myEndDateFilter) && (
+                  <button
+                    type="button"
+                    onClick={() => { setMyStartDateFilter(''); setMyEndDateFilter(''); }}
+                    className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-xl transition-colors shrink-0 cursor-pointer"
+                    title="Clear date range"
+                  >
+                    <X size={15} />
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* My Reports Table */}
@@ -1994,9 +2021,6 @@ const DailyReportHR = () => {
                   <h3 className="text-base font-extrabold text-slate-900 dark:text-white">
                     {editingReport ? 'Edit Daily Work Update' : 'Daily Work Update'}
                   </h3>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                    {editingReport ? 'Modify task progress, hours, or status.' : 'Task progress & working hours for today.'}
-                  </p>
                 </div>
               </div>
               <button
@@ -2016,11 +2040,10 @@ const DailyReportHR = () => {
               <form id="dailyReportHRDrawerForm" onSubmit={handleSubmit} noValidate className="space-y-4">
                 {/* 1. Date */}
                 <div>
-                  <div className="flex items-center justify-between mb-1.5">
+                  <div className="mb-1.5">
                     <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider">
                       Date <span className="text-red-500">*</span>
                     </label>
-                    <span className="text-[10px] text-slate-400 dark:text-slate-500">Past 7 days only</span>
                   </div>
                   <CustomDatePicker
                     name="reportDate"
@@ -2054,19 +2077,16 @@ const DailyReportHR = () => {
 
                 {/* 2. Project Name Multi-Select */}
                 <div>
-                  <div className="flex items-center justify-between mb-1.5">
+                  <div className="mb-1.5">
                     <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider">
-                      Project Name(s) <span className="text-red-500">*</span>
+                      Project Name <span className="text-red-500">*</span>
                     </label>
-                    <span className="text-[10px] text-slate-400 dark:text-slate-500">
-                      Multi-select enabled
-                    </span>
                   </div>
                   <MultiProjectSelect
                     options={projectOptions}
                     value={formData.selectedProjects || []}
                     onChange={handleProjectsChange}
-                    placeholder="Select project(s)..."
+                    placeholder="Select project..."
                     canManage={true}
                     onProjectsUpdated={(newProjects) => setProjectOptions(newProjects)}
                   />

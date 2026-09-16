@@ -1,12 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useParams, Link } from 'react-router-dom';
+import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
 import axios from 'axios';
-import { ShieldCheck, ArrowRight, ArrowLeft, Lock, Zap, AlertCircle, CheckCircle, Eye, EyeOff } from 'lucide-react';
+import { ShieldCheck, ArrowRight, ArrowLeft, Lock, Zap, AlertCircle, CheckCircle, Eye, EyeOff, RefreshCw } from 'lucide-react';
 import { EntryButton, EntryInput } from '../components/EntryPrimitives';
+import api from '../services/api';
 
 const ResetPassword = () => {
   const navigate = useNavigate();
-  const { token } = useParams();
+  const params = useParams();
+  const location = useLocation();
+
+  // Robust token extraction: route param, query param, or URL path
+  const token = params.token ||
+    new URLSearchParams(location.search).get('token') ||
+    (location.pathname.includes('/reset-password/') ? location.pathname.split('/reset-password/')[1]?.split(/[?#]/)[0] : '');
 
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -30,10 +37,15 @@ const ResetPassword = () => {
     const verifyToken = async () => {
       if (!token) return;
       try {
-        const response = await axios.get(`/api/auth/reset-password/${token}`);
+        const response = await api.get(`/auth/reset-password/${token}`);
         setUserDetails(response.data);
       } catch (err) {
-        setError(err.response?.data?.message || 'Invalid or expired password reset link.');
+        try {
+          const fallback = await axios.get(`/api/auth/reset-password/${token}`);
+          setUserDetails(fallback.data);
+        } catch (innerErr) {
+          setError(innerErr.response?.data?.message || err.response?.data?.message || 'Invalid or expired password reset link.');
+        }
       } finally {
         setVerifying(false);
       }
@@ -73,13 +85,16 @@ const ResetPassword = () => {
     }
 
     try {
-      const response = await axios.post(`/api/auth/reset-password/${token}`, { password });
-      setSuccess(response.data.message || 'Password reset successfully.');
-      
-      // Changed to 3 minutes (180000ms) to allow manual navigation
+      let response;
+      try {
+        response = await api.post(`/auth/reset-password/${token}`, { password });
+      } catch (_) {
+        response = await axios.post(`/api/auth/reset-password/${token}`, { password });
+      }
+      setSuccess(response.data?.message || 'Password reset successfully. Redirecting to login...');
       setTimeout(() => {
         navigate('/login', { replace: true });
-      }, 180000);
+      }, 2500);
     } catch (err) {
       setError(err.response?.data?.message || 'An error occurred while resetting the password.');
     } finally {
@@ -103,8 +118,9 @@ const ResetPassword = () => {
 
                {/* Verification & User Info Container */}
                {verifying && (
-                 <div className="mt-4 p-3 bg-[#ffffff] border border-[#e2e0d8] rounded-[6px] text-xs text-[#7a7873] animate-pulse">
-                   Verifying token validity...
+                 <div className="mt-4 p-3.5 bg-white border border-[#e2e0d8] rounded-xl text-xs text-[#7a7873] flex items-center gap-2.5 shadow-xs">
+                   <RefreshCw size={16} className="animate-spin text-emerald-500 shrink-0" />
+                   <span>Verifying password reset token...</span>
                  </div>
                )}
                {!verifying && userDetails && (

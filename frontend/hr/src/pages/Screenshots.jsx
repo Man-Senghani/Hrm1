@@ -474,9 +474,6 @@ const Screenshots = () => {
               Live Sync Active
             </span>
           </div>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            Real-time desktop activity captures, employee monitoring traces & audit archives.
-          </p>
         </div>
       </div>
 

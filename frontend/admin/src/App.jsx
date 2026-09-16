@@ -94,11 +94,11 @@ const RouteLoadingFallback = () => (
 // ROUTE PROTECTION LOGIC
 const ProtectedRoute = ({ children, allowedRole }) => {
   syncSessionFromActiveAccount();
-  const token = sessionStorage.getItem('token');
+  const token = sessionStorage.getItem('token') || localStorage.getItem('token');
   const role = sessionStorage.getItem('role');
 
   if (!token) {
-    window.location.href = '/login';
+    window.location.replace('/login');
     return null;
   }
 
@@ -112,7 +112,7 @@ const ProtectedRoute = ({ children, allowedRole }) => {
       employee: '/employee/',
       manager: '/manager/'
     };
-    window.location.href = roleSubpaths[role] || `/${role}/`;
+    window.location.replace(roleSubpaths[role] || `/${role}/`);
     return null;
   }
 
@@ -122,10 +122,23 @@ const ProtectedRoute = ({ children, allowedRole }) => {
 const App = () => {
   React.useEffect(() => {
     syncSessionFromActiveAccount();
+    const handleAuthCheck = () => {
+      const currentToken = sessionStorage.getItem('token') || localStorage.getItem('token');
+      if (!currentToken) {
+        window.location.replace('/login');
+      }
+    };
+    handleAuthCheck();
+    window.addEventListener('pageshow', handleAuthCheck);
+    window.addEventListener('popstate', handleAuthCheck);
     const cleanup = setupCrossTabSessionSync(() => {
-      window.location.href = '/login';
+      window.location.replace('/login');
     });
-    return cleanup;
+    return () => {
+      window.removeEventListener('pageshow', handleAuthCheck);
+      window.removeEventListener('popstate', handleAuthCheck);
+      cleanup();
+    };
   }, []);
   // Background chunk preloader to ensure instant navigation for key views without initial load freeze
   React.useEffect(() => {

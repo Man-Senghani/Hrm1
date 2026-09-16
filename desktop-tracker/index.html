@@ -22,7 +22,13 @@
 
         <div class="status-header">
             <div class="status-badge" id="status-display">OFFLINE</div>
-            <div class="sync-pulse" id="sync-indicator"></div>
+            <div class="header-actions">
+                <button id="meeting-request-btn" class="header-request-btn" title="Offline / Meeting Request">
+                    <span class="material-symbols-outlined icon">calendar_month</span>
+                    <span class="btn-text">REQUEST</span>
+                </button>
+                <div class="sync-pulse" id="sync-indicator" title="Connected"></div>
+            </div>
         </div>
 
         <div class="desktop-alert" id="desktop-alert" style="display: none;">
@@ -62,10 +68,6 @@
                 <span class="material-symbols-outlined">stop_circle</span>
                 CHECK OUT
             </button>
-            <button id="meeting-request-btn" class="ctrl-btn info" style="margin-top: 10px;">
-                <span class="material-symbols-outlined">event_note</span>
-                REQUEST
-            </button>
             <button id="logout-btn" class="ctrl-btn secondary" style="margin-top: 10px;">
                 <span class="material-symbols-outlined">logout</span>
                 LOGOUT
@@ -84,6 +86,26 @@
                 <p class="completed-info-text">If you want to start or restart the timer, please contact your <strong>HR, Manager, or Admin</strong>.</p>
             </div>
             <button id="completed-logout-btn" class="ctrl-btn secondary" style="margin-top: 20px; width: 100%; max-width: 290px;">
+                <span class="material-symbols-outlined">logout</span>
+                LOGOUT
+            </button>
+        </div>
+
+        <!-- 🏖️ On Leave Card -->
+        <div id="on-leave-section" class="on-leave-card" style="display: none;">
+            <div class="on-leave-icon-wrapper">
+                <span class="material-symbols-outlined">beach_access</span>
+            </div>
+            <h2 class="on-leave-title">YOU ARE ON LEAVE TODAY</h2>
+            <div class="on-leave-badge-container">
+                <span id="leave-type-pill" class="leave-type-pill">APPROVED LEAVE ACTIVE</span>
+            </div>
+            <p class="on-leave-desc" id="on-leave-desc-text">Your leave application has been approved for today. Time tracking and activity capture are paused.</p>
+            <div class="on-leave-info-box">
+                <span class="material-symbols-outlined info-icon">info</span>
+                <p class="on-leave-info-text">Enjoy your time off! If you need to attend urgent work or cancel this leave, please contact your <strong>HR or Manager</strong>.</p>
+            </div>
+            <button id="leave-logout-btn" class="ctrl-btn secondary" style="margin-top: 20px; width: 100%; max-width: 290px;">
                 <span class="material-symbols-outlined">logout</span>
                 LOGOUT
             </button>

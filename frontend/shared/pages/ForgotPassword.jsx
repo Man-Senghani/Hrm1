@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import axios from 'axios';
 import { ShieldCheck, ArrowRight, ArrowLeft, Mail, Zap, AlertCircle, CheckCircle } from 'lucide-react';
 import { EntryButton, EntryInput } from '../components/EntryPrimitives';
+import api from '../services/api';
 
 const ForgotPassword = () => {
   const navigate = useNavigate();
@@ -34,8 +35,16 @@ const ForgotPassword = () => {
     }
 
     try {
-      const response = await axios.post('/api/auth/forgot-password', { email });
-      setSuccess(response.data.message || 'A password reset link has been sent.');
+      let response;
+      try {
+        response = await api.post('/auth/forgot-password', { email });
+      } catch (apiErr) {
+        if (apiErr.response) {
+          throw apiErr;
+        }
+        response = await axios.post('/api/auth/forgot-password', { email });
+      }
+      setSuccess(response.data?.message || 'A password reset link has been sent.');
       setTimeout(() => {
         navigate('/login');
       }, 3000);

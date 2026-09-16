@@ -52,26 +52,35 @@ const RouteLoadingFallback = () => (
 function App() {
   syncSessionFromActiveAccount();
   const user = JSON.parse(sessionStorage.getItem('user') || '{}');
-  const token = sessionStorage.getItem('token');
+  const token = sessionStorage.getItem('token') || localStorage.getItem('token');
 
   React.useEffect(() => {
     syncSessionFromActiveAccount();
-    const currentToken = sessionStorage.getItem('token');
-    if (!currentToken) {
-      window.location.href = '/login';
-    }
+    const handleAuthCheck = () => {
+      const currentToken = sessionStorage.getItem('token') || localStorage.getItem('token');
+      if (!currentToken) {
+        window.location.replace('/login');
+      }
+    };
+    handleAuthCheck();
+    window.addEventListener('pageshow', handleAuthCheck);
+    window.addEventListener('popstate', handleAuthCheck);
 
     const cleanup = setupCrossTabSessionSync(() => {
-      window.location.href = '/login';
+      window.location.replace('/login');
     });
-    return cleanup;
+    return () => {
+      window.removeEventListener('pageshow', handleAuthCheck);
+      window.removeEventListener('popstate', handleAuthCheck);
+      cleanup();
+    };
   }, []);
 
   if (!token) return null;
 
   const handleLogout = () => {
     clearActiveAccountAndSession();
-    window.location.href = '/login';
+    window.location.replace('/login');
   };
 
   const navItems = [

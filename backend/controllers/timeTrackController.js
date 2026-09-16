@@ -17,6 +17,7 @@ const Employee = require('../models/Employee');
 const Attendance = require('../models/Attendance');
 const OfflineRequest = require('../models/OfflineRequest');
 const Notification = require('../models/Notification');
+const Leave = require('../models/Leave');
 const mongoose = require('mongoose');
 
 // ── CONFIG // Constants for Idle tracking (MUST MATCH DESKTOP APP & WEB APP)
@@ -31,6 +32,18 @@ const getToday = () => {
     day: '2-digit'
   });
   return formatter.format(new Date());
+};
+
+const getTodayLeaveBounds = () => {
+  const todayStr = getToday();
+  const utcStart = new Date(`${todayStr}T00:00:00.000Z`);
+  const utcEnd = new Date(`${todayStr}T23:59:59.999Z`);
+  const istStart = new Date(`${todayStr}T00:00:00.000+05:30`);
+  const istEnd = new Date(`${todayStr}T23:59:59.999+05:30`);
+  return {
+    start: new Date(Math.min(utcStart.getTime(), istStart.getTime())),
+    end: new Date(Math.max(utcEnd.getTime(), istEnd.getTime()))
+  };
 };
 
 const isDBConnected = () => mongoose.connection.readyState === 1;
@@ -81,6 +94,24 @@ exports.startTracking = async (req, res) => {
 
     let session = await TimeTrack.findOne({ employeeId: id, date: today });
     const existingAttendance = await Attendance.findOne({ user: id, date: today });
+
+    // 🏖️ Check if employee has an approved leave today
+    const { start: leaveStartBound, end: leaveEndBound } = getTodayLeaveBounds();
+    const activeLeave = await Leave.findOne({
+      user: id,
+      status: 'approved',
+      startDate: { $lte: leaveEndBound },
+      endDate: { $gte: leaveStartBound }
+    });
+
+    if (activeLeave && role === 'employee') {
+      const leaveTypeName = activeLeave.leaveType ? (activeLeave.leaveType.charAt(0).toUpperCase() + activeLeave.leaveType.slice(1)) : 'Approved';
+      return res.status(403).json({
+        message: `You are on approved ${leaveTypeName} Leave today. Time tracking is suspended during approved leaves.`,
+        isOnLeave: true,
+        leaveType: activeLeave.leaveType
+      });
+    }
 
     // 🛡️ If user already checked out for today, require HR/Admin override
     if (session?.status === 'completed' && existingAttendance?.checkOutTime && role === 'employee') {
@@ -444,6 +475,31 @@ exports.getSessionStatus = async (req, res) => {
 
     const attendance = await Attendance.findOne({ user: targetId, date: today });
     const isAttendanceCheckedOut = attendance && (attendance.checkOutTime || attendance.clockOut);
+
+    // 🏖️ Check for approved leave today
+    const { start: leaveStartBound, end: leaveEndBound } = getTodayLeaveBounds();
+    const activeLeave = await Leave.findOne({
+      user: targetId,
+      status: 'approved',
+      startDate: { $lte: leaveEndBound },
+      endDate: { $gte: leaveStartBound }
+    });
+
+    if (activeLeave && (!session || session.status !== 'active')) {
+      const leaveTypeName = activeLeave.leaveType ? (activeLeave.leaveType.charAt(0).toUpperCase() + activeLeave.leaveType.slice(1)) : 'Approved';
+      return res.json({
+        hasActiveSession: false,
+        status: 'ON_LEAVE',
+        isRunning: false,
+        isOnLeave: true,
+        leaveType: activeLeave.leaveType,
+        leaveTypeName,
+        leaveReason: activeLeave.reason,
+        startDate: activeLeave.startDate,
+        endDate: activeLeave.endDate,
+        message: `You are on approved ${leaveTypeName} Leave today.`
+      });
+    }
 
     if (!session) {
       if (isAttendanceCheckedOut) {

@@ -149,17 +149,21 @@ const TimeTrackerWidget = ({ className = '', isDark = false, showControls = fals
 
   const isRunning = !!(session?.hasActiveSession && session?.isRunning && session?.status === 'active');
 
-  const statusText = !session?.hasActiveSession || session?.status === 'completed'
-    ? 'NOT STARTED'
-    : (session?.status === 'active' && session?.isRunning)
-      ? 'WORKING'
-      : (session?.status === 'paused' || session?.status === 'idle' ? 'ON BREAK' : 'STOPPED');
+  const statusText = session?.isOnLeave
+    ? 'ON LEAVE'
+    : (!session?.hasActiveSession || session?.status === 'completed'
+      ? 'NOT STARTED'
+      : (session?.status === 'active' && session?.isRunning)
+        ? 'WORKING'
+        : (session?.status === 'paused' || session?.status === 'idle' ? 'ON BREAK' : 'STOPPED'));
 
-  const statusDotClass = !session?.hasActiveSession || session?.status === 'completed'
-    ? 'bg-slate-400 dark:bg-slate-500'
-    : (session?.status === 'active' && session?.isRunning)
-      ? 'bg-[#10B981] animate-pulse'
-      : 'bg-amber-500';
+  const statusDotClass = session?.isOnLeave
+    ? 'bg-amber-400'
+    : (!session?.hasActiveSession || session?.status === 'completed'
+      ? 'bg-slate-400 dark:bg-slate-500'
+      : (session?.status === 'active' && session?.isRunning)
+        ? 'bg-[#10B981] animate-pulse'
+        : 'bg-amber-500');
 
   return (
     <div className={`bg-white dark:bg-[#181612] rounded-[24px] border border-gray-200/90 dark:border-[#38352e] hover:!border-[#10b981] dark:hover:!border-[#34d399] transition-colors duration-300 p-3.5 sm:p-4 flex flex-col justify-between relative overflow-hidden min-h-[170px] shadow-sm select-none ${className}`}>
@@ -191,8 +195,16 @@ const TimeTrackerWidget = ({ className = '', isDark = false, showControls = fals
         </p>
       </div>
 
-      {/* Control Action Buttons */}
-      {showControls && (
+      {/* Control Action Buttons or On Leave Notice */}
+      {session?.isOnLeave ? (
+        <div className="pt-2 border-t border-slate-100 dark:border-[#282520] flex flex-col items-center justify-center gap-0.5 relative z-10 text-center">
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-800/40">
+            <span>🏖️</span>
+            <span>On Approved {session.leaveTypeName || 'Leave'} Today</span>
+          </span>
+          <p className="text-[10px] text-slate-400 dark:text-[#a3a094]">Time tracking is suspended for today.</p>
+        </div>
+      ) : showControls && (
         <div className="pt-2 border-t border-slate-100 dark:border-[#282520] flex items-center justify-center gap-3 relative z-10">
           {!session?.hasActiveSession || session?.status === 'completed' ? (
             <button

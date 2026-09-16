@@ -582,6 +582,19 @@ exports.getAttendance = async (req, res) => {
     const absentLookbackDays = 60;
     const absentRecords = [];
 
+    // Pre-index existing attendance & leaves for O(1) lookup
+    const existingAttSet = new Set();
+    for (const r of records) {
+      const rId = r.user?._id ? r.user._id.toString() : (typeof r.user === 'string' ? r.user : '');
+      if (rId && r.date) existingAttSet.add(`${rId}_${r.date}`);
+    }
+
+    const existingLeaveSet = new Set();
+    for (const r of leaveRecords) {
+      const rId = r.user?._id ? r.user._id.toString() : (typeof r.user === 'string' ? r.user : '');
+      if (rId && r.date) existingLeaveSet.add(`${rId}_${r.date}`);
+    }
+
     targetUsers.forEach(u => {
       const uId = u._id.toString();
       let uJoinDate = u.joinDate || u.createdAt ? new Date(u.joinDate || u.createdAt) : null;
@@ -595,15 +608,9 @@ exports.getAttendance = async (req, res) => {
         if (isWeekend) continue;
         if (uJoinDate && d < new Date(new Date(uJoinDate).setHours(0, 0, 0, 0))) continue;
 
-        const hasAtt = records.some(r => {
-          const rId = r.user?._id ? r.user._id.toString() : (typeof r.user === 'string' ? r.user : '');
-          return rId === uId && r.date === dStr;
-        });
-
-        const hasLeave = leaveRecords.some(r => {
-          const rId = r.user?._id ? r.user._id.toString() : (typeof r.user === 'string' ? r.user : '');
-          return rId === uId && r.date === dStr;
-        });
+        const userDateKey = `${uId}_${dStr}`;
+        const hasAtt = existingAttSet.has(userDateKey);
+        const hasLeave = existingLeaveSet.has(userDateKey);
 
         if (!hasAtt && !hasLeave) {
           absentRecords.push({
@@ -652,12 +659,18 @@ exports.getAttendance = async (req, res) => {
           date: { $in: allDates }
         }).lean();
 
+        // Index time track records by employeeId_date for O(1) lookup
+        const timeTrackMap = new Map();
+        for (const t of timeTrackRecords) {
+          const tEmpId = t.employeeId?._id ? t.employeeId._id.toString() : (t.employeeId ? t.employeeId.toString() : '');
+          if (tEmpId && t.date) {
+            timeTrackMap.set(`${tEmpId}_${t.date}`, t);
+          }
+        }
+
         for (const rec of combined) {
           const uId = rec.user?._id ? rec.user._id.toString() : (rec.user ? rec.user.toString() : '');
-          const tt = timeTrackRecords.find(t => {
-            const tEmpId = t.employeeId?._id ? t.employeeId._id.toString() : (t.employeeId ? t.employeeId.toString() : '');
-            return tEmpId === uId && t.date === rec.date;
-          });
+          const tt = timeTrackMap.get(`${uId}_${rec.date}`);
 
           if (tt) {
             if (tt.startTime && (!rec.checkInTime || !rec.clockIn || rec.clockIn === '--' || rec.clockIn === '--:--')) {
