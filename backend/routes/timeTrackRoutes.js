@@ -19,7 +19,10 @@ const {
   getDashboardData,
   getCalendarData,
   getDailyData,
-  getDailySummaryLogs
+  getDailySummaryLogs,
+  submitOfflineRequest,
+  getOfflineRequests,
+  updateOfflineRequestStatus
 } = require('../controllers/timeTrackController');
 
 // 🟢 Session Control
@@ -34,6 +37,11 @@ router.post('/update', protect, updateActivity); // Alias as requested
 router.get('/status', protect, getSessionStatus);
 router.get('/timer/status', protect, getSessionStatus); // Alias as requested
 router.post('/timer/update', protect, updateActivity); // Alias as requested
+
+// 📋 Meeting / Offline Activity Requests
+router.post('/offline-request', protect, submitOfflineRequest);
+router.get('/offline-requests', protect, getOfflineRequests);
+router.put('/offline-request/:id/status', protect, authorize('admin', 'hr', 'manager'), updateOfflineRequestStatus);
 
 // 📊 Analytics & History
 router.get('/my', protect, getMyTime);

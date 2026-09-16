@@ -299,6 +299,13 @@ const Screenshots = () => {
     });
 
     return [...data].sort((a, b) => {
+      const dateA = getLocalISODate(new Date(a.timestamp));
+      const dateB = getLocalISODate(new Date(b.timestamp));
+      if (dateA !== dateB) {
+        // Date groups: Always newest date first (16, 15, 14...)
+        return dateB.localeCompare(dateA);
+      }
+      // Within each date: earliest capture first when 'asc' (start of timer first, latest in end)
       const tA = new Date(a.timestamp).getTime();
       const tB = new Date(b.timestamp).getTime();
       return sortOrder === 'asc' ? tA - tB : tB - tA;
@@ -908,54 +915,62 @@ const Screenshots = () => {
                       return groups;
                     }, {})
                   ).sort(([, groupA], [, groupB]) => {
-                    const timeA = new Date(groupA[0]?.timestamp || 0).getTime();
-                    const timeB = new Date(groupB[0]?.timestamp || 0).getTime();
-                    return sortOrder === 'asc' ? timeA - timeB : timeB - timeA;
-                  }).map(([date, group]) => (
-                    <div key={date} className="space-y-4">
-                      {/* Date Header */}
-                      <div className="flex items-center gap-3">
-                        <h2 className="text-sm font-bold text-slate-800 dark:text-slate-200">{date}</h2>
-                        <div className="h-px flex-1 bg-slate-200 dark:bg-slate-800" />
-                        <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">{group.length} Captures</span>
-                      </div>
+                    const dateA = getLocalISODate(new Date(groupA[0]?.timestamp || 0));
+                    const dateB = getLocalISODate(new Date(groupB[0]?.timestamp || 0));
+                    // Always show newest dates first (16, 15, 14...)
+                    return dateB.localeCompare(dateA);
+                  }).map(([date, group]) => {
+                    const sortedGroup = [...group].sort((a, b) => {
+                      const tA = new Date(a.timestamp).getTime();
+                      const tB = new Date(b.timestamp).getTime();
+                      return sortOrder === 'asc' ? tA - tB : tB - tA;
+                    });
+                    return (
+                      <div key={date} className="space-y-4">
+                        {/* Date Header */}
+                        <div className="flex items-center gap-3">
+                          <h2 className="text-sm font-bold text-slate-800 dark:text-slate-200">{date}</h2>
+                          <div className="h-px flex-1 bg-slate-200 dark:bg-slate-800" />
+                          <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">{sortedGroup.length} Captures</span>
+                        </div>
 
-                      {/* Photo Cards Grid */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                        {group.map((s) => (
-                          <div 
-                            key={s._id} 
-                            className="bg-white dark:bg-[#111c18] border border-slate-200/80 dark:border-[#38352e] rounded-xl p-1.5 shadow-xs hover:shadow-md hover:border-[#00a76b]/50 transition-all flex flex-col gap-1.5 group cursor-pointer"
-                            onClick={() => openImageModal(s)}
-                          >
-                            {/* Image Container with Crisp Border Radius */}
-                            <div className="relative aspect-video rounded-lg bg-slate-950 overflow-hidden border border-slate-200/80 dark:border-slate-800/80">
-                              <img 
-                                src={getImageUrl(s.imageUrl)} 
-                                alt={`Capture ${s.employeeName}`} 
-                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
-                              />
-                              <div className="absolute inset-0 bg-slate-950/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                                <span className="bg-[#00a76b] text-white px-3 py-1.5 rounded-lg text-[11px] font-bold flex items-center gap-1.5 shadow-sm">
-                                  <Eye size={13} /> View Full
-                                </span>
+                        {/* Photo Cards Grid */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                          {sortedGroup.map((s) => (
+                            <div 
+                              key={s._id} 
+                              className="bg-white dark:bg-[#111c18] border border-slate-200/80 dark:border-[#38352e] rounded-xl p-1.5 shadow-xs hover:shadow-md hover:border-[#00a76b]/50 transition-all flex flex-col gap-1.5 group cursor-pointer"
+                              onClick={() => openImageModal(s)}
+                            >
+                              {/* Image Container with Crisp Border Radius */}
+                              <div className="relative aspect-video rounded-lg bg-slate-950 overflow-hidden border border-slate-200/80 dark:border-slate-800/80">
+                                <img 
+                                  src={getImageUrl(s.imageUrl)} 
+                                  alt={`Capture ${s.employeeName}`} 
+                                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
+                                />
+                                <div className="absolute inset-0 bg-slate-950/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                                  <span className="bg-[#00a76b] text-white px-3 py-1.5 rounded-lg text-[11px] font-bold flex items-center gap-1.5 shadow-sm">
+                                    <Eye size={13} /> View Full
+                                  </span>
+                                </div>
+                              </div>
+
+                              {/* Card Footer Details */}
+                              <div className="px-1 pb-0.5">
+                                <div className="flex items-center justify-between gap-2">
+                                  <p className="text-xs font-bold text-slate-900 dark:text-white truncate">{s.employeeName}</p>
+                                  <p className="text-[10.5px] font-medium text-slate-500 dark:text-slate-400 shrink-0">
+                                    {new Date(s.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                  </p>
+                                </div>
                               </div>
                             </div>
-
-                            {/* Card Footer Details */}
-                            <div className="px-1 pb-0.5">
-                              <div className="flex items-center justify-between gap-2">
-                                <p className="text-xs font-bold text-slate-900 dark:text-white truncate">{s.employeeName}</p>
-                                <p className="text-[10.5px] font-medium text-slate-500 dark:text-slate-400 shrink-0">
-                                  {new Date(s.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                </p>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               ) : (
                 /* List View Table */

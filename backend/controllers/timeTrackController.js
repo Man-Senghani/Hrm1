@@ -13,11 +13,14 @@
 
 const TimeTrack = require('../models/TimeTrack');
 const User = require('../models/User');
+const Employee = require('../models/Employee');
 const Attendance = require('../models/Attendance');
+const OfflineRequest = require('../models/OfflineRequest');
+const Notification = require('../models/Notification');
 const mongoose = require('mongoose');
 
 // ── CONFIG // Constants for Idle tracking (MUST MATCH DESKTOP APP & WEB APP)
-const IDLE_THRESHOLD_SECONDS = 60; // 1 minute (60 seconds)
+const IDLE_THRESHOLD_SECONDS = 600; // 10 minutes (600 seconds)
 
 // ── HELPERS ───────────────────────────────────────────────
 const getToday = () => {
@@ -932,6 +935,333 @@ exports.getDailySummaryLogs = async (req, res) => {
     res.json(summary);
   } catch (err) {
     res.status(500).json({ message: 'Failed to fetch summary logs', error: err.message });
+  }
+};
+
+// ============================================================
+// 📋 MEETING / OFFLINE ACTIVITY REQUESTS
+// ============================================================
+
+/**
+ * Submit a meeting / offline activity request.
+ * Strict Inactive Time Ceiling: Requested minutes cannot exceed the employee's recorded inactive time!
+ */
+exports.submitOfflineRequest = async (req, res) => {
+  try {
+    const { reason, durationMinutes, date } = req.body;
+
+    if (!reason || !reason.trim()) {
+      return res.status(400).json({ message: 'Reason for meeting / offline activity is required.' });
+    }
+
+    const minutesNum = parseInt(durationMinutes, 10);
+    if (isNaN(minutesNum) || minutesNum <= 0) {
+      return res.status(400).json({ message: 'Please provide a valid duration in minutes (greater than 0).' });
+    }
+
+    const targetDate = date || getToday();
+
+    // 🛡️ Resolve reporting manager and employee ID
+    let managerId = null;
+    let empId = req.user.employeeId || '';
+    const employeeDoc = await Employee.findOne({ userId: req.user.id });
+    if (employeeDoc) {
+      managerId = employeeDoc.reportingManager || employeeDoc.managerId || null;
+      if (!empId && employeeDoc.employeeId) empId = employeeDoc.employeeId;
+    }
+    if (!managerId) {
+      const userDoc = await User.findById(req.user.id);
+      if (userDoc?.reportingManager) managerId = userDoc.reportingManager;
+    }
+
+    // 🛡️ INACTIVE TIME CEILING VALIDATION:
+    // Check recorded inactive time for this employee on the target date
+    const timeTrack = await TimeTrack.findOne({ employeeId: req.user.id, date: targetDate });
+    let recordedInactiveSec = Math.floor(timeTrack?.idleTime || 0);
+
+    // If currently idle or paused, add the live ongoing idle duration
+    if (timeTrack && (timeTrack.status === 'idle' || timeTrack.status === 'paused') && timeTrack.idleStart) {
+      const ongoing = Math.floor((Date.now() - new Date(timeTrack.idleStart).getTime()) / 1000);
+      recordedInactiveSec += Math.max(0, ongoing);
+    }
+
+    const maxAllowedMinutes = Math.floor(recordedInactiveSec / 60);
+
+    if (maxAllowedMinutes <= 0) {
+      return res.status(400).json({
+        message: 'No recorded inactive time available to convert for this date. You can only request meeting time if inactive time was recorded.'
+      });
+    }
+
+    if (minutesNum > maxAllowedMinutes) {
+      return res.status(400).json({
+        message: `Requested duration (${minutesNum} mins) cannot exceed your recorded inactive time of ${maxAllowedMinutes} mins.`
+      });
+    }
+
+    const newRequest = await OfflineRequest.create({
+      employeeId: req.user.id,
+      employeeName: req.user.name || 'Employee',
+      employeeRole: req.user.role || 'employee',
+      empId: empId,
+      managerId: managerId,
+      date: targetDate,
+      reason: reason.trim(),
+      recordedInactiveMinutes: maxAllowedMinutes,
+      requestedDurationMinutes: minutesNum,
+      approvedDurationMinutes: 0,
+      status: 'pending'
+    });
+
+    // 🔔 Notify Manager and HR via Socket.io and Notification Model
+    const io = req.app.get('io');
+    const notifMessage = `${req.user.name || 'An employee'} submitted a meeting request for ${minutesNum} mins on ${targetDate}.`;
+
+    if (managerId) {
+      const mgrNotif = await Notification.create({
+        userId: managerId,
+        senderId: req.user.id,
+        senderName: req.user.name || 'Employee',
+        senderRole: req.user.role || 'employee',
+        message: notifMessage,
+        type: 'meeting_request'
+      });
+      if (io) {
+        io.to(`user_${String(managerId)}`).emit('new_notification', mgrNotif);
+      }
+    }
+
+    // Also notify HR and Admin
+    const hrUsers = await User.find({ role: { $in: ['hr', 'admin'] } }, '_id');
+    for (const hr of hrUsers) {
+      if (String(hr._id) !== String(managerId) && String(hr._id) !== String(req.user.id)) {
+        const hrNotif = await Notification.create({
+          userId: hr._id,
+          senderId: req.user.id,
+          senderName: req.user.name || 'Employee',
+          senderRole: req.user.role || 'employee',
+          message: notifMessage,
+          type: 'meeting_request'
+        });
+        if (io) {
+          io.to(`user_${String(hr._id)}`).emit('new_notification', hrNotif);
+        }
+      }
+    }
+
+    res.status(201).json({
+      message: 'Meeting / Offline request submitted successfully.',
+      request: newRequest
+    });
+  } catch (err) {
+    console.error('Error submitting offline request:', err);
+    res.status(500).json({ message: 'Failed to submit request', error: err.message });
+  }
+};
+
+/**
+ * Fetch meeting / offline activity requests with role scoping & filters.
+ */
+exports.getOfflineRequests = async (req, res) => {
+  try {
+    const { status, search, date, page = 1, limit = 10 } = req.query;
+    const userRole = (req.user.role || 'employee').toLowerCase();
+    const query = {};
+
+    // 🔒 Role Scoping
+    if (userRole === 'employee') {
+      query.employeeId = req.user.id;
+    } else if (userRole === 'manager') {
+      query.$or = [
+        { managerId: req.user.id },
+        { employeeId: req.user.id }
+      ];
+    }
+    // Admin & HR see all
+
+    // Status filter
+    if (status && status !== 'All' && status !== 'all') {
+      query.status = status.toLowerCase();
+    }
+
+    // Date filter (exact match or date range)
+    if (date) {
+      if (date.includes(':')) {
+        const [start, end] = date.split(':');
+        query.date = { $gte: start, $lte: end };
+      } else {
+        query.date = date;
+      }
+    }
+
+    // Search filter
+    if (search && search.trim()) {
+      const sRegex = new RegExp(search.trim(), 'i');
+      const searchMatch = {
+        $or: [
+          { employeeName: sRegex },
+          { empId: sRegex },
+          { reason: sRegex },
+          { employeeRole: sRegex }
+        ]
+      };
+      if (query.$or) {
+        query.$and = [{ $or: query.$or }, searchMatch];
+        delete query.$or;
+      } else {
+        Object.assign(query, searchMatch);
+      }
+    }
+
+    const pageNum = Math.max(1, parseInt(page, 10) || 1);
+    const limitNum = Math.max(1, parseInt(limit, 10) || 10);
+    const skip = (pageNum - 1) * limitNum;
+
+    const [requests, total] = await Promise.all([
+      OfflineRequest.find(query)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limitNum)
+        .lean(),
+      OfflineRequest.countDocuments(query)
+    ]);
+
+    res.json({
+      requests,
+      total,
+      page: pageNum,
+      totalPages: Math.ceil(total / limitNum) || 1
+    });
+  } catch (err) {
+    console.error('Error fetching offline requests:', err);
+    res.status(500).json({ message: 'Failed to fetch requests', error: err.message });
+  }
+};
+
+/**
+ * Approve or reject an offline request with editable final approved timer.
+ * Managers can approve their team members, HR & Admin can approve all.
+ */
+exports.updateOfflineRequestStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, finalMinutes, reviewRemarks } = req.body;
+    const userRole = (req.user.role || '').toLowerCase();
+
+    if (!['approved', 'rejected'].includes(status)) {
+      return res.status(400).json({ message: "Status must be either 'approved' or 'rejected'." });
+    }
+
+    const request = await OfflineRequest.findById(id);
+    if (!request) {
+      return res.status(404).json({ message: 'Offline request not found.' });
+    }
+
+    // 🔒 Authorization check for Managers
+    if (userRole === 'manager') {
+      const isManager = String(request.managerId) === String(req.user.id);
+      if (!isManager) {
+        return res.status(403).json({ message: 'You are only authorized to review requests from your direct reports.' });
+      }
+    }
+
+    if (status === 'approved') {
+      // 🛡️ Determine final approved duration
+      const approvedMins = parseInt(finalMinutes !== undefined ? finalMinutes : request.requestedDurationMinutes, 10);
+      if (isNaN(approvedMins) || approvedMins <= 0) {
+        return res.status(400).json({ message: 'Approved duration must be a positive number of minutes.' });
+      }
+
+      // 🛡️ Inactive Time Ceiling: Approved minutes cannot exceed recorded inactive time
+      if (approvedMins > request.recordedInactiveMinutes) {
+        return res.status(400).json({
+          message: `Approved time (${approvedMins} mins) cannot exceed the recorded inactive time (${request.recordedInactiveMinutes} mins).`
+        });
+      }
+
+      request.status = 'approved';
+      request.approvedDurationMinutes = approvedMins;
+      request.reviewedBy = req.user.id;
+      request.reviewerName = req.user.name || 'Manager';
+      request.reviewRemarks = (reviewRemarks || '').trim();
+      request.reviewedAt = new Date();
+      await request.save();
+
+      // 🎯 TRANSFER MATH: Deduct from Inactive Time and Add to Active Work Time in TimeTrack
+      const approvedSeconds = approvedMins * 60;
+      const timeTrack = await TimeTrack.findOne({ employeeId: request.employeeId, date: request.date });
+      if (timeTrack) {
+        const actualDeduct = Math.min(timeTrack.idleTime || 0, approvedSeconds);
+        timeTrack.idleTime = Math.max(0, (timeTrack.idleTime || 0) - actualDeduct);
+        timeTrack.activeTime = (timeTrack.activeTime || 0) + approvedSeconds;
+        await timeTrack.save();
+      }
+
+      // 🎯 UPDATE ATTENDANCE RECORD (reflects added active work hours)
+      const attendance = await Attendance.findOne({ user: request.employeeId, date: request.date });
+      if (attendance) {
+        const currentWork = parseFloat(attendance.workHours || attendance.totalHours) || 0;
+        const additionalHours = approvedMins / 60;
+        const updatedHours = (currentWork + additionalHours).toFixed(2);
+        attendance.workHours = updatedHours;
+        attendance.totalHours = updatedHours;
+        attendance.effectiveHours = updatedHours;
+        if (attendance.status === 'Absent' || attendance.status === 'absent') {
+          attendance.status = 'Present';
+        }
+        await attendance.save();
+      }
+
+      // 🔔 Real-time notification to employee
+      const io = req.app.get('io');
+      const empNotif = await Notification.create({
+        userId: request.employeeId,
+        senderId: req.user.id,
+        senderName: req.user.name || 'Manager',
+        senderRole: req.user.role || 'manager',
+        message: `Your meeting request for ${request.date} has been approved for ${approvedMins} mins.`,
+        type: 'meeting_request_approved'
+      });
+      if (io) {
+        io.to(`user_${String(request.employeeId)}`).emit('new_notification', empNotif);
+      }
+
+      return res.json({
+        message: `Meeting request approved for ${approvedMins} minutes.`,
+        request
+      });
+    }
+
+    if (status === 'rejected') {
+      request.status = 'rejected';
+      request.reviewedBy = req.user.id;
+      request.reviewerName = req.user.name || 'Manager';
+      request.reviewRemarks = (reviewRemarks || '').trim();
+      request.reviewedAt = new Date();
+      await request.save();
+
+      // 🔔 Real-time notification to employee
+      const io = req.app.get('io');
+      const empNotif = await Notification.create({
+        userId: request.employeeId,
+        senderId: req.user.id,
+        senderName: req.user.name || 'Manager',
+        senderRole: req.user.role || 'manager',
+        message: `Your meeting request for ${request.date} was rejected.${request.reviewRemarks ? ` Reason: ${request.reviewRemarks}` : ''}`,
+        type: 'meeting_request_rejected'
+      });
+      if (io) {
+        io.to(`user_${String(request.employeeId)}`).emit('new_notification', empNotif);
+      }
+
+      return res.json({
+        message: 'Meeting request rejected.',
+        request
+      });
+    }
+  } catch (err) {
+    console.error('Error updating offline request status:', err);
+    res.status(500).json({ message: 'Failed to update request status', error: err.message });
   }
 };
 

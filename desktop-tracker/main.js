@@ -199,7 +199,7 @@ app.on('open-url', (event, url) => {
 });
 
 // ── MUST match backend IDLE_THRESHOLD_SECONDS ─────────────
-const IDLE_THRESHOLD = 60; // 1 minute (60 seconds)
+const IDLE_THRESHOLD = 600; // 10 minutes (600 seconds)
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -297,8 +297,63 @@ if (!gotTheLock) {
       });
     }, 1000); // 🚀 1s interval matches real-time seconds
     // ============================================================
+    // ── Auto-Pause on OS Sleep, Lock, Shutdown ──
+    powerMonitor.on('suspend', async () => {
+      console.log('[POWER MONITOR] System entering sleep/suspend. Pausing tracking...');
+      await autoPauseTrackingOnExit();
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('deep-link-action', 'pause');
+      }
+    });
+
+    powerMonitor.on('shutdown', async () => {
+      console.log('[POWER MONITOR] System shutting down/restarting. Pausing tracking...');
+      await autoPauseTrackingOnExit();
+    });
+
+    powerMonitor.on('lock-screen', async () => {
+      console.log('[POWER MONITOR] System screen locked. Pausing tracking...');
+      await autoPauseTrackingOnExit();
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('deep-link-action', 'pause');
+      }
+    });
   });
 }
+
+// ── Auto-Pause Helper for Exits & Sleep ───────────────────
+async function autoPauseTrackingOnExit() {
+  try {
+    const token = store.get('authToken');
+    let serverHost = store.get('serverHost') || 'https://hrm1-1-zli1.onrender.com';
+    if (!token) return;
+    console.log('[AUTO PAUSE] Sending pause signal before exit/shutdown...');
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 2500);
+    await fetch(`${serverHost}/api/time/pause`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      signal: controller.signal
+    }).catch(() => {});
+    clearTimeout(timeoutId);
+    console.log('[AUTO PAUSE] Completed.');
+  } catch (err) {
+    console.error('[AUTO PAUSE ERROR]', err.message);
+  }
+}
+
+let isAppQuitting = false;
+app.on('before-quit', async (event) => {
+  if (!isAppQuitting) {
+    event.preventDefault();
+    isAppQuitting = true;
+    await autoPauseTrackingOnExit();
+    app.quit();
+  }
+});
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
@@ -321,7 +376,8 @@ ipcMain.handle('set-store-value', (event, key, value) => {
   store.set(key, value);
 });
 
-ipcMain.handle('close-app', () => {
+ipcMain.handle('close-app', async () => {
+  await autoPauseTrackingOnExit();
   app.quit();
 });
 

@@ -18,6 +18,7 @@ import ViewHolidaysDrawer from '../components/modals/ViewHolidaysDrawer';
 import CheckInButton from '../components/CheckInButton';
 import AttendanceSessionDetailModal from '@shared/components/AttendanceSessionDetailModal';
 import ExportFilterModal from '@shared/components/ExportFilterModal';
+import MeetingRequestsTable from '@shared/components/MeetingRequestsTable';
 
 // ─── LOCAL DATE HELPER ─────────────────────────
 export const getLocalYYYYMMDD = (d) => {
@@ -1045,6 +1046,13 @@ const Attendance = () => {
   const [statusFilter, setStatusFilter] = useState('All');
   const [dateFilter, setDateFilter] = useState(() => getLocalYYYYMMDD(new Date()));
   const [appViewMode, setAppViewMode] = useState('attendance'); // 'attendance' | 'timeTracker'
+  const [attendanceSubTab, setAttendanceSubTab] = useState(() => {
+    try {
+      const p = new URLSearchParams(window.location.search);
+      if (p.get('action') === 'new-offline-request' || p.get('tab') === 'meetingRequests') return 'meetingRequests';
+    } catch (_) {}
+    return 'history';
+  });
   const [viewMode, setViewMode] = useState('all'); // all | daily | weekly | monthly
   const [sortField, setSortField] = useState('date');
   const [sortDir, setSortDir] = useState('desc');
@@ -2883,8 +2891,35 @@ const Attendance = () => {
         </Card>
       )}
 
-      {/* ── ATTENDANCE HISTORY TABLE ── */}
-      <Card className="!p-4">
+      {/* ── ATTENDANCE SUB-TAB NAVIGATION ── */}
+      <div className="flex items-center gap-2 mb-3">
+        <button
+          onClick={() => setAttendanceSubTab('history')}
+          className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
+            attendanceSubTab === 'history'
+              ? 'bg-emerald-600 text-white shadow-sm'
+              : 'bg-white dark:bg-[#071e17] text-slate-600 dark:text-slate-300 border border-[#e2eae7] dark:border-[#133029] hover:bg-slate-50 dark:hover:bg-[#0d2a22]'
+          }`}
+        >
+          <Calendar size={14} />
+          <span>Attendance History</span>
+        </button>
+
+        <button
+          onClick={() => setAttendanceSubTab('meetingRequests')}
+          className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
+            attendanceSubTab === 'meetingRequests'
+              ? 'bg-emerald-600 text-white shadow-sm'
+              : 'bg-white dark:bg-[#071e17] text-slate-600 dark:text-slate-300 border border-[#e2eae7] dark:border-[#133029] hover:bg-slate-50 dark:hover:bg-[#0d2a22]'
+          }`}
+        >
+          <Timer size={14} />
+          <span>Meeting & Offline Requests</span>
+        </button>
+      </div>
+
+      {attendanceSubTab === 'history' ? (
+        <Card className="!p-4">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 mb-2.5">
           <h3 className="text-[14px] font-extrabold text-slate-900 dark:text-white tracking-tight shrink-0">
             Attendance History
@@ -3148,6 +3183,16 @@ const Attendance = () => {
           )}
         </div>
       </Card>
+      ) : (
+        <MeetingRequestsTable
+          userRole={userRole}
+          currentUserId={sessionStorage.getItem('userId')}
+          onStatusChanged={() => {
+            fetchLiveTimeStatus();
+            fetchRecords();
+          }}
+        />
+      )}
 
       {/* View Holidays Drawer */}
       <ViewHolidaysDrawer

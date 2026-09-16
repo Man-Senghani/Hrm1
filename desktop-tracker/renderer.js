@@ -137,11 +137,11 @@ if (window.electronAPI?.onSystemIdleStatus) {
   window.electronAPI.onSystemIdleStatus(({ idleSeconds, isIdle: systemIsIdle }) => {
     lastSystemIdleSeconds = idleSeconds;
 
-    // Case 1: Currently ACTIVE — check if user has gone idle (no activity for 60s)
+    // Case 1: Currently ACTIVE — check if user has gone idle (no activity for 10 minutes = 600s)
     if (status === 'ACTIVE' && isSessionRunning) {
-      if (systemIsIdle || idleSeconds >= 60) {
+      if (systemIsIdle || idleSeconds >= 600) {
         if (!idleNotificationSent) {
-          triggerIdle(60);
+          triggerIdle(600);
         }
       } else if (idleSeconds < 5) {
         idleNotificationSent = false;
@@ -350,7 +350,7 @@ async function sendHeartbeat() {
 }
 
 // ── Immediately fire idle signal to backend ───────────────
-async function triggerIdle(idleSeconds = 60) {
+async function triggerIdle(idleSeconds = 600) {
   if (!authToken || status !== 'ACTIVE') return;
 
   // 🚀 OPTIMISTIC UI: Instantly freeze active timer and lock into IDLE state
@@ -430,6 +430,7 @@ async function startSession() {
     startPolling();
     startHeartbeat();
     initScreenshotLoop(true);
+    takeScreenshot(true); // 📸 Capture immediately on start
   } catch (err) {
     console.error('[START ERROR]', err);
     alert('Connection error. Is the server running?');
@@ -451,6 +452,7 @@ async function pauseSession() {
       if (!err.message?.toLowerCase().includes('already')) alert(err.message || 'Unable to pause.');
     }
     stopScreenshotLoop();
+    takeScreenshot(true); // 📸 Capture immediately on pause
     await pollSessionStatus();
     await notifyDesktop('Session Paused', 'Your tracking session has been paused. Please resume when you are back.');
     startIdleReminderLoop();
@@ -499,6 +501,7 @@ async function resumeSession() {
     startPolling();
     startHeartbeat();
     initScreenshotLoop(true);
+    takeScreenshot(true); // 📸 Capture immediately on resume
     notifyDesktop('Session Resumed', 'Your tracking session is now active.').catch(() => {});
   } catch (err) {
     console.error('[RESUME ERROR]', err);
@@ -540,6 +543,7 @@ async function confirmStopSession() {
     stopScreenshotLoop();
     stopIdleReminderLoop();
     idleNotificationSent = false;
+    takeScreenshot(true); // 📸 Capture immediately on checkout
 
     // 🛡️ Lock into COMPLETED state immediately after checkout
     status = 'COMPLETED';
@@ -708,14 +712,21 @@ function stopIdleReminderLoop() {
 // ============================================================
 // 📸 SCREENSHOTS
 // ============================================================
-async function takeScreenshot() {
-  if (status !== 'ACTIVE' || !authToken) return;
+// 📸 SCREENSHOT ENGINE: 15-Min Random Window (4/hr) + Event Captures
+// ============================================================
+const FIFTEEN_MINUTES_MS = 15 * 60 * 1000;
+
+async function takeScreenshot(isEventTriggered = false) {
+  if (!authToken) return;
+  if (!isEventTriggered && (status !== 'ACTIVE' || !isSessionRunning)) return;
+
   try {
-    const dataUrl = await window.electronAPI.captureScreen();
+    const dataUrl = await window.electronAPI?.captureScreen();
     if (!dataUrl) return;
     const userRes = await fetch(`${BACKEND_HOST}/api/auth/me`, {
       headers: { Authorization: `Bearer ${authToken}` }
     });
+    if (!userRes.ok) return;
     const user = await userRes.json();
     await fetch(`${BACKEND_HOST}/api/screenshot/upload`, {
       method: 'POST',
@@ -725,26 +736,149 @@ async function takeScreenshot() {
       },
       body: JSON.stringify({
         screenshot: dataUrl,
-        userId: user.id || user._id
+        userId: user.id || user._id,
+        trigger: isEventTriggered ? 'event' : 'periodic_random'
       })
     });
-    await notifyDesktop('Screenshot Captured', 'A monitoring trace has been recorded.');
+    // 🔕 Screenshot notification popup is completely suppressed as requested
   } catch (err) {
     console.error('[SCREENSHOT ERROR]', err);
   } finally {
-    initScreenshotLoop();
+    if (!isEventTriggered && status === 'ACTIVE') {
+      scheduleNextRandomScreenshot();
+    }
   }
+}
+
+function scheduleNextRandomScreenshot() {
+  if (screenshotTimeout) clearTimeout(screenshotTimeout);
+  if (status !== 'ACTIVE' || !isSessionRunning) return;
+
+  // Pick a random minute between 1 min and 14 min in the 15-minute slot (4 per hour)
+  const randomMs = Math.floor(60000 + Math.random() * (FIFTEEN_MINUTES_MS - 120000));
+  console.log(`[SCREENSHOT ENGINE] Next random screenshot scheduled in ${(randomMs / 60000).toFixed(1)} mins`);
+  screenshotTimeout = setTimeout(() => {
+    takeScreenshot(false);
+  }, randomMs);
 }
 
 function initScreenshotLoop(isFirst = false) {
   if (screenshotTimeout) clearTimeout(screenshotTimeout);
   if (status !== 'ACTIVE') return;
-  const randomMs = isFirst ? 10000 : 60000; // First screenshot in 10s, then every 60s
-  screenshotTimeout = setTimeout(takeScreenshot, randomMs);
+  const randomMs = isFirst
+    ? Math.floor(60000 + Math.random() * 300000) // 1-5 mins on start
+    : Math.floor(60000 + Math.random() * (FIFTEEN_MINUTES_MS - 120000));
+  console.log(`[SCREENSHOT ENGINE] Loop started: next capture in ${(randomMs / 60000).toFixed(1)} mins`);
+  screenshotTimeout = setTimeout(() => {
+    takeScreenshot(false);
+  }, randomMs);
 }
 
 function stopScreenshotLoop() {
   if (screenshotTimeout) { clearTimeout(screenshotTimeout); screenshotTimeout = null; }
+}
+
+// ============================================================
+// 📋 MEETING / OFFLINE ACTIVITY REQUEST MODAL
+// ============================================================
+// ============================================================
+// 📋 MEETING / OFFLINE REQUEST — REDIRECT TO WEB RIGHT DRAWER
+// ============================================================
+function redirectToWebMeetingRequest() {
+  let role = 'employee';
+  try {
+    const roleEl = document.getElementById('display-role');
+    if (roleEl && roleEl.innerText) {
+      const r = roleEl.innerText.toLowerCase().trim();
+      if (['admin', 'hr', 'manager', 'employee'].includes(r)) role = r;
+    }
+  } catch (_) {}
+
+  const targetFrontend = (BACKEND_HOST && (BACKEND_HOST.includes('wljp') || BACKEND_HOST.includes('staging')))
+    ? 'https://hrm-staging.aupanishad.tech'
+    : (FRONTEND_HOST || PRODUCTION_FRONTEND_URL);
+
+  const requestUrl = `${targetFrontend}/${role}/attendance?action=new-offline-request`;
+  console.log('🔗 Redirecting to Web Attendance Request Drawer:', requestUrl);
+  if (window.electronAPI?.openExternal) {
+    window.electronAPI.openExternal(requestUrl);
+  } else {
+    window.open(requestUrl, '_blank');
+  }
+}
+
+async function submitMeetingRequest() {
+  const reasonInput = document.getElementById('request-reason-input');
+  const durationInput = document.getElementById('request-duration-input');
+  const errorBox = document.getElementById('request-error-msg');
+  const submitBtn = document.getElementById('submit-meeting-btn');
+
+  const reason = (reasonInput?.value || '').trim();
+  const duration = parseInt(durationInput?.value, 10);
+  const maxMinutes = Math.floor((inactiveSeconds || 0) / 60);
+
+  const showError = (msg) => {
+    if (errorBox) {
+      errorBox.innerText = msg;
+      errorBox.style.display = 'block';
+    } else {
+      alert(msg);
+    }
+  };
+
+  if (!reason) {
+    return showError('Please enter a reason for the meeting or offline activity.');
+  }
+
+  if (isNaN(duration) || duration <= 0) {
+    return showError('Please enter a valid time in minutes (minimum 1 min).');
+  }
+
+  // 🛡️ INACTIVE TIME CEILING VALIDATION
+  if (maxMinutes <= 0) {
+    return showError('You have 0 recorded inactive minutes to convert.');
+  }
+
+  if (duration > maxMinutes) {
+    return showError(`Requested duration (${duration} mins) cannot exceed your recorded inactive time (${maxMinutes} mins).`);
+  }
+
+  if (errorBox) errorBox.style.display = 'none';
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.innerText = 'SUBMITTING...';
+  }
+
+  try {
+    const res = await fetch(`${BACKEND_HOST}/api/time/offline-request`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authToken}`
+      },
+      body: JSON.stringify({
+        reason,
+        durationMinutes: duration
+      })
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      showError(data.message || 'Failed to submit meeting request.');
+      return;
+    }
+
+    hideMeetingRequestModal();
+    alert(`Meeting request submitted for ${duration} minutes. Your Manager/HR will review it.`);
+  } catch (err) {
+    console.error('[SUBMIT MEETING ERROR]', err);
+    showError('Network error. Failed to submit request.');
+  } finally {
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = '<span class="material-symbols-outlined" style="font-size: 16px;">send</span> SUBMIT';
+    }
+  }
 }
 
 // ============================================================
@@ -1116,12 +1250,5 @@ document.getElementById('update-close-btn')?.addEventListener('click', () => {
   }
 });
 
-// ── Dynamic Version Display ─────────────────────────────
-if (window.electronAPI?.getAppVersion) {
-  window.electronAPI.getAppVersion().then(v => {
-    const versionEl = document.getElementById('version-display');
-    if (versionEl && v) {
-      versionEl.innerText = `V${v} PRO`;
-    }
-  }).catch(() => {});
-}
+document.getElementById('meeting-request-btn')?.addEventListener('click', redirectToWebMeetingRequest);
+
