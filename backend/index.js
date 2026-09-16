@@ -318,7 +318,7 @@ const LOGIN_INDEX = path.join(LOGIN_DIST, 'index.html');
 
 if (fs.existsSync(LOGIN_INDEX)) {
   app.use(express.static(LOGIN_DIST, staticOptions));
-  app.get(['/', '/login', '/forgot-password', '/reset-password', '/reset-password/:token', '/reset-password/*'], (req, res) => {
+  app.get(['/', '/login', '/forgot-password', '/reset-password', '/reset-password/:token'], (req, res) => {
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.sendFile(LOGIN_INDEX);
   });
