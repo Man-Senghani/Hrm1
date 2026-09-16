@@ -29,6 +29,20 @@ const INITIAL_PROJECT_OPTIONS = [
 ];
 
 const STATUS_OPTIONS = ['Completed', 'In Progress', 'Pending', 'On Hold'];
+const PAGE_SIZE = 10;
+
+const getPageNumbers = (curr, total) => {
+  if (total <= 5) {
+    return Array.from({ length: total }, (_, i) => i + 1);
+  }
+  if (curr <= 3) {
+    return [1, 2, 3, 4, '...', total];
+  }
+  if (curr >= total - 2) {
+    return [1, '...', total - 3, total - 2, total - 1, total];
+  }
+  return [1, '...', curr - 1, curr, curr + 1, '...', total];
+};
 
 const getTodayStr = () => {
   const d = new Date();
@@ -383,7 +397,7 @@ const DailyReportHR = () => {
   const fetchDailyReports = useCallback(async () => {
     setLoading(true);
     try {
-      const params = { page, limit: 20 };
+      const params = { page, limit: PAGE_SIZE };
 
       if (search.trim()) params.search = search.trim();
       if (department !== 'all') params.department = department;
@@ -427,6 +441,11 @@ const DailyReportHR = () => {
       setLoading(false);
     }
   }, [search, department, project, status, employeeId, period, startDate, endDate, page]);
+
+  // Reset page to 1 when filters or search term change
+  useEffect(() => {
+    setPage(1);
+  }, [search, department, project, status, employeeId, period, startDate, endDate]);
 
   // Fetch My Personal Reports (when viewTab === 'my')
   const fetchMyReports = useCallback(async () => {
@@ -882,6 +901,18 @@ const DailyReportHR = () => {
     });
   }, [myReports, mySearch, myProjectFilter, myStatusFilter, myDateFilter]);
 
+  const [myPage, setMyPage] = useState(1);
+  const myTotalPages = Math.ceil(filteredMyReports.length / PAGE_SIZE) || 1;
+
+  useEffect(() => {
+    setMyPage(1);
+  }, [mySearch, myProjectFilter, myStatusFilter, myDateFilter]);
+
+  const paginatedMyReports = useMemo(() => {
+    const start = (myPage - 1) * PAGE_SIZE;
+    return filteredMyReports.slice(start, start + PAGE_SIZE);
+  }, [filteredMyReports, myPage]);
+
   // My Personal Reports Stats
   const myCompletedCount = filteredMyReports.filter(r => r.status === 'Completed').length;
   const myInProgressCount = filteredMyReports.filter(r => r.status === 'In Progress').length;
@@ -1070,7 +1101,7 @@ const DailyReportHR = () => {
             </div>
 
             {/* My Reports Table */}
-            <div className="daily-report-table-container overflow-x-auto">
+            <div id="myReportTableContainer" className="daily-report-table-container overflow-x-auto">
               {loadingMyReports ? (
                 <div className="py-12 text-center text-slate-400">
                   <RefreshCw className="animate-spin mx-auto mb-2 text-emerald-500" size={24} />
@@ -1101,7 +1132,7 @@ const DailyReportHR = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-[#1a2d29] text-xs font-medium text-slate-700 dark:text-slate-200">
-                    {filteredMyReports.map((rep) => {
+                    {paginatedMyReports.map((rep) => {
                       const entries = Array.isArray(rep.projectEntries) && rep.projectEntries.length > 0
                         ? rep.projectEntries
                         : [{
@@ -1305,6 +1336,69 @@ const DailyReportHR = () => {
                 </table>
               )}
             </div>
+
+            {myTotalPages > 1 && (
+              <div className="flex flex-col sm:flex-row justify-between items-center px-4 sm:px-6 py-4 mt-4 bg-white dark:bg-[#111c18] border-t border-slate-100 dark:border-[#1a2d29] rounded-b-2xl gap-4">
+                <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                  Showing {filteredMyReports.length === 0 ? 0 : (myPage - 1) * PAGE_SIZE + 1}–{Math.min(myPage * PAGE_SIZE, filteredMyReports.length)} of {filteredMyReports.length} reports
+                </span>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <button
+                    type="button"
+                    disabled={myPage <= 1}
+                    onClick={() => {
+                      setMyPage(p => Math.max(1, p - 1));
+                      const el = document.getElementById('myReportTableContainer');
+                      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }}
+                    className="px-3.5 py-1.5 rounded-xl border border-slate-200 dark:border-[#1a2d29] bg-white dark:bg-[#162722] text-xs font-bold text-slate-700 dark:text-slate-200 hover:border-[#00a76b] hover:text-[#00a76b] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-all shadow-2xs"
+                  >
+                    Prev
+                  </button>
+
+                  {getPageNumbers(myPage, myTotalPages).map((item, idx) => {
+                    if (item === '...') {
+                      return (
+                        <span key={`my-ellipsis-${idx}`} className="px-1.5 text-slate-400 font-bold text-xs">
+                          ...
+                        </span>
+                      );
+                    }
+                    return (
+                      <button
+                        key={item}
+                        type="button"
+                        onClick={() => {
+                          setMyPage(item);
+                          const el = document.getElementById('myReportTableContainer');
+                          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        }}
+                        className={`min-w-[32px] h-8 px-2 rounded-xl text-xs font-bold transition-all border ${
+                          myPage === item
+                            ? 'bg-[#00a76b] text-white border-[#00a76b] shadow-xs'
+                            : 'bg-white dark:bg-[#162722] text-slate-700 dark:text-slate-300 border-slate-200 dark:border-[#1a2d29] hover:border-[#00a76b] hover:text-[#00a76b] cursor-pointer'
+                        }`}
+                      >
+                        {item}
+                      </button>
+                    );
+                  })}
+
+                  <button
+                    type="button"
+                    disabled={myPage >= myTotalPages}
+                    onClick={() => {
+                      setMyPage(p => Math.min(myTotalPages, p + 1));
+                      const el = document.getElementById('myReportTableContainer');
+                      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }}
+                    className="px-3.5 py-1.5 rounded-xl border border-slate-200 dark:border-[#1a2d29] bg-white dark:bg-[#162722] text-xs font-bold text-slate-700 dark:text-slate-200 hover:border-[#00a76b] hover:text-[#00a76b] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-all shadow-2xs"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -1589,7 +1683,7 @@ const DailyReportHR = () => {
           )}
 
           {/* Higher Authority Reports Table */}
-          <div className="bg-white dark:bg-[#162722] border border-slate-200 dark:border-[#1a2d29] rounded-2xl p-4 sm:p-5 shadow-sm">
+          <div id="dailyReportTableContainer" className="bg-white dark:bg-[#162722] border border-slate-200 dark:border-[#1a2d29] rounded-2xl p-4 sm:p-5 shadow-sm">
             <div className="daily-report-table-container overflow-x-auto">
               {loading ? (
                 <div className="py-16 text-center text-slate-400">
@@ -1815,22 +1909,61 @@ const DailyReportHR = () => {
             </div>
 
             {totalPages > 1 && (
-              <div className="flex items-center justify-between pt-6 mt-4 border-t border-slate-100 dark:border-[#1a2d29]">
-                <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-                  Page {page} of {totalPages}
+              <div className="flex flex-col sm:flex-row justify-between items-center px-4 sm:px-6 py-4 mt-4 bg-white dark:bg-[#111c18] border-t border-slate-100 dark:border-[#1a2d29] rounded-b-2xl gap-4">
+                <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                  Showing {summary.totalReports === 0 ? 0 : (page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, summary.totalReports || (page * PAGE_SIZE))} of {summary.totalReports || reports.length} reports
                 </span>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5 flex-wrap">
                   <button
+                    type="button"
                     disabled={page <= 1}
-                    onClick={() => setPage(p => Math.max(1, p - 1))}
-                    className="px-3.5 py-1.5 rounded-xl border border-slate-200 dark:border-[#1a2d29] text-xs font-bold text-slate-700 dark:text-slate-200 hover:border-emerald-500 disabled:opacity-40 cursor-pointer"
+                    onClick={() => {
+                      setPage(p => Math.max(1, p - 1));
+                      const el = document.getElementById('dailyReportTableContainer');
+                      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }}
+                    className="px-3.5 py-1.5 rounded-xl border border-slate-200 dark:border-[#1a2d29] bg-white dark:bg-[#162722] text-xs font-bold text-slate-700 dark:text-slate-200 hover:border-[#00a76b] hover:text-[#00a76b] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-all shadow-2xs"
                   >
-                    Previous
+                    Prev
                   </button>
+
+                  {getPageNumbers(page, totalPages).map((item, idx) => {
+                    if (item === '...') {
+                      return (
+                        <span key={`team-ellipsis-${idx}`} className="px-1.5 text-slate-400 font-bold text-xs">
+                          ...
+                        </span>
+                      );
+                    }
+                    return (
+                      <button
+                        key={item}
+                        type="button"
+                        onClick={() => {
+                          setPage(item);
+                          const el = document.getElementById('dailyReportTableContainer');
+                          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        }}
+                        className={`min-w-[32px] h-8 px-2 rounded-xl text-xs font-bold transition-all border ${
+                          page === item
+                            ? 'bg-[#00a76b] text-white border-[#00a76b] shadow-xs'
+                            : 'bg-white dark:bg-[#162722] text-slate-700 dark:text-slate-300 border-slate-200 dark:border-[#1a2d29] hover:border-[#00a76b] hover:text-[#00a76b] cursor-pointer'
+                        }`}
+                      >
+                        {item}
+                      </button>
+                    );
+                  })}
+
                   <button
+                    type="button"
                     disabled={page >= totalPages}
-                    onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                    className="px-3.5 py-1.5 rounded-xl border border-slate-200 dark:border-[#1a2d29] text-xs font-bold text-slate-700 dark:text-slate-200 hover:border-emerald-500 disabled:opacity-40 cursor-pointer"
+                    onClick={() => {
+                      setPage(p => Math.min(totalPages, p + 1));
+                      const el = document.getElementById('dailyReportTableContainer');
+                      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }}
+                    className="px-3.5 py-1.5 rounded-xl border border-slate-200 dark:border-[#1a2d29] bg-white dark:bg-[#162722] text-xs font-bold text-slate-700 dark:text-slate-200 hover:border-[#00a76b] hover:text-[#00a76b] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-all shadow-2xs"
                   >
                     Next
                   </button>

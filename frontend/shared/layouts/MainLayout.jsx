@@ -137,52 +137,65 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
     navigate(targetPath, typeof options === 'object' && options !== null ? options : { state: options });
   };
 
-  // Helper to determine target navigation path based on notification type and message content
+  // Helper to determine target navigation path based on notification
   const getNotificationPath = (notif, targetRole) => {
     const currentRole = targetRole || activeRole || 'employee';
-    const type = (notif?.type || '').toLowerCase();
-    const text = (notif?.message || notif?.text || '').toLowerCase();
-
-    // 1. Leave requests / approvals / status
-    if (
-      type.includes('leave') ||
-      text.includes('leave') ||
-      text.includes('vacation') ||
-      text.includes('time off')
-    ) {
-      return `/${currentRole}/leave`;
-    }
-
-    // 2. Timer / attendance / tracking / check-in / check-out
-    if (
-      type.includes('attendance') ||
-      type.includes('timer') ||
-      text.includes('attendance') ||
-      text.includes('timer') ||
-      text.includes('time track') ||
-      text.includes('tracker') ||
-      text.includes('check-in') ||
-      text.includes('checked in') ||
-      text.includes('check in') ||
-      text.includes('check-out') ||
-      text.includes('checked out') ||
-      text.includes('check out') ||
-      text.includes('clock in') ||
-      text.includes('clock out') ||
-      text.includes('overtime') ||
-      text.includes('late mark') ||
-      text.includes('half day')
-    ) {
-      return `/${currentRole}/attendance`;
-    }
-
-    // 3. Tasks
-    if (type.includes('task') || text.includes('task') || text.includes('assigned to you')) {
-      return `/${currentRole}/tasks`;
-    }
-
-    // 4. Announcements and personal notifications -> notifications page
     return `/${currentRole}/notifications`;
+  };
+
+  // 🎨 Helper to determine notification color (from custom color or derived from type/urgency)
+  const getNotificationColor = (notif) => {
+    if (!notif) return '#00a76b';
+    if (notif.color && typeof notif.color === 'string' && notif.color.startsWith('#')) {
+      return notif.color;
+    }
+    const rawType = notif.type || '';
+    try {
+      const s = localStorage.getItem('type_colors_v1');
+      if (s) {
+        const savedColors = JSON.parse(s);
+        if (savedColors[rawType]) return savedColors[rawType];
+        const match = Object.keys(savedColors).find(k => k.toLowerCase() === rawType.toLowerCase());
+        if (match && savedColors[match]) return savedColors[match];
+      }
+    } catch {}
+
+    const type = rawType.toLowerCase();
+    const text = (notif.message || notif.text || '').toLowerCase();
+
+    if (type.includes('emergency') || text.includes('emergency') || type.includes('urgent') || text.includes('urgent') || type === 'rework') {
+      return '#ef4444'; // Red
+    }
+    if (type.includes('leave') || text.includes('leave') || type.includes('vacation')) {
+      return '#00a76b'; // Green
+    }
+    if (type.includes('task') || text.includes('task') || type.includes('project') || text.includes('project')) {
+      return '#3b82f6'; // Blue
+    }
+    if (type.includes('announcement') || text.includes('announcement') || type.includes('notice')) {
+      return '#f59e0b'; // Amber / Orange
+    }
+    if (type.includes('attendance') || text.includes('clock') || text.includes('attendance')) {
+      return '#10b981'; // Emerald
+    }
+    return '#3b82f6'; // Default Blue
+  };
+
+  // 🛡️ Helper to verify if target navigation route is accessible and present in user's active sidebar menu
+  const isPathInSidebar = (targetPath) => {
+    if (!targetPath) return false;
+    const cleanTarget = targetPath.toLowerCase().split('?')[0].split('#')[0];
+    const targetSegments = cleanTarget.split('/').filter(Boolean);
+    const coreTarget = '/' + targetSegments.filter(s => !['admin', 'hr', 'employee', 'manager'].includes(s)).join('/');
+
+    return menuItems.some(item => {
+      if (!item?.path) return false;
+      const cleanItem = item.path.toLowerCase().split('?')[0].split('#')[0];
+      const itemSegments = cleanItem.split('/').filter(Boolean);
+      const coreItem = '/' + itemSegments.filter(s => !['admin', 'hr', 'employee', 'manager'].includes(s)).join('/');
+
+      return cleanTarget === cleanItem || (coreTarget !== '/' && coreItem !== '/' && coreTarget === coreItem);
+    });
   };
 
   const [unreadChats, setUnreadChats] = useState([]);
@@ -206,8 +219,10 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
           .map(n => ({
             id: n._id,
             type: n.type || 'task',
+            title: n.title || '',
             text: n.message,
             message: n.message,
+            color: n.color || null,
             read: n.read || false,
             time: n.createdAt ? new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Recently',
             path: getNotificationPath(n, activeRole)
@@ -271,8 +286,10 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
       const formatted = {
         id: notif._id,
         type: notif.type || 'announcement',
+        title: notif.title || '',
         text: notif.message,
         message: notif.message,
+        color: notif.color || null,
         read: false,
         batchId: notif.batchId,
         time: new Date(notif.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
@@ -643,16 +660,24 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
       if (user) s.emit('join_notifications', { userId: user._id || user.id, role: user.role });
     });
 
-    s.on('notification', (data) => {
+    const handleIncomingNotif = (data) => {
       const newAlert = {
-        type: data.type || 'task',
+        id: data._id || Date.now(),
+        type: data.type || 'announcement',
+        title: data.title || '',
         text: data.message,
+        message: data.message,
+        color: data.color || null,
         time: 'Just Now',
-        path: data.type === 'task' ? `/${activeRole}/task-management` : `/${activeRole}/dashboard`
+        read: false,
+        path: data.type === 'task' ? `/${activeRole}/task-management` : (data.path || getNotificationPath(data, activeRole))
       };
-      setLiveNotifications(prev => [newAlert, ...prev].slice(0, 50));
+      setLiveNotifications(prev => [newAlert, ...prev.filter(x => x.id !== newAlert.id)].slice(0, 50));
       toast(data.message, { icon: '🔔', style: { borderRadius: '5px', background: '#201515', color: '#fff', fontWeight: 900, fontSize: '12px' } });
-    });
+    };
+
+    s.on('notification', handleIncomingNotif);
+    s.on('new_notification', handleIncomingNotif);
 
     s.on('timer_paused', () => {
       setIsTrackingActive(false);
@@ -888,19 +913,34 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
                   setIsNotificationsOpen(prev => !prev);
                 }}
                 className={`w-9 h-9 flex items-center justify-center rounded-full transition-all relative border-none cursor-pointer outline-none ${isNotificationsOpen ? 'bg-[#00a76b] text-white shadow-lg' : 'bg-transparent text-gray-500 hover:bg-gray-100 dark:hover:bg-slate-800 dark:text-slate-400 dark:hover:text-white'}`}
+                title="Notifications"
               >
                 <Bell size={18} />
-                {liveNotifications.filter(n => !n.read).length > 0 && (
-                  <span className="absolute -top-1 -right-1 min-w-[16px] h-[16px] px-1 bg-red-500 text-white text-[9px] font-bold flex items-center justify-center rounded-full shadow-sm border border-white dark:border-[#111c18]">
-                    {liveNotifications.filter(n => !n.read).length > 10 ? '10+' : liveNotifications.filter(n => !n.read).length}
-                  </span>
-                )}
+                {(() => {
+                  const unreadNotifs = liveNotifications.filter(n => !n.read);
+                  if (unreadNotifs.length === 0) return null;
+                  const latestUnread = unreadNotifs[0];
+                  const dotColor = getNotificationColor(latestUnread);
+
+                  return (
+                    <span className="absolute top-1.5 right-1.5 flex h-2.5 w-2.5 pointer-events-none">
+                      <span
+                        className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75"
+                        style={{ backgroundColor: dotColor }}
+                      />
+                      <span
+                        className="relative inline-flex rounded-full h-2.5 w-2.5 shadow-xs ring-2 ring-white dark:ring-[#111c18]"
+                        style={{ backgroundColor: dotColor }}
+                      />
+                    </span>
+                  );
+                })()}
               </button>
 
               {isNotificationsOpen && (
                 <div className="absolute top-[48px] right-0 w-80 bg-white dark:bg-[#111c18] border border-[#c5c0b1] dark:border-[#1a2d29] rounded-xl shadow-[0_20px_50px_rgba(0,0,0,0.1)] dark:shadow-[0_20px_50px_rgba(0,0,0,0.3)] overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200 z-[100]">
                   <div className="p-4 border-b border-[#eceae3] dark:border-[#1a2d29] bg-[#fffdf9] dark:bg-[#162722] flex justify-between items-center">
-                    <span className="text-[11px] font-black uppercase tracking-widest text-[#201515] dark:text-white">Announcement</span>
+                    <span className="text-[11px] font-black uppercase tracking-widest text-[#201515] dark:text-white">Notifications</span>
                     {liveNotifications.filter(n => !n.read).length > 0 && (
                       <span className="px-2 py-0.5 bg-[#00a76b]/10 text-[#00a76b] text-[8px] font-black rounded-full uppercase">
                         {liveNotifications.filter(n => !n.read).length} New
@@ -910,36 +950,75 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
                   <div className="max-h-[320px] overflow-y-auto">
                     {liveNotifications.length === 0 ? (
                       <div className="p-8 text-center opacity-40">
-                        <p className="text-[10px] font-black uppercase tracking-widest text-[#939084] dark:text-[#a3b3af]">No Active Announcements</p>
+                        <p className="text-[10px] font-black uppercase tracking-widest text-[#939084] dark:text-[#a3b3af]">No Active Notifications</p>
                       </div>
                     ) : (
-                      liveNotifications.map((n, i) => (
-                        <div
-                          key={i}
-                          onClick={async () => {
-                            if (!n.read) {
-                              try {
-                                await axios.put(`/api/notifications/${n.id}/read`, {}, { headers: { Authorization: `Bearer ${token}` } });
-                                setLiveNotifications(prev => prev.map(item => item.id === n.id ? { ...item, read: true } : item));
-                              } catch (err) {
-                                console.error('Failed to mark notification as read:', err);
+                      liveNotifications.map((n, i) => {
+                        const notifColor = getNotificationColor(n);
+                        return (
+                          <div
+                            key={n.id || i}
+                            onClick={async () => {
+                              if (!n.read && n.id) {
+                                try {
+                                  await axios.put(`/api/notifications/${n.id}/read`, {}, { headers: { Authorization: `Bearer ${token}` } });
+                                  setLiveNotifications(prev => prev.map(item => item.id === n.id ? { ...item, read: true } : item));
+                                } catch (err) {
+                                  console.error('Failed to mark notification as read:', err);
+                                }
                               }
-                            }
-                            const targetPath = n.path || getNotificationPath(n, activeRole);
-                            handleNav(targetPath, { state: { highlightedNotificationId: n.id, notification: n } });
-                            setIsNotificationsOpen(false);
-                          }}
-                          className="p-4 border-b border-[#eceae3] dark:border-[#1a2d29] hover:bg-[#fffdf9] dark:hover:bg-[#162722]/50 transition-all cursor-pointer group"
-                        >
-                          <div className="flex gap-3">
-                            {!n.read && <div className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${n.type === 'rework' ? 'bg-red-500' : 'bg-[#00a76b]'}`}></div>}
-                            <div className={n.read ? 'pl-4' : ''}>
-                              <p className={`text-[12px] font-bold text-[#201515] dark:text-[#e2e8f0] leading-tight group-hover:text-[#00a76b] transition-colors ${n.read ? 'opacity-50' : ''}`}>{n.text}</p>
-                              <p className="text-[9px] font-black text-[#939084] dark:text-[#a3b3af] uppercase tracking-widest mt-1">{n.time}</p>
+                              const targetPath = n.path || getNotificationPath(n, activeRole);
+                              // 🛡️ SMART NAVIGATION: Only navigate if page is visible in active sidebar menu!
+                              if (isPathInSidebar(targetPath)) {
+                                handleNav(targetPath, { state: { highlightedNotificationId: n.id, notification: n } });
+                              }
+                              setIsNotificationsOpen(false);
+                            }}
+                            className="p-3.5 border-b border-[#eceae3] dark:border-[#1a2d29] hover:bg-[#fffdf9] dark:hover:bg-[#162722]/50 transition-all cursor-pointer group flex items-start gap-3"
+                          >
+                            {/* Left-side Bell Icon with Matching Color */}
+                            <div
+                              className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 transition-transform group-hover:scale-105 mt-0.5"
+                              style={{
+                                backgroundColor: `${notifColor}18`,
+                                color: notifColor,
+                                border: `1px solid ${notifColor}35`
+                              }}
+                            >
+                              <Bell size={15} />
                             </div>
+
+                            <div className="flex-1 min-w-0">
+                              <p className={`text-[12px] font-bold text-[#201515] dark:text-[#e2e8f0] leading-snug group-hover:text-[#00a76b] transition-colors ${n.read ? 'opacity-60 font-semibold' : ''}`}>
+                                {n.text || n.message}
+                              </p>
+                              <div className="flex items-center gap-2 mt-1">
+                                <span className="text-[9px] font-black text-[#939084] dark:text-[#a3b3af] uppercase tracking-widest">
+                                  {n.time}
+                                </span>
+                                {n.type && (
+                                  <span
+                                    className="text-[9px] font-extrabold px-1.5 py-0.5 rounded capitalize"
+                                    style={{
+                                      backgroundColor: `${notifColor}15`,
+                                      color: notifColor
+                                    }}
+                                  >
+                                    {n.type}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            {!n.read && (
+                              <div
+                                className="w-2 h-2 rounded-full shrink-0 mt-1.5 animate-pulse"
+                                style={{ backgroundColor: notifColor }}
+                              />
+                            )}
                           </div>
-                        </div>
-                      ))
+                        );
+                      })
                     )}
                   </div>
                   <div className="flex divide-x divide-[#eceae3] dark:divide-[#1a2d29]">

@@ -184,7 +184,7 @@ const PendingApprovalQueue = ({ onAction, onCountsUpdate }) => {
   });
 
   return (
-    <div className="bg-white dark:bg-[#1e293b] rounded-2xl p-6 shadow-sm border border-gray-100 dark:border-gray-800 min-h-[620px] flex flex-col justify-between transition-colors duration-300 hover:!border-violet-500 dark:hover:!border-violet-400">
+    <div className="bg-white dark:bg-[#1e293b] rounded-2xl p-6 shadow-sm border border-gray-100 dark:border-gray-800 h-auto flex flex-col justify-between transition-colors duration-300 hover:!border-violet-500 dark:hover:!border-violet-400">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
         <div>
           <h2 className="text-lg font-bold text-gray-900 dark:text-white">Employee Leave Requests</h2>

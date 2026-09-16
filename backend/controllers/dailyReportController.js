@@ -455,7 +455,7 @@ const mergeGroupedReports = (reports) => {
 // @access  Private
 exports.getMyReports = async (req, res) => {
   try {
-    const { startDate, endDate, projectName, status, search, page = 1, limit = 20 } = req.query;
+    const { startDate, endDate, projectName, status, search, page = 1, limit = 10 } = req.query;
 
     const query = { user: req.user.id };
 
@@ -520,7 +520,7 @@ exports.getAllReports = async (req, res) => {
       endDate,
       search,
       page = 1,
-      limit = 20
+      limit = 10
     } = req.query;
 
     let baseQuery = {};

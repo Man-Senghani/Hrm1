@@ -350,7 +350,7 @@ const Leaves = () => {
           </div>
 
           {/* 3. Employee Leave Requests (Full Width 100% - Row 2) */}
-          <div ref={leaveRequestsRef} className="w-full bg-white dark:bg-[#1e293b] border border-gray-100 dark:border-gray-800 rounded-2xl shadow-sm p-6 flex flex-col justify-between mb-8 overflow-hidden transition-all duration-200 hover:border-emerald-500 h-[680px]">
+          <div ref={leaveRequestsRef} className="w-full bg-white dark:bg-[#1e293b] border border-gray-100 dark:border-gray-800 rounded-2xl shadow-sm p-6 flex flex-col justify-between mb-8 overflow-hidden transition-all duration-200 hover:border-emerald-500 h-auto">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
               <div>
                 <h3 className="text-lg font-bold text-gray-900 dark:text-white">Employee Leave Requests</h3>

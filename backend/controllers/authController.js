@@ -8,6 +8,14 @@ exports.login = async (req, res) => {
   try {
     const { email, password, role } = req.body;
 
+    if (!email || typeof email !== 'string') {
+      return res.status(400).json({ message: 'Please enter your email address.' });
+    }
+
+    if (/\s/.test(email)) {
+      return res.status(400).json({ message: 'Invalid email address. Spaces are not allowed.' });
+    }
+
     if (mongoose.connection.readyState !== 1) {
       return res.status(503).json({ message: 'Database connection is initializing. Please try again in a few seconds.' });
     }
@@ -346,8 +354,12 @@ const sendEmail = require('../utils/sendEmail');
 exports.forgotPassword = async (req, res) => {
   try {
     const { email } = req.body;
-    if (!email) {
+    if (!email || typeof email !== 'string') {
       return res.status(400).json({ message: 'Email address is required' });
+    }
+
+    if (/\s/.test(email)) {
+      return res.status(400).json({ message: 'Invalid email address. Spaces are not allowed.' });
     }
 
     const user = await User.findOne({ email });

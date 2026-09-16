@@ -2907,7 +2907,7 @@ const Attendance = () => {
         )}
 
         {/* Table */}
-        <div className="min-h-[405px] overflow-x-auto rounded-xl border border-[#e2eae7] dark:border-[#133029]">
+        <div className="h-auto overflow-x-auto rounded-xl border border-[#e2eae7] dark:border-[#133029]">
           <table className="w-full text-xs">
             <thead className="sticky top-0 z-10">
               <tr className="bg-slate-100 dark:bg-[#0d2a22] border-b border-[#e2eae7] dark:border-[#133029]">

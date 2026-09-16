@@ -28,7 +28,15 @@ const notificationSchema = new mongoose.Schema({
   },
   type: {
     type: String,
-    default: 'task'
+    default: 'announcement'
+  },
+  title: {
+    type: String,
+    default: ''
+  },
+  color: {
+    type: String,
+    default: null
   },
   read: {
     type: Boolean,

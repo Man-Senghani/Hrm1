@@ -171,7 +171,7 @@ exports.getTeamMembers = async (req, res) => {
 // @access Private/HR/Admin/Manager
 exports.createNotification = async (req, res) => {
   try {
-    const { message, type, targetRole, targetUserId, targetLabel } = req.body;
+    const { message, title, type, targetRole, targetUserId, targetLabel, color } = req.body;
     if (!message) return res.status(400).json({ message: 'Message is required' });
 
     const senderUser = await User.findById(req.user.id).select('name role');
@@ -229,8 +229,10 @@ exports.createNotification = async (req, res) => {
         senderName,
         senderRole,
         batchId,
+        title: title || '',
         message,
         type: type || 'announcement',
+        color: color || null,
         targetLabel: computedTargetLabel,
         read: false
       }))
@@ -242,8 +244,10 @@ exports.createNotification = async (req, res) => {
       notifications.forEach(n => {
         io.to(`user_${String(n.userId)}`).emit('new_notification', {
           _id: n._id,
+          title: n.title,
           message: n.message,
           type: n.type,
+          color: n.color,
           read: false,
           senderId: req.user.id,
           senderName,
@@ -264,15 +268,20 @@ exports.createNotification = async (req, res) => {
 // @desc   Update a notification (only creator can do this)
 exports.updateNotification = async (req, res) => {
   try {
-    const { message } = req.body;
+    const { message, title, type, color } = req.body;
     const notif = await Notification.findById(req.params.id);
     if (!notif) return res.status(404).json({ message: 'Not found' });
     if (notif.senderId?.toString() !== req.user.id) return res.status(403).json({ message: 'Not authorized' });
 
+    const updateFields = { message };
+    if (title !== undefined) updateFields.title = title;
+    if (type !== undefined) updateFields.type = type;
+    if (color !== undefined) updateFields.color = color;
+
     if (notif.batchId) {
-      await Notification.updateMany({ batchId: notif.batchId }, { message });
+      await Notification.updateMany({ batchId: notif.batchId }, updateFields);
     } else {
-      await Notification.findByIdAndUpdate(req.params.id, { message });
+      await Notification.findByIdAndUpdate(req.params.id, updateFields);
     }
 
     // 🔔 Emit real-time update socket
@@ -282,7 +291,10 @@ exports.updateNotification = async (req, res) => {
       affected.forEach(n => {
         io.to(`user_${String(n.userId)}`).emit('update_notification', {
           _id: n._id,
+          title: title || n.title,
           message: message,
+          type: type || n.type,
+          color: color !== undefined ? color : n.color,
           batchId: n.batchId
         });
       });

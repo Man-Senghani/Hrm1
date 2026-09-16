@@ -346,7 +346,7 @@ const AttendanceSessionDetailModal = ({ isOpen, onClose, record }) => {
     >
       {/* Modal Container with reduced crisp border radius (rounded-2xl) and fixed height */}
       <div
-        className="bg-white dark:bg-[#11241f] border border-slate-200 dark:border-[#1e3831] rounded-2xl w-full max-w-4xl shadow-2xl overflow-hidden flex flex-col min-h-[580px] max-h-[90vh] animate-scaleUp cursor-default"
+        className="bg-white dark:bg-[#11241f] border border-slate-200 dark:border-[#1e3831] rounded-2xl w-full max-w-4xl shadow-2xl overflow-hidden flex flex-col min-h-0 h-auto max-h-[90vh] animate-scaleUp cursor-default"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Top Header Row */}

@@ -17,12 +17,17 @@ const ForgotPassword = () => {
     setError('');
     setSuccess('');
 
-    if (!email.trim()) {
+    if (!email) {
       setError('Please enter your email address.');
       setLoading(false);
       return;
     }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+    if (/\s/.test(email)) {
+      setError('Email address cannot contain spaces.');
+      setLoading(false);
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       setError('Please enter a valid email address.');
       setLoading(false);
       return;
@@ -93,13 +98,24 @@ const ForgotPassword = () => {
               </div>
 
               <form onSubmit={handleSubmit} noValidate className="space-y-4">
-                 <EntryInput 
+                  <EntryInput 
                     label="Email"
                     type="email" 
                     value={email}
+                    onKeyDown={(e) => {
+                      if (e.key === ' ' || e.code === 'Space') {
+                        e.preventDefault();
+                        setError('Spaces are not allowed in email address.');
+                      }
+                    }}
                     onChange={(e) => {
-                      setEmail(e.target.value);
-                      if (error) setError('');
+                      const rawVal = e.target.value;
+                      if (rawVal.includes(' ')) {
+                        setError('Spaces are not allowed in email address.');
+                      } else if (error) {
+                        setError('');
+                      }
+                      setEmail(rawVal.replace(/\s/g, ''));
                     }}
                     placeholder="name@company.io"
                     icon={<Mail size={20} />}

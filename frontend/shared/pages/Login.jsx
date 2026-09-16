@@ -87,7 +87,7 @@ const Login = () => {
     if (storedAccountRaw) {
       try {
         const active = JSON.parse(storedAccountRaw);
-        if (active && active.email && active.email.toLowerCase() !== email.trim().toLowerCase()) {
+        if (active && active.email && active.email.toLowerCase() !== email.toLowerCase()) {
           setError(`Another account (${active.name || active.email}) is currently active in this browser. Only one account can be logged in per browser. Please log out from that account first.`);
           setExistingActiveAccount(active);
           return;
@@ -96,9 +96,11 @@ const Login = () => {
     }
 
     const newErrors = {};
-    if (!email.trim()) {
+    if (!email) {
       newErrors.email = 'Please enter your email address.';
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+    } else if (/\s/.test(email)) {
+      newErrors.email = 'Email address cannot contain spaces.';
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       newErrors.email = 'Please enter a valid email address.';
     }
 
@@ -117,7 +119,7 @@ const Login = () => {
 
     try {
       const response = await axios.post('/api/auth/login', {
-        email: email.trim(),
+        email,
         password
       });
 
@@ -366,9 +368,20 @@ const Login = () => {
                   label="Email"
                   type="email" 
                   value={email}
+                  onKeyDown={(e) => {
+                    if (e.key === ' ' || e.code === 'Space') {
+                      e.preventDefault();
+                      setFormErrors(prev => ({ ...prev, email: 'Spaces are not allowed in email address.' }));
+                    }
+                  }}
                   onChange={(e) => {
-                    setEmail(e.target.value);
-                    if (formErrors.email) setFormErrors(prev => ({ ...prev, email: '' }));
+                    const rawVal = e.target.value;
+                    if (rawVal.includes(' ')) {
+                      setFormErrors(prev => ({ ...prev, email: 'Spaces are not allowed in email address.' }));
+                    } else if (formErrors.email) {
+                      setFormErrors(prev => ({ ...prev, email: '' }));
+                    }
+                    setEmail(rawVal.replace(/\s/g, ''));
                     if (error) setError('');
                   }}
                   placeholder="name@company.io"
