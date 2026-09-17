@@ -577,15 +577,9 @@ const ExportFilterModal = ({
               <Download size={18} className="stroke-[2.2]" />
             </div>
             <div className="flex-1 min-w-0">
-              <h2 className="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-2 truncate">
-                <span className="truncate">{title}</span>
-                <span className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 shrink-0">
-                  {recordsToExport.length}
-                </span>
+              <h2 className="text-sm font-bold text-gray-900 dark:text-white truncate">
+                {title}
               </h2>
-              <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5 truncate">
-                {subtitle}
-              </p>
             </div>
           </div>
           <button 
@@ -783,19 +777,19 @@ const ExportFilterModal = ({
 
           {/* 3. Columns to Include */}
           <div>
-            <div className="flex items-center justify-between mb-2.5">
-              <label className="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 flex items-center gap-1.5">
+            <div className="flex items-center justify-between mb-2.5 gap-2 flex-nowrap">
+              <label className="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 flex items-center gap-1.5 shrink-0">
                 <SlidersHorizontal size={13} />
-                <span>Select Fields to Export</span>
-                <span className="text-[11px] font-normal normal-case text-gray-400">
-                  ({selectedColumnKeys.length} of {columns.length} selected)
+                <span>Fields</span>
+                <span className="text-[10.5px] font-medium normal-case text-gray-400 dark:text-gray-500">
+                  ({selectedColumnKeys.length}/{columns.length} selected)
                 </span>
               </label>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 shrink-0 text-[11px]">
                 <button
                   type="button"
                   onClick={selectAllColumns}
-                  className="text-[11px] font-bold text-[#00a76b] hover:underline cursor-pointer"
+                  className="font-bold text-[#00a76b] hover:underline cursor-pointer"
                 >
                   Select All
                 </button>
@@ -803,7 +797,7 @@ const ExportFilterModal = ({
                 <button
                   type="button"
                   onClick={deselectAllColumns}
-                  className="text-[11px] font-medium text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 cursor-pointer"
+                  className="font-medium text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 cursor-pointer"
                 >
                   Reset
                 </button>

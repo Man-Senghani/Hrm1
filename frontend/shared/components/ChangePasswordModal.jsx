@@ -127,7 +127,7 @@ const ChangePasswordModal = ({ isOpen, onClose }) => {
               <form onSubmit={handleUpdatePassword} className="flex flex-col gap-5">
                 {/* Field 1 */}
                 <div className="flex flex-col gap-2">
-                  <label className="text-[13px] font-bold text-slate-700 dark:text-slate-200">Current Password</label>
+                  <label className="text-[13px] font-bold text-slate-700 dark:text-slate-200">Current Password <span className="text-red-500">*</span></label>
                   <div className="relative">
                     <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400">
                       <Lock size={18} />
@@ -154,7 +154,7 @@ const ChangePasswordModal = ({ isOpen, onClose }) => {
 
                 {/* Field 2 */}
                 <div className="flex flex-col gap-2">
-                  <label className="text-[13px] font-bold text-slate-700 dark:text-slate-200">New Password</label>
+                  <label className="text-[13px] font-bold text-slate-700 dark:text-slate-200">New Password <span className="text-red-500">*</span></label>
                   <div className="relative">
                     <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400">
                       <Lock size={18} />
@@ -189,7 +189,7 @@ const ChangePasswordModal = ({ isOpen, onClose }) => {
 
                 {/* Field 3 */}
                 <div className="flex flex-col gap-2">
-                  <label className="text-[13px] font-bold text-slate-700 dark:text-slate-200">Confirm New Password</label>
+                  <label className="text-[13px] font-bold text-slate-700 dark:text-slate-200">Confirm New Password <span className="text-red-500">*</span></label>
                   <div className="relative">
                     <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400">
                       <Lock size={18} />

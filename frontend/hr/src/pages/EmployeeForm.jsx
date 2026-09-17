@@ -1,8 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import axios from 'axios';
 import { useNavigate, useParams } from 'react-router-dom';
-import CustomDatePicker from '../components/CustomDatePicker';
 import {
   User,
   Mail,
@@ -26,11 +25,84 @@ import {
   FileText,
   ArrowLeft,
   Save,
-  Download
+  Download,
+  Trash2
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
+import CustomDatePicker from '../components/CustomDatePicker';
 import { getImageUrl } from '@shared/services/api';
 import { compressImageAndConvertToBase64 } from '@shared/utils/imageCompressor';
+import EditableSelect from '@shared/components/EditableSelect';
+import { resolveRoleFromDesignation, getRoleAccessMetadata } from '@shared/utils/roleResolver';
+
+// ─── Premium Custom Dropdown ──────────────────────────────────────────────────
+const StyledSelect = ({ name, value, onChange, options, placeholder, required, error, disabled }) => {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  const selectedLabel = options.find(o => o.value === value)?.label || '';
+
+  useEffect(() => {
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    const keyHandler = (e) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', handler);
+    window.addEventListener('keydown', keyHandler);
+    return () => {
+      document.removeEventListener('mousedown', handler);
+      window.removeEventListener('keydown', keyHandler);
+    };
+  }, []);
+
+  const handleSelect = (val) => {
+    if (disabled) return;
+    onChange({ target: { name, value: val } });
+    setOpen(false);
+  };
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => !disabled && setOpen(p => !p)}
+        className={`w-full h-11 px-3.5 pr-9 flex items-center justify-between rounded-xl border text-xs font-semibold transition-all
+          bg-white dark:bg-[#1a1714]
+          ${open ? 'border-[#00a76b] ring-1 ring-[#00a76b]/30 shadow-[0_0_0_3px_rgba(0,167,107,0.08)]' : 'border-slate-200 dark:border-[#38352e] hover:border-[#00a76b]/50'}
+          ${value ? 'text-slate-900 dark:text-white' : 'text-slate-400 dark:text-slate-500'}
+          ${error ? 'border-red-400 ring-1 ring-red-300' : ''}
+          ${disabled ? 'opacity-50 cursor-not-allowed bg-slate-50 dark:bg-[#14120f]' : 'cursor-pointer'}`}
+      >
+        <span className="truncate">{selectedLabel || placeholder || 'Select…'}</span>
+        <ChevronDown
+          size={15}
+          className={`absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none transition-transform duration-200 ${open ? 'rotate-180 text-[#00a76b]' : ''}`}
+        />
+      </button>
+
+      {open && (
+        <div className="absolute z-[9999] left-0 right-0 mt-1.5 bg-white dark:bg-[#1e1b16] border border-slate-200 dark:border-[#38352e] rounded-xl shadow-xl overflow-hidden animate-in fade-in slide-in-from-top-1 duration-150">
+          <div className="max-h-52 overflow-y-auto py-1 scrollbar-thin scrollbar-thumb-slate-200 dark:scrollbar-thumb-[#38352e]">
+            {options.map((opt, idx) => (
+              <div
+                key={`${opt.value}-${idx}`}
+                onClick={() => handleSelect(opt.value)}
+                className={`px-3.5 py-2.5 flex items-center gap-2.5 text-xs font-semibold cursor-pointer transition-all
+                  ${value === opt.value
+                    ? 'bg-[#00a76b]/10 text-[#00a76b] dark:bg-[#00a76b]/15 font-bold'
+                    : 'text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-[#2a261f]'}`}
+              >
+                {value === opt.value && (
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#00a76b] flex-shrink-0" />
+                )}
+                {value !== opt.value && <span className="w-1.5 h-1.5 flex-shrink-0" />}
+                <span className="truncate">{opt.label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
 
 // Helper to format date strings as DD-MM-YYYY
 const formatDDMMYYYY = (dateStr) => {
@@ -105,6 +177,8 @@ const EmployeeForm = () => {
   const [panFile, setPanFile] = useState(null);
   const [previewDoc, setPreviewDoc] = useState(null);
   const [imgError, setImgError] = useState(false);
+  const [docToDelete, setDocToDelete] = useState(null);
+  const [isDeletingDoc, setIsDeletingDoc] = useState(false);
 
   const handlePreviewDoc = (title, localFile, serverPath) => {
     setImgError(false);
@@ -122,15 +196,53 @@ const EmployeeForm = () => {
 
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if (e.key === 'Escape' && previewDoc) {
-        setPreviewDoc(null);
+      if (e.key === 'Escape') {
+        if (previewDoc) setPreviewDoc(null);
+        if (docToDelete && !isDeletingDoc) setDocToDelete(null);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [previewDoc]);
+  }, [previewDoc, docToDelete, isDeletingDoc]);
+
+  const handleDeleteDoc = (type, title, field, endpoint) => {
+    if (isEdit && id && formData[field]) {
+      setDocToDelete({ type, title, field, endpoint });
+    } else {
+      if (type === 'adhar') setAdharFile(null);
+      if (type === 'bank') setBankFile(null);
+      if (type === 'pan') setPanFile(null);
+      toast.success(`${title} removed`);
+    }
+  };
+
+  const confirmDeleteDoc = async () => {
+    if (!docToDelete) return;
+    const { type, title, field, endpoint } = docToDelete;
+    setIsDeletingDoc(true);
+    try {
+      if (isEdit && id && formData[field]) {
+        await axios.delete(`/api/employees/${id}/${endpoint}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+      }
+      if (type === 'adhar') setAdharFile(null);
+      if (type === 'bank') setBankFile(null);
+      if (type === 'pan') setPanFile(null);
+      setFormData(prev => ({ ...prev, [field]: '' }));
+      toast.success(`${title} deleted successfully`);
+      window.dispatchEvent(new Event('profileUpdated'));
+    } catch (err) {
+      console.error('Delete doc error:', err);
+      toast.error(err.response?.data?.message || `Failed to delete ${title}`);
+    } finally {
+      setIsDeletingDoc(false);
+      setDocToDelete(null);
+    }
+  };
 
   const defaultDepartments = [
+    'Admin',
     'Engineering',
     'Sales',
     'Marketing',
@@ -143,6 +255,104 @@ const EmployeeForm = () => {
   const departmentList = departments.length > 0
     ? departments.map(d => typeof d === 'string' ? d : d.name).filter(Boolean)
     : defaultDepartments;
+
+  const defaultDesignations = [
+    'Admin',
+    'Software Engineer',
+    'Senior Software Engineer',
+    'Frontend Developer',
+    'Backend Developer',
+    'Full Stack Developer',
+    'UI/UX Designer',
+    'QA Tester',
+    'Product Manager',
+    'HR Executive',
+    'Support Staff',
+    'Operations Lead'
+  ];
+
+  const [designationList, setDesignationList] = useState(defaultDesignations);
+
+  const handleAddDepartment = async (name) => {
+    try {
+      const res = await axios.post('/api/departments', { name }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.data) {
+        setDepartments(prev => [...prev, res.data]);
+        toast.success(`Department "${name}" added`);
+      }
+    } catch {
+      setDepartments(prev => [...prev, { name }]);
+      toast.success(`Department "${name}" added`);
+    }
+  };
+
+  const handleEditDepartment = async (oldName, newName) => {
+    try {
+      const dept = departments.find(d => (typeof d === 'string' ? d : d.name) === oldName);
+      if (dept && dept._id) {
+        await axios.put(`/api/departments/${dept._id}`, { name: newName }, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+      }
+      setDepartments(prev => prev.map(d => {
+        if (typeof d === 'string') return d === oldName ? newName : d;
+        return d.name === oldName ? { ...d, name: newName } : d;
+      }));
+      toast.success(`Department updated to "${newName}"`);
+    } catch {
+      setDepartments(prev => prev.map(d => {
+        if (typeof d === 'string') return d === oldName ? newName : d;
+        return d.name === oldName ? { ...d, name: newName } : d;
+      }));
+    }
+  };
+
+  const handleDeleteDepartment = async (nameToDelete) => {
+    try {
+      const dept = departments.find(d => (typeof d === 'string' ? d : d.name) === nameToDelete);
+      if (dept && dept._id) {
+        await axios.delete(`/api/departments/${dept._id}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+      }
+      setDepartments(prev => prev.filter(d => (typeof d === 'string' ? d : d.name) !== nameToDelete));
+      toast.success(`Department "${nameToDelete}" deleted`);
+    } catch {
+      setDepartments(prev => prev.filter(d => (typeof d === 'string' ? d : d.name) !== nameToDelete));
+    }
+  };
+
+  const handleAddDesignation = async (name) => {
+    setDesignationList(prev => prev.includes(name) ? prev : [...prev, name]);
+    toast.success(`Designation "${name}" added`);
+  };
+
+  const handleEditDesignation = async (oldName, newName) => {
+    setDesignationList(prev => prev.map(d => d === oldName ? newName : d));
+    toast.success(`Designation updated to "${newName}"`);
+  };
+
+  const handleDeleteDesignation = async (nameToDelete) => {
+    setDesignationList(prev => prev.filter(d => d !== nameToDelete));
+    toast.success(`Designation "${nameToDelete}" deleted`);
+  };
+
+  const handleReorderDepartments = (newDeptNames) => {
+    setDepartments(prev => {
+      const existingMap = new Map();
+      prev.forEach(d => {
+        const name = typeof d === 'string' ? d : d.name;
+        existingMap.set(name, d);
+      });
+      return newDeptNames.map(name => existingMap.get(name) || { name });
+    });
+  };
+
+  const handleReorderDesignations = (newDesigNames) => {
+    setDesignationList(newDesigNames);
+  };
 
   const token = sessionStorage.getItem('token');
 
@@ -242,6 +452,8 @@ const EmployeeForm = () => {
 
     if (token) {
       fetchManagers();
+      fetchDepartments();
+      fetchSystemRoles();
       fetchEmployeeData();
     }
   }, [id, isEdit, token]);
@@ -284,13 +496,36 @@ const EmployeeForm = () => {
       }
     }
 
-    setErrors(newErrors);
-    if (name === 'role') {
+    if (name === 'department') {
+      const isDeptAdmin = value?.trim().toLowerCase() === 'admin';
+      const newDesignation = isDeptAdmin ? 'Admin' : formData.designation;
+      const autoRole = isDeptAdmin ? 'admin' : (newDesignation ? resolveRoleFromDesignation(newDesignation, formData.role) : formData.role);
+      if (isDeptAdmin && newErrors.designation) {
+        delete newErrors.designation;
+      }
+      setErrors(newErrors);
+      setFormData(prev => ({
+        ...prev,
+        department: value,
+        designation: newDesignation,
+        role: autoRole
+      }));
+    } else if (name === 'designation') {
+      const autoRole = resolveRoleFromDesignation(value, formData.role);
+      setErrors(newErrors);
+      setFormData(prev => ({
+        ...prev,
+        designation: value,
+        role: autoRole
+      }));
+    } else if (name === 'role') {
+      setErrors(newErrors);
       setFormData(prev => ({
         ...prev,
         role: value
       }));
     } else {
+      setErrors(newErrors);
       setFormData({ ...formData, [name]: value });
     }
   };
@@ -388,7 +623,7 @@ const EmployeeForm = () => {
       }
     }
 
-    if (!['hr', 'manager', 'admin'].includes(formData.role?.toLowerCase()) && !formData.managerId) {
+    if (formData.role?.toLowerCase() !== 'admin' && !formData.managerId) {
       newErrors.managerId = 'Reporting Manager is required.';
     }
     if (!formData.address) newErrors.address = 'Physical Address is required.';
@@ -416,7 +651,7 @@ const EmployeeForm = () => {
         dob: formData.dob,
         joinDate: formData.joinDate,
         employmentType: formData.employmentType || 'Full-time',
-        managerId: !['hr', 'manager', 'admin'].includes(formData.role?.toLowerCase()) ? formData.managerId : null
+        managerId: formData.role?.toLowerCase() !== 'admin' ? formData.managerId : null
       };
 
       if (formData.password) {
@@ -575,17 +810,24 @@ const EmployeeForm = () => {
             <h1 className="text-2xl sm:text-3xl font-semibold text-slate-900 dark:text-white tracking-tight">
               {isEdit ? 'UPDATE EMPLOYEE' : 'Create Employee'}
             </h1>
-            <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 font-medium mt-1">
-              {isEdit ? 'Update team member profile details, credentials, and verification documents.' : 'Add a new team member with profile details, credentials, and verification documents.'}
-            </p>
           </div>
-          <button
-            type="button"
-            onClick={() => navigate('/employees')}
-            className="px-4 py-2.5 bg-white dark:bg-[#181612] hover:bg-slate-50 dark:hover:bg-[#201d18] text-slate-700 dark:text-slate-300 font-bold text-xs rounded-xl border border-slate-200/80 dark:border-[#38352e] transition-all shadow-xs flex items-center gap-2 cursor-pointer shrink-0"
-          >
-            ← Back
-          </button>
+          <div className="flex items-center gap-3 shrink-0">
+            <button
+              type="button"
+              onClick={() => navigate('/employees')}
+              className="px-4 py-2.5 bg-white dark:bg-[#181612] hover:bg-slate-50 dark:hover:bg-[#201d18] text-slate-700 dark:text-slate-300 font-bold text-xs rounded-xl border border-slate-200/80 dark:border-[#38352e] transition-all shadow-xs flex items-center gap-2 cursor-pointer shrink-0"
+            >
+              ← Back
+            </button>
+            <button
+              type="submit"
+              disabled={loading}
+              className="px-5 py-2.5 bg-[#00a76b] hover:bg-[#00915c] text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer uppercase tracking-wider shrink-0"
+            >
+              {loading ? <RefreshCw className="animate-spin" size={15} /> : <Save size={15} />}
+              <span>{loading ? 'Saving...' : (isEdit ? 'SAVE EMPLOYEE' : 'Save Employee')}</span>
+            </button>
+          </div>
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           
@@ -596,7 +838,7 @@ const EmployeeForm = () => {
               {/* Profile Picture */}
               <div className="relative group mb-4">
                 <div className={`w-32 h-32 rounded-2xl bg-slate-100 dark:bg-[#221e19] flex items-center justify-center overflow-hidden transition-all ${
-                  previewUrl ? 'border border-slate-200 dark:border-[#38352e]' : 'border-2 border-dashed border-slate-200 dark:border-[#38352e] group-hover:border-[#00a76b]'
+                  previewUrl ? 'border-none' : 'border-2 border-dashed border-slate-200 dark:border-[#38352e] group-hover:border-[#00a76b]'
                 }`}>
                   {previewUrl ? (
                     <img src={previewUrl} alt="Preview" className="w-full h-full object-cover" />
@@ -637,13 +879,6 @@ const EmployeeForm = () => {
               {/* Real-Time Live Data Summary */}
               <div className="w-full mt-5 pt-5 border-t border-slate-100 dark:border-[#28241e] space-y-3 text-left">
                 <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 dark:text-slate-400 mb-2">Live Employee Card</p>
-
-                <div className="flex justify-between items-center text-xs">
-                  <span className="font-semibold text-slate-500 dark:text-slate-400">System Role</span>
-                  <span className="font-bold text-[#00a76b] uppercase bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-md text-[10px]">
-                    {formData.role || 'employee'}
-                  </span>
-                </div>
 
                 <div className="flex justify-between items-center text-xs">
                   <span className="font-semibold text-slate-500 dark:text-slate-400">Department</span>
@@ -854,7 +1089,7 @@ const EmployeeForm = () => {
                 {/* Password */}
                 <div className="space-y-1.5">
                   <label className="text-[11px] font-extrabold text-slate-600 dark:text-slate-300 uppercase tracking-wider">
-                    {isEdit ? 'Password (Leave blank to keep current)' : 'Password *'}
+                    {isEdit ? 'Password (Leave blank to keep current)' : <>Password <span className="text-red-500">*</span></>}
                   </label>
                   <div className="relative">
                     <Lock size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -883,77 +1118,82 @@ const EmployeeForm = () => {
                 <h3 className="text-base font-bold text-slate-900 dark:text-white tracking-tight">Role & Organization Setup</h3>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                {/* System Role */}
-                <div className="space-y-1.5">
-                  <label className="text-[11px] font-extrabold text-slate-600 dark:text-slate-300 uppercase tracking-wider">System Role <span className="text-red-500">*</span></label>
-                  <div className="relative">
-                    <select
-                      name="role" value={formData.role} onChange={handleChange}
-                      className="w-full h-11 px-3.5 bg-white dark:bg-[#1a1714] border border-slate-200 dark:border-[#38352e] rounded-xl text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-[#00a76b] focus:ring-1 focus:ring-[#00a76b] appearance-none cursor-pointer capitalize"
-                    >
-                      {systemRoles.length > 0 ? (
-                        systemRoles.map((r) => (
-                          <option key={r.roleKey || r._id} value={r.roleKey}>{r.label}</option>
-                        ))
-                      ) : (
-                        <>
-                          <option value="employee">Employee</option>
-                          <option value="hr">HR</option>
-                          <option value="manager">Manager</option>
-                          <option value="admin">Admin</option>
-                        </>
-                      )}
-                    </select>
-                    <ChevronDown size={16} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                  </div>
-                  {errors.role && <p className="text-red-500 text-[10px] font-semibold">{errors.role}</p>}
-                </div>
-
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {/* Department */}
                 <div className="space-y-1.5">
                   <label className="text-[11px] font-extrabold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Department <span className="text-red-500">*</span></label>
-                  <div className="relative">
-                    <select
-                      name="department"
-                      value={formData.department}
-                      onChange={handleChange}
-                      className="w-full h-11 px-3.5 bg-white dark:bg-[#1a1714] border border-slate-200 dark:border-[#38352e] rounded-xl text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-[#00a76b] focus:ring-1 focus:ring-[#00a76b] appearance-none cursor-pointer"
-                    >
-                      <option value="">Select Department</option>
-                      {departmentList.map(d => (
-                        <option key={d} value={d}>{d}</option>
-                      ))}
-                    </select>
-                    <ChevronDown size={16} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                  </div>
+                  <EditableSelect
+                    name="department"
+                    value={formData.department}
+                    onChange={handleChange}
+                    placeholder="Select or add Department"
+                    label="Department"
+                    error={errors.department}
+                    options={departmentList}
+                    onAddOption={handleAddDepartment}
+                    onEditOption={handleEditDepartment}
+                    onDeleteOption={handleDeleteDepartment}
+                    onReorder={handleReorderDepartments}
+                  />
                   {errors.department && <p className="text-red-500 text-[10px] font-semibold">{errors.department}</p>}
                 </div>
 
                 {/* Designation */}
                 <div className="space-y-1.5">
-                  <label className="text-[11px] font-extrabold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Designation</label>
-                  <input
-                    name="designation" value={formData.designation} onChange={handleChange}
-                    className="w-full h-11 px-3.5 bg-white dark:bg-[#1a1714] border border-slate-200 dark:border-[#38352e] rounded-xl text-xs font-semibold text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-[#00a76b] focus:ring-1 focus:ring-[#00a76b] transition-all"
-                    placeholder="e.g. Software Engineer"
+                  <label className="text-[11px] font-extrabold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Designation <span className="text-red-500">*</span></label>
+                  <EditableSelect
+                    name="designation"
+                    value={formData.designation}
+                    onChange={handleChange}
+                    placeholder="Select or add Designation"
+                    label="Designation"
+                    error={errors.designation}
+                    options={designationList}
+                    onAddOption={handleAddDesignation}
+                    onEditOption={handleEditDesignation}
+                    onDeleteOption={handleDeleteDesignation}
+                    onReorder={handleReorderDesignations}
                   />
+                  {errors.designation && <p className="text-red-500 text-[10px] font-semibold">{errors.designation}</p>}
                 </div>
+              </div>
 
+              {/* Portal Access Auto-Resolution Indicator */}
+              {formData.designation && (
+                (() => {
+                  const accessMeta = getRoleAccessMetadata(formData.role);
+                  return (
+                    <div className={`flex flex-wrap items-center justify-between gap-2 px-3.5 py-2.5 rounded-xl border text-xs font-semibold ${accessMeta.badgeBg} ${accessMeta.border}`}>
+                      <div className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-current shrink-0" />
+                        <span className={accessMeta.badgeText}>
+                          Assigned Portal Access: <strong className="uppercase font-bold tracking-wide">{accessMeta.label}</strong>
+                        </span>
+                      </div>
+                      <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+                        {accessMeta.subtext}
+                      </span>
+                    </div>
+                  );
+                })()
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 {/* Gender */}
                 <div className="space-y-1.5">
                   <label className="text-[11px] font-extrabold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Gender <span className="text-red-500">*</span></label>
-                  <div className="relative">
-                    <select
-                      name="gender" value={formData.gender} onChange={handleChange}
-                      className="w-full h-11 px-3.5 bg-white dark:bg-[#1a1714] border border-slate-200 dark:border-[#38352e] rounded-xl text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-[#00a76b] focus:ring-1 focus:ring-[#00a76b] appearance-none cursor-pointer"
-                    >
-                      <option value="Male">Male</option>
-                      <option value="Female">Female</option>
-                      <option value="Other">Other</option>
-                    </select>
-                    <ChevronDown size={16} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                  </div>
+                  <StyledSelect
+                    name="gender"
+                    value={formData.gender}
+                    onChange={handleChange}
+                    placeholder="Select Gender"
+                    error={errors.gender}
+                    options={[
+                      { value: 'Male', label: 'Male' },
+                      { value: 'Female', label: 'Female' },
+                      { value: 'Other', label: 'Other' },
+                    ]}
+                  />
                   {errors.gender && <p className="text-red-500 text-[10px] font-semibold">{errors.gender}</p>}
                 </div>
 
@@ -978,30 +1218,28 @@ const EmployeeForm = () => {
                   />
                   {errors.dob && <p className="text-red-500 text-[10px] font-semibold">{errors.dob}</p>}
                 </div>
+              </div>
 
-                {/* Reporting Manager */}
-                <div className="space-y-1.5">
+              {/* Reporting Manager */}
+              {formData.role?.toLowerCase() !== 'admin' && (
+                <div className="space-y-1.5 max-w-md">
                   <label className="text-[11px] font-extrabold text-slate-600 dark:text-slate-300 uppercase tracking-wider">
-                    Reporting Manager {!['hr', 'manager', 'admin'].includes(formData.role?.toLowerCase()) && <span className="text-red-500">*</span>}
+                    Reporting Manager <span className="text-red-500">*</span>
                   </label>
-                  <div className="relative">
-                    <select
-                      name="managerId" value={formData.managerId} onChange={handleChange}
-                      disabled={['hr', 'manager', 'admin'].includes(formData.role?.toLowerCase())}
-                      className="w-full h-11 px-3.5 bg-white dark:bg-[#1a1714] border border-slate-200 dark:border-[#38352e] rounded-xl text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-[#00a76b] focus:ring-1 focus:ring-[#00a76b] appearance-none cursor-pointer disabled:opacity-50"
-                    >
-                      <option value="">Select Manager</option>
-                      {managers.map(m => (
-                        <option key={m._id} value={m._id}>
-                          {m.name || m.fullName} ({m.employeeId || 'Manager'})
-                        </option>
-                      ))}
-                    </select>
-                    <ChevronDown size={16} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                  </div>
+                  <StyledSelect
+                    name="managerId"
+                    value={formData.managerId}
+                    onChange={handleChange}
+                    placeholder="Select Manager"
+                    error={errors.managerId}
+                    options={managers.map(m => ({
+                      value: m._id,
+                      label: `${m.name || m.fullName} (${m.employeeId || 'Manager'})`
+                    }))}
+                  />
                   {errors.managerId && <p className="text-red-500 text-[10px] font-semibold">{errors.managerId}</p>}
                 </div>
-              </div>
+              )}
 
               {/* Residential Addresses */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1047,7 +1285,7 @@ const EmployeeForm = () => {
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 {/* Adharcard */}
-                <div className={`p-4 rounded-xl border border-dashed transition-all flex flex-col justify-between ${hasAdhar ? 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-400' : 'bg-slate-50/50 dark:bg-[#1a1714] border-slate-200 dark:border-[#38352e]'}`}>
+                <div className={`p-3.5 sm:p-4 rounded-xl border border-dashed transition-all flex flex-col justify-between ${hasAdhar ? 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-400' : 'bg-slate-50/50 dark:bg-[#1a1714] border-slate-200 dark:border-[#38352e]'}`}>
                   <div 
                     onClick={() => hasAdhar && handlePreviewDoc('Adharcard', adharFile, formData.adharCard)}
                     className={`flex items-center gap-3 mb-3 ${hasAdhar ? 'cursor-pointer group' : ''}`}
@@ -1063,26 +1301,50 @@ const EmployeeForm = () => {
                       </p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    {hasAdhar && (
-                      <button
-                        type="button"
-                        onClick={() => handlePreviewDoc('Adharcard', adharFile, formData.adharCard)}
-                        className="h-9 px-3 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg transition-colors flex items-center justify-center gap-1 shrink-0 cursor-pointer shadow-xs"
-                        title="View Document"
-                      >
-                        <Eye size={14} /> View
-                      </button>
+                  <div className="w-full">
+                    {hasAdhar ? (
+                      <div className="grid grid-cols-3 gap-1.5 w-full">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handlePreviewDoc('Adharcard', adharFile, formData.adharCard);
+                          }}
+                          className="h-8 px-1 text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors flex items-center justify-center gap-1 cursor-pointer shadow-xs whitespace-nowrap"
+                          title="View Document"
+                        >
+                          <Eye size={12} className="shrink-0" />
+                          <span>View</span>
+                        </button>
+                        <label onClick={(e) => e.stopPropagation()} className="h-8 px-1 text-[11px] font-bold bg-slate-900 hover:bg-[#00a76b] dark:bg-[#25201b] dark:hover:bg-[#00a76b] text-white font-bold rounded-lg cursor-pointer flex items-center justify-center gap-1 transition-colors shadow-xs whitespace-nowrap" title="Change Document">
+                          <RefreshCw size={11} className="shrink-0" />
+                          <span>Change</span>
+                          <input type="file" className="hidden" accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf" onChange={(e) => handleDocumentChange(e, setAdharFile, 'Adharcard')} />
+                        </label>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteDoc('adhar', 'Adharcard', 'adharCard', 'adhar-card');
+                          }}
+                          className="h-8 px-1 text-[11px] font-bold bg-rose-600 hover:bg-rose-700 text-white rounded-lg transition-colors flex items-center justify-center gap-1 cursor-pointer shadow-xs whitespace-nowrap"
+                          title="Delete Document"
+                        >
+                          <Trash2 size={12} className="shrink-0" />
+                          <span>Delete</span>
+                        </button>
+                      </div>
+                    ) : (
+                      <label className="h-8 text-[11px] sm:text-xs bg-slate-900 hover:bg-[#00a76b] dark:bg-[#25201b] dark:hover:bg-[#00a76b] text-white font-bold rounded-lg cursor-pointer flex items-center justify-center gap-1.5 transition-colors w-full shadow-xs">
+                        <Plus size={13} /> Upload File
+                        <input type="file" className="hidden" accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf" onChange={(e) => handleDocumentChange(e, setAdharFile, 'Adharcard')} />
+                      </label>
                     )}
-                    <label className="h-9 text-xs bg-slate-900 hover:bg-[#00a76b] dark:bg-[#25201b] dark:hover:bg-[#00a76b] text-white font-bold rounded-lg cursor-pointer flex items-center justify-center transition-colors w-full">
-                      {hasAdhar ? 'Change File' : 'Upload File'}
-                      <input type="file" className="hidden" accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf" onChange={(e) => handleDocumentChange(e, setAdharFile, 'Adharcard')} />
-                    </label>
                   </div>
                 </div>
 
                 {/* Bank Details */}
-                <div className={`p-4 rounded-xl border border-dashed transition-all flex flex-col justify-between ${hasBank ? 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-400' : 'bg-slate-50/50 dark:bg-[#1a1714] border-slate-200 dark:border-[#38352e]'}`}>
+                <div className={`p-3.5 sm:p-4 rounded-xl border border-dashed transition-all flex flex-col justify-between ${hasBank ? 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-400' : 'bg-slate-50/50 dark:bg-[#1a1714] border-slate-200 dark:border-[#38352e]'}`}>
                   <div 
                     onClick={() => hasBank && handlePreviewDoc('Bank Details', bankFile, formData.bankDetails)}
                     className={`flex items-center gap-3 mb-3 ${hasBank ? 'cursor-pointer group' : ''}`}
@@ -1098,26 +1360,50 @@ const EmployeeForm = () => {
                       </p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    {hasBank && (
-                      <button
-                        type="button"
-                        onClick={() => handlePreviewDoc('Bank Details', bankFile, formData.bankDetails)}
-                        className="h-9 px-3 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg transition-colors flex items-center justify-center gap-1 shrink-0 cursor-pointer shadow-xs"
-                        title="View Document"
-                      >
-                        <Eye size={14} /> View
-                      </button>
+                  <div className="w-full">
+                    {hasBank ? (
+                      <div className="grid grid-cols-3 gap-1.5 w-full">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handlePreviewDoc('Bank Details', bankFile, formData.bankDetails);
+                          }}
+                          className="h-8 px-1 text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors flex items-center justify-center gap-1 cursor-pointer shadow-xs whitespace-nowrap"
+                          title="View Document"
+                        >
+                          <Eye size={12} className="shrink-0" />
+                          <span>View</span>
+                        </button>
+                        <label onClick={(e) => e.stopPropagation()} className="h-8 px-1 text-[11px] font-bold bg-slate-900 hover:bg-[#00a76b] dark:bg-[#25201b] dark:hover:bg-[#00a76b] text-white font-bold rounded-lg cursor-pointer flex items-center justify-center gap-1 transition-colors shadow-xs whitespace-nowrap" title="Change Document">
+                          <RefreshCw size={11} className="shrink-0" />
+                          <span>Change</span>
+                          <input type="file" className="hidden" accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf" onChange={(e) => handleDocumentChange(e, setBankFile, 'Bank Details')} />
+                        </label>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteDoc('bank', 'Bank Details', 'bankDetails', 'bank-details');
+                          }}
+                          className="h-8 px-1 text-[11px] font-bold bg-rose-600 hover:bg-rose-700 text-white rounded-lg transition-colors flex items-center justify-center gap-1 cursor-pointer shadow-xs whitespace-nowrap"
+                          title="Delete Document"
+                        >
+                          <Trash2 size={12} className="shrink-0" />
+                          <span>Delete</span>
+                        </button>
+                      </div>
+                    ) : (
+                      <label className="h-8 text-[11px] sm:text-xs bg-slate-900 hover:bg-[#00a76b] dark:bg-[#25201b] dark:hover:bg-[#00a76b] text-white font-bold rounded-lg cursor-pointer flex items-center justify-center gap-1.5 transition-colors w-full shadow-xs">
+                        <Plus size={13} /> Upload File
+                        <input type="file" className="hidden" accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf" onChange={(e) => handleDocumentChange(e, setBankFile, 'Bank Details')} />
+                      </label>
                     )}
-                    <label className="h-9 text-xs bg-slate-900 hover:bg-[#00a76b] dark:bg-[#25201b] dark:hover:bg-[#00a76b] text-white font-bold rounded-lg cursor-pointer flex items-center justify-center transition-colors w-full">
-                      {hasBank ? 'Change File' : 'Upload File'}
-                      <input type="file" className="hidden" accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf" onChange={(e) => handleDocumentChange(e, setBankFile, 'Bank Details')} />
-                    </label>
                   </div>
                 </div>
 
                 {/* PAN Card */}
-                <div className={`p-4 rounded-xl border border-dashed transition-all flex flex-col justify-between ${hasPan ? 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-400' : 'bg-slate-50/50 dark:bg-[#1a1714] border-slate-200 dark:border-[#38352e]'}`}>
+                <div className={`p-3.5 sm:p-4 rounded-xl border border-dashed transition-all flex flex-col justify-between ${hasPan ? 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-400' : 'bg-slate-50/50 dark:bg-[#1a1714] border-slate-200 dark:border-[#38352e]'}`}>
                   <div 
                     onClick={() => hasPan && handlePreviewDoc('PAN Card', panFile, formData.panCard)}
                     className={`flex items-center gap-3 mb-3 ${hasPan ? 'cursor-pointer group' : ''}`}
@@ -1133,21 +1419,45 @@ const EmployeeForm = () => {
                       </p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    {hasPan && (
-                      <button
-                        type="button"
-                        onClick={() => handlePreviewDoc('PAN Card', panFile, formData.panCard)}
-                        className="h-9 px-3 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg transition-colors flex items-center justify-center gap-1 shrink-0 cursor-pointer shadow-xs"
-                        title="View Document"
-                      >
-                        <Eye size={14} /> View
-                      </button>
+                  <div className="w-full">
+                    {hasPan ? (
+                      <div className="grid grid-cols-3 gap-1.5 w-full">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handlePreviewDoc('PAN Card', panFile, formData.panCard);
+                          }}
+                          className="h-8 px-1 text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors flex items-center justify-center gap-1 cursor-pointer shadow-xs whitespace-nowrap"
+                          title="View Document"
+                        >
+                          <Eye size={12} className="shrink-0" />
+                          <span>View</span>
+                        </button>
+                        <label onClick={(e) => e.stopPropagation()} className="h-8 px-1 text-[11px] font-bold bg-slate-900 hover:bg-[#00a76b] dark:bg-[#25201b] dark:hover:bg-[#00a76b] text-white font-bold rounded-lg cursor-pointer flex items-center justify-center gap-1 transition-colors shadow-xs whitespace-nowrap" title="Change Document">
+                          <RefreshCw size={11} className="shrink-0" />
+                          <span>Change</span>
+                          <input type="file" className="hidden" accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf" onChange={(e) => handleDocumentChange(e, setPanFile, 'PAN Card')} />
+                        </label>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteDoc('pan', 'PAN Card', 'panCard', 'pan-card');
+                          }}
+                          className="h-8 px-1 text-[11px] font-bold bg-rose-600 hover:bg-rose-700 text-white rounded-lg transition-colors flex items-center justify-center gap-1 cursor-pointer shadow-xs whitespace-nowrap"
+                          title="Delete Document"
+                        >
+                          <Trash2 size={12} className="shrink-0" />
+                          <span>Delete</span>
+                        </button>
+                      </div>
+                    ) : (
+                      <label className="h-8 text-[11px] sm:text-xs bg-slate-900 hover:bg-[#00a76b] dark:bg-[#25201b] dark:hover:bg-[#00a76b] text-white font-bold rounded-lg cursor-pointer flex items-center justify-center gap-1.5 transition-colors w-full shadow-xs">
+                        <Plus size={13} /> Upload File
+                        <input type="file" className="hidden" accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf" onChange={(e) => handleDocumentChange(e, setPanFile, 'PAN Card')} />
+                      </label>
                     )}
-                    <label className="h-9 text-xs bg-slate-900 hover:bg-[#00a76b] dark:bg-[#25201b] dark:hover:bg-[#00a76b] text-white font-bold rounded-lg cursor-pointer flex items-center justify-center transition-colors w-full">
-                      {hasPan ? 'Change File' : 'Upload File'}
-                      <input type="file" className="hidden" accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf" onChange={(e) => handleDocumentChange(e, setPanFile, 'PAN Card')} />
-                    </label>
                   </div>
                 </div>
               </div>
@@ -1263,6 +1573,61 @@ const EmployeeForm = () => {
                   </a>
                 </div>
               )}
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* DOCUMENT DELETE CONFIRMATION MODAL */}
+      {docToDelete && createPortal(
+        <div
+          className="fixed inset-0 w-screen h-screen z-[999999] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200 cursor-pointer"
+          onClick={() => !isDeletingDoc && setDocToDelete(null)}
+        >
+          <div
+            className="relative w-full max-w-md bg-white dark:bg-[#181612] border border-slate-200 dark:border-[#38352e] rounded-3xl p-6 sm:p-7 shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 cursor-default"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-4 mb-5">
+              <div className="w-12 h-12 rounded-2xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-500 shrink-0">
+                <Trash2 size={22} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h4 className="text-base font-bold text-slate-900 dark:text-white mb-1">
+                  Delete {docToDelete.title}?
+                </h4>
+                <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                  Are you sure you want to permanently delete this {docToDelete.title} document? This action cannot be undone.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-[#28241e]">
+              <button
+                type="button"
+                disabled={isDeletingDoc}
+                onClick={() => setDocToDelete(null)}
+                className="px-4 py-2.5 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[#25201b] rounded-xl transition-colors cursor-pointer disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isDeletingDoc}
+                onClick={confirmDeleteDoc}
+                className="px-5 py-2.5 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl transition-colors flex items-center gap-2 shadow-md cursor-pointer disabled:opacity-50"
+              >
+                {isDeletingDoc ? (
+                  <>
+                    <RefreshCw size={14} className="animate-spin" /> Deleting...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 size={14} /> Delete Document
+                  </>
+                )}
+              </button>
             </div>
           </div>
         </div>,

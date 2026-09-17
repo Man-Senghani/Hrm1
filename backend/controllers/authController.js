@@ -370,8 +370,26 @@ exports.forgotPassword = async (req, res) => {
     // Generate token
     const resetToken = user.createPasswordResetToken();
     await user.save({ validateBeforeSave: false });
-    // Create reset URL using CLIENT_URL environment variable if set, otherwise falling back to request protocol/host
-    const clientUrl = (process.env.CLIENT_URL || `${req.protocol}://${req.get('host').replace(/:\d+/, ':4000')}`).replace(/\/+$/, '');
+    // Create reset URL using request origin/referer, CLIENT_URL environment variable, or request host
+    let clientUrl = req.get('origin');
+    if (!clientUrl && req.get('referer')) {
+      try {
+        const parsed = new URL(req.get('referer'));
+        clientUrl = parsed.origin;
+      } catch (e) {
+        // ignore parsing error
+      }
+    }
+    if (!clientUrl) {
+      clientUrl = process.env.CLIENT_URL;
+    }
+    if (!clientUrl) {
+      const host = req.get('host') || 'localhost:3000';
+      const isLocal = host.includes('localhost') || host.includes('127.0.0.1');
+      const protocol = req.protocol || (isLocal ? 'http' : 'https');
+      clientUrl = `${protocol}://${isLocal ? host.replace(/:\d+/, ':4000') : host}`;
+    }
+    clientUrl = clientUrl.replace(/\/+$/, '');
     const resetUrl = `${clientUrl}/reset-password/${resetToken}`;
 
     const message = `You are receiving this email because you (or someone else) has requested the reset of a password. Please click on the link below to reset your password:\n\n${resetUrl}\n\nIf you did not request a password reset, please ignore this email.\nThis link will expire in 30 minutes.`;

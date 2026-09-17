@@ -109,6 +109,96 @@ const getAppBaseUrl = (req) => {
   return `http://localhost:${port}`;
 };
 
+const syncApprovedLeaveEffects = async (userId, startDate, endDate, leaveType, io) => {
+  try {
+    const formatLocalDate = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const todayStr = formatLocalDate(new Date());
+
+    const todayStart = new Date(`${todayStr}T00:00:00.000Z`);
+    const todayEnd = new Date(`${todayStr}T23:59:59.999Z`);
+    const istStart = new Date(`${todayStr}T00:00:00.000+05:30`);
+    const istEnd = new Date(`${todayStr}T23:59:59.999+05:30`);
+    const minStart = new Date(Math.min(todayStart.getTime(), istStart.getTime()));
+    const maxEnd = new Date(Math.max(todayEnd.getTime(), istEnd.getTime()));
+
+    const leaveStart = new Date(startDate);
+    const leaveEnd = new Date(endDate);
+
+    const coversToday = leaveStart <= maxEnd && leaveEnd >= minStart;
+    if (!coversToday) return;
+
+    // 1. If today has an active/running TimeTrack session, stop/complete it immediately
+    const TimeTrack = require('../models/TimeTrack');
+    const now = new Date();
+    const session = await TimeTrack.findOne({
+      employeeId: userId,
+      date: todayStr,
+      status: { $in: ['active', 'paused', 'idle'] }
+    });
+
+    if (session) {
+      if (session.status === 'active' && session.segmentStart) {
+        const elapsed = Math.floor((now - new Date(session.segmentStart)) / 1000);
+        session.activeTime += Math.max(0, elapsed);
+        session.segmentStart = null;
+      }
+      session.status = 'completed';
+      session.isRunning = false;
+      session.completedAt = now;
+      await session.save();
+    }
+
+    // 2. Mark or create today's attendance record with status 'Leave'
+    const Attendance = require('../models/Attendance');
+    let att = await Attendance.findOne({ user: userId, date: todayStr });
+    if (att) {
+      att.status = 'Leave';
+      if (!att.checkOutTime) {
+        att.checkOutTime = now;
+        const hours = now.getHours();
+        const minutes = now.getMinutes();
+        att.clockOut = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+      }
+      await att.save();
+    } else {
+      await Attendance.create({
+        user: userId,
+        date: todayStr,
+        status: 'Leave',
+        checkInTime: now,
+        checkOutTime: now,
+        clockIn: '--',
+        clockOut: '--',
+        totalHours: 0
+      });
+    }
+
+    // 3. Emit real-time socket events so desktop tracker and web app immediately react
+    if (io) {
+      const leaveTypeName = leaveType ? (leaveType.charAt(0).toUpperCase() + leaveType.slice(1)) : 'Approved';
+      io.to(`user_${userId.toString()}`).emit('timer_stopped', {
+        reason: 'leave_approved',
+        isOnLeave: true,
+        status: 'ON_LEAVE',
+        leaveType,
+        leaveTypeName,
+        message: `You are on approved ${leaveTypeName} Leave today.`
+      });
+      io.to(`user_${userId.toString()}`).emit('timer_status', {
+        hasActiveSession: false,
+        status: 'ON_LEAVE',
+        isRunning: false,
+        isOnLeave: true,
+        leaveType,
+        leaveTypeName,
+        message: `You are on approved ${leaveTypeName} Leave today.`
+      });
+    }
+  } catch (err) {
+    console.error('Error in syncApprovedLeaveEffects:', err);
+  }
+};
+
 const wrapEmailInTemplate = (contentHtml, titleText, targetUrl) => {
   const ctaUrl = targetUrl || getAppBaseUrl();
   return `
@@ -629,6 +719,10 @@ exports.managerApprove = async (req, res) => {
     const leave = await Leave.findById(req.params.id);
     if (!leave) return res.status(404).json({ message: 'Leave request not found' });
 
+    if (leave.user && leave.user.toString() === req.user.id.toString()) {
+      return res.status(403).json({ message: 'You cannot approve your own leave request. An HR or Admin must approve it.' });
+    }
+
     if (leave.managerId && leave.managerId.toString() !== req.user.id) {
       return res.status(403).json({ message: 'Not authorized to approve this leave' });
     }
@@ -660,6 +754,7 @@ exports.managerApprove = async (req, res) => {
     });
 
     await updateLeaveBalanceForUser(leave.user, new Date(leave.startDate));
+    await syncApprovedLeaveEffects(leave.user, leave.startDate, leave.endDate, leave.leaveType, req.app?.get ? req.app.get('io') : null);
 
     const approvingUser = await User.findById(req.user.id);
     const leaveUser = await User.findById(leave.user);
@@ -760,6 +855,9 @@ exports.hrApprove = async (req, res) => {
     });
 
     await updateLeaveBalanceForUser(leave.user, new Date(leave.startDate));
+    if (leave.status === 'approved') {
+      await syncApprovedLeaveEffects(leave.user, leave.startDate, leave.endDate, leave.leaveType, req.app?.get ? req.app.get('io') : null);
+    }
 
     const approvingUser = await User.findById(req.user.id);
     const leaveUser = await User.findById(leave.user);
@@ -816,6 +914,11 @@ exports.rejectLeave = async (req, res) => {
   try {
     const leave = await Leave.findById(req.params.id);
     if (!leave) return res.status(404).json({ message: 'Leave request not found' });
+
+    const isHrOrAdmin = ['admin', 'hr'].includes((req.user.role || '').toLowerCase());
+    if (leave.user && leave.user.toString() === req.user.id.toString() && !isHrOrAdmin) {
+      return res.status(403).json({ message: 'You cannot reject your own leave request. You can cancel it from My Leaves.' });
+    }
 
     if (leave.status === 'rejected' && leave.status !== 'cancellation_pending') {
       return res.status(400).json({ message: 'Leave request is already rejected' });
@@ -1627,11 +1730,15 @@ exports.bulkApproveLeaves = async (req, res) => {
     const leaves = await Leave.find({ _id: { $in: ids } });
 
     for (const leave of leaves) {
+      if (leave.user && leave.user.toString() === req.user.id.toString()) {
+        continue; // skip self
+      }
       if (leave.managerId && leave.managerId.toString() !== req.user.id) {
         continue; // skip if not authorized
       }
       leave.status = 'approved';
       await leave.save();
+      await syncApprovedLeaveEffects(leave.user, leave.startDate, leave.endDate, leave.leaveType, req.app?.get ? req.app.get('io') : null);
     }
 
     res.json({ success: true, message: `${leaves.length} leaves approved` });
@@ -1869,6 +1976,9 @@ exports.hrOverride = async (req, res) => {
     });
 
     await updateLeaveBalanceForUser(leave.user, new Date(leave.startDate));
+    if (targetStatus === 'approved') {
+      await syncApprovedLeaveEffects(leave.user, leave.startDate, leave.endDate, leave.leaveType, req.app?.get ? req.app.get('io') : null);
+    }
 
     const actorUser = await User.findById(req.user.id);
     const leaveUser = await User.findById(leave.user);
@@ -2268,15 +2378,29 @@ exports.getDepartmentAnalytics = async (req, res) => {
 // @access  Private/Manager/HR/Admin
 exports.bulkApproveLeaves = async (req, res) => {
   try {
-    const { leaveIds } = req.body;
-    if (!Array.isArray(leaveIds) || leaveIds.length === 0) {
+    const targetIds = leaveIds || req.body.ids;
+    if (!Array.isArray(targetIds) || targetIds.length === 0) {
       return res.status(400).json({ message: 'No leave IDs provided.' });
     }
 
+    const isHrOrAdmin = ['admin', 'hr'].includes((req.user.role || '').toLowerCase());
+    const filterQuery = {
+      _id: { $in: targetIds },
+      status: { $in: ['pending', 'cancellation_pending'] }
+    };
+    if (!isHrOrAdmin) {
+      filterQuery.user = { $ne: req.user.id };
+    }
+
+    const leavesToApprove = await Leave.find(filterQuery);
     const updated = await Leave.updateMany(
-      { _id: { $in: leaveIds }, status: { $in: ['pending', 'cancellation_pending'] } },
+      filterQuery,
       { $set: { status: 'approved' } }
     );
+
+    for (const l of leavesToApprove) {
+      await syncApprovedLeaveEffects(l.user, l.startDate, l.endDate, l.leaveType, req.app?.get ? req.app.get('io') : null);
+    }
 
     res.json({ success: true, message: `${updated.modifiedCount} leave(s) approved successfully.` });
   } catch (error) {

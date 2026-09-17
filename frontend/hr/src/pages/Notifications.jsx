@@ -246,6 +246,18 @@ const Notifications = () => {
     return () => document.removeEventListener('mousedown', h);
   }, []);
 
+  /* ── DISMISS COLOR PICKER WHEN CLICKING OUTSIDE IT ── */
+  useEffect(() => {
+    if (activeColorPickerIdx === null) return;
+    const handlePickerDismiss = (e) => {
+      if (!e.target.closest('[data-color-picker]') && !e.target.closest('[data-color-dot]')) {
+        setActiveColorPickerIdx(null);
+      }
+    };
+    document.addEventListener('mousedown', handlePickerDismiss);
+    return () => document.removeEventListener('mousedown', handlePickerDismiss);
+  }, [activeColorPickerIdx]);
+
   /* ── ENTER EDIT MODE ── */
   const enterEditMode = (e) => {
     e.stopPropagation();
@@ -599,7 +611,10 @@ const Notifications = () => {
                                 onDrop={e => handleDrop(e, idx)}
                                 onDragEnd={handleDragEnd}
                                 onClick={() => {
-                                  if (isTypeEditMode) return;
+                                  if (isTypeEditMode) {
+                                    if (activeColorPickerIdx !== null) setActiveColorPickerIdx(null);
+                                    return;
+                                  }
                                   setForm(f => ({...f, type:t, color:getTypeColor(t), _typeOpen:false}));
                                 }}
                                 className={`flex items-center gap-2 px-3 py-2.5 transition-colors border-b border-[#eceae3]/60 dark:border-[#1a2d29]/60 last:border-b-0 ${
@@ -610,7 +625,7 @@ const Notifications = () => {
                               >
                                 {/* 1: Drag handle */}
                                 <span className={`shrink-0 ${isTypeEditMode?'text-slate-300 dark:text-slate-600':'text-slate-300 dark:text-slate-600 cursor-grab active:cursor-grabbing hover:text-slate-500'}`}
-                                  onMouseDown={e => e.stopPropagation()} title="Drag to reorder">
+                                  onMouseDown={e => { e.stopPropagation(); if (activeColorPickerIdx !== null) setActiveColorPickerIdx(null); }} title="Drag to reorder">
                                   <GripVertical size={14} />
                                 </span>
 
@@ -618,6 +633,7 @@ const Notifications = () => {
                                 {isTypeEditMode ? (
                                   <button
                                     type="button"
+                                    data-color-dot="true"
                                     title="Click to change color"
                                     onClick={e => {
                                       e.stopPropagation();
@@ -638,7 +654,12 @@ const Notifications = () => {
                                     type="text"
                                     value={editTypeNames[idx] ?? t}
                                     onChange={e => setEditTypeNames(prev => ({...prev, [idx]: e.target.value}))}
-                                    onClick={e => e.stopPropagation()}
+                                    onClick={e => {
+                                      e.stopPropagation();
+                                      if (activeColorPickerIdx !== null && activeColorPickerIdx !== idx) {
+                                        setActiveColorPickerIdx(null);
+                                      }
+                                    }}
                                     onKeyDown={e => { e.stopPropagation(); if(e.key==='Enter') e.target.blur(); }}
                                     className="flex-1 bg-white dark:bg-[#162722] border border-[#eceae3] dark:border-[#1a2d29] focus:border-[#00a76b] rounded-lg px-2.5 py-1 text-[12px] font-bold text-[#201515] dark:text-white outline-none min-w-0 transition-colors"
                                   />
@@ -653,7 +674,10 @@ const Notifications = () => {
 
                                 {/* Delete (edit mode) */}
                                 {isTypeEditMode && (
-                                  <button type="button" onClick={e => deleteType(idx, e)}
+                                  <button type="button" onClick={e => {
+                                    if (activeColorPickerIdx !== null) setActiveColorPickerIdx(null);
+                                    deleteType(idx, e);
+                                  }}
                                     className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/40 text-slate-400 hover:text-red-500 transition-colors cursor-pointer shrink-0"
                                     title={`Delete ${t}`}>
                                     <Trash2 size={14} />
@@ -663,7 +687,7 @@ const Notifications = () => {
 
                               {/* ── STYLISH COLOR PICKER POPUP ── */}
                               {isColorPickerOpen && (
-                                <div className="px-3 pb-3" onClick={e => e.stopPropagation()}>
+                                <div data-color-picker="true" className="px-3 pb-3" onClick={e => e.stopPropagation()}>
                                   <div className="bg-slate-50 dark:bg-[#162722] border border-[#eceae3] dark:border-[#1a2d29] rounded-xl p-3">
                                     {/* Color preview */}
                                     <div className="w-full h-6 rounded-lg mb-2.5 shadow-inner border border-black/5 transition-colors" style={{ backgroundColor: editingTypeColor }} />
@@ -717,7 +741,10 @@ const Notifications = () => {
                         })}
 
                         {/* ── BOTTOM TOOLBAR ── */}
-                        <div className="p-2 border-t border-[#eceae3] dark:border-[#1a2d29] bg-slate-50/70 dark:bg-[#162722]/50" onClick={e => e.stopPropagation()}>
+                        <div className="p-2 border-t border-[#eceae3] dark:border-[#1a2d29] bg-slate-50/70 dark:bg-[#162722]/50" onClick={e => {
+                          e.stopPropagation();
+                          if (activeColorPickerIdx !== null) setActiveColorPickerIdx(null);
+                        }}>
                           {isTypeEditMode ? (
                             /* EDIT MODE — Add Type + Done buttons */
                             <div className="space-y-2">
@@ -1038,45 +1065,15 @@ const Notifications = () => {
             </div>
 
             {/* Footer */}
-            {(() => {
-              const sId = selectedNotif?.senderId?._id ? String(selectedNotif.senderId._id) : (selectedNotif?.senderId ? String(selectedNotif.senderId) : '');
-              const canEdit = role !== 'employee' && (role === 'admin' || role === 'hr' || sId === currentUserId);
-              return (
-                <div className="p-4 border-t border-[#eceae3] dark:border-[#1a2d29] bg-slate-50/50 dark:bg-[#162722]/30 flex items-center gap-3">
-                  {canEdit ? (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const notifToEdit = selectedNotif;
-                          setSelectedNotif(null);
-                          handleEdit(notifToEdit);
-                        }}
-                        className="flex-1 py-2.5 bg-[#00a76b] hover:bg-[#00915c] text-white rounded-[10px] font-bold text-xs transition-all cursor-pointer border-none shadow-sm flex items-center justify-center gap-1.5"
-                      >
-                        <Edit2 size={13} />
-                        <span>Edit</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setSelectedNotif(null)}
-                        className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-[#1a2d29] dark:hover:bg-[#223b35] text-slate-700 dark:text-slate-200 rounded-[10px] font-bold text-xs transition-all cursor-pointer border-none"
-                      >
-                        Close
-                      </button>
-                    </>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => setSelectedNotif(null)}
-                      className="w-full py-2.5 bg-[#00a76b] hover:bg-[#00915c] text-white rounded-[10px] font-bold text-xs transition-all cursor-pointer border-none shadow-sm"
-                    >
-                      Close
-                    </button>
-                  )}
-                </div>
-              );
-            })()}
+            <div className="p-4 border-t border-[#eceae3] dark:border-[#1a2d29] bg-slate-50/50 dark:bg-[#162722]/30 flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setSelectedNotif(null)}
+                className="w-full py-2.5 bg-[#00a76b] hover:bg-[#00915c] text-white rounded-[10px] font-bold text-xs transition-all cursor-pointer border-none shadow-sm"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>,
         document.body

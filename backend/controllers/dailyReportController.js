@@ -876,6 +876,12 @@ exports.reviewEditAccess = async (req, res) => {
       return res.status(404).json({ message: 'Daily report not found' });
     }
 
+    const isHrOrAdmin = ['admin', 'hr'].includes((req.user.role || '').toLowerCase());
+    const empUserId = report.user?._id || report.user;
+    if (empUserId && empUserId.toString() === req.user.id.toString() && !isHrOrAdmin) {
+      return res.status(403).json({ message: 'You cannot review edit access on your own daily report. An HR or Admin must review it.' });
+    }
+
     const isApprove = action === 'approve';
     report.editRequest = {
       ...(report.editRequest ? (report.editRequest.toObject ? report.editRequest.toObject() : report.editRequest) : {}),
@@ -890,7 +896,6 @@ exports.reviewEditAccess = async (req, res) => {
     // Send Notification to Employee
     const Notification = require('../models/Notification');
     const reviewerName = req.user.name || 'Higher Authority';
-    const empUserId = report.user?._id || report.user;
     const notifMsg = isApprove
       ? `Edit Access Granted: Your request to edit the daily report for ${report.reportDate} has been approved by ${reviewerName}. You can now edit your report.`
       : `Edit Request Declined: Your request to edit the daily report for ${report.reportDate} was declined by ${reviewerName}.`;

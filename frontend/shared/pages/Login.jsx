@@ -42,6 +42,13 @@ const Login = () => {
 
   // 🛡️ BROWSER-WIDE SINGLE ACCOUNT DETECTION & REDIRECT
   useEffect(() => {
+    // Prevent browser back button from navigating back to protected pages
+    window.history.pushState(null, '', window.location.href);
+    const handlePopState = () => {
+      window.history.pushState(null, '', window.location.href);
+    };
+    window.addEventListener('popstate', handlePopState);
+
     const checkActiveBrowserAccount = () => {
       try {
         const stored = localStorage.getItem('activeAccount');
@@ -66,7 +73,10 @@ const Login = () => {
       }
     };
     window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('popstate', handlePopState);
+    };
   }, []);
 
   const handleSwitchAccount = () => {
@@ -77,6 +87,7 @@ const Login = () => {
     setError('');
     setEmail('');
     setPassword('');
+    window.history.pushState(null, '', window.location.href);
   };
 
   const handleSubmit = async (e) => {
@@ -367,6 +378,7 @@ const Login = () => {
                 <EntryInput 
                   label="Email"
                   type="email" 
+                  required={true}
                   value={email}
                   onKeyDown={(e) => {
                     if (e.key === ' ' || e.code === 'Space') {
@@ -393,6 +405,7 @@ const Login = () => {
                   <EntryInput 
                     label="Password"
                     type="password" 
+                    required={true}
                     value={password}
                     onChange={(e) => {
                       setPassword(e.target.value);

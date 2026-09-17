@@ -27,12 +27,11 @@ import Login from '@shared/pages/Login';
 import ForgotPassword from '@shared/pages/ForgotPassword';
 import ResetPassword from '@shared/pages/ResetPassword';
 import MainLayout from '@shared/layouts/MainLayout';
-import { Users, Calendar, Bell, Camera, User, FileText, SlidersHorizontal } from 'lucide-react';
+import { Users, Calendar, Bell, Camera, User, FileText } from 'lucide-react';
 import { syncSessionFromActiveAccount, setupCrossTabSessionSync } from '@shared/utils/sessionSync';
 
 // Route-level pages are lazy-loaded so a role only downloads the code for
 // the pages it actually visits, instead of every page in the app upfront.
-const DepartmentsRoles = lazy(() => import('@shared/components/DepartmentsRoles'));
 const AdminDashboard = lazy(() => import('./pages/admin/AdminDashboard'));
 const HRDashboard = lazy(() => import('./pages/hr/HRDashboard'));
 const ManagerDashboard = lazy(() => import('./pages/manager/ManagerDashboard'));
@@ -94,11 +93,11 @@ const RouteLoadingFallback = () => (
 // ROUTE PROTECTION LOGIC
 const ProtectedRoute = ({ children, allowedRole }) => {
   syncSessionFromActiveAccount();
-  const token = sessionStorage.getItem('token');
+  const token = sessionStorage.getItem('token') || localStorage.getItem('token');
   const role = sessionStorage.getItem('role');
 
   if (!token) {
-    window.location.href = '/login';
+    window.location.replace('/login');
     return null;
   }
 
@@ -112,7 +111,7 @@ const ProtectedRoute = ({ children, allowedRole }) => {
       employee: '/employee/',
       manager: '/manager/'
     };
-    window.location.href = roleSubpaths[role] || `/${role}/`;
+    window.location.replace(roleSubpaths[role] || `/${role}/`);
     return null;
   }
 
@@ -122,10 +121,23 @@ const ProtectedRoute = ({ children, allowedRole }) => {
 const App = () => {
   React.useEffect(() => {
     syncSessionFromActiveAccount();
+    const handleAuthCheck = () => {
+      const currentToken = sessionStorage.getItem('token') || localStorage.getItem('token');
+      if (!currentToken) {
+        window.location.replace('/login');
+      }
+    };
+    handleAuthCheck();
+    window.addEventListener('pageshow', handleAuthCheck);
+    window.addEventListener('popstate', handleAuthCheck);
     const cleanup = setupCrossTabSessionSync(() => {
-      window.location.href = '/login';
+      window.location.replace('/login');
     });
-    return cleanup;
+    return () => {
+      window.removeEventListener('pageshow', handleAuthCheck);
+      window.removeEventListener('popstate', handleAuthCheck);
+      cleanup();
+    };
   }, []);
   // Background chunk preloader to ensure instant navigation for key views without initial load freeze
   React.useEffect(() => {
@@ -195,7 +207,6 @@ const App = () => {
     { label: 'Attendance', icon: Calendar, path: '/attendance' },
     { label: 'Daily Report', icon: FileText, path: '/daily-report' },
     { label: 'Screenshots', icon: Camera, path: '/screenshots' },
-    { label: 'Dropdown Setup', icon: SlidersHorizontal, path: '/dropdown-settings' },
     { label: 'My Profile', icon: User, path: '/profile' },
   ];
 
@@ -296,8 +307,6 @@ const App = () => {
             <Route path="integrations" element={<Integrations />} />
             <Route path="departments" element={<Departments />} />
             <Route path="designations" element={<Designations />} />
-            <Route path="dropdown-settings" element={<DepartmentsRoles />} />
-            <Route path="departments-roles" element={<DepartmentsRoles />} />
 
             {/* Sub-routes with /admin prefix */}
             <Route path="admin" element={<AdminDashboard />} />
@@ -332,8 +341,6 @@ const App = () => {
             <Route path="admin/integrations" element={<Integrations />} />
             <Route path="admin/departments" element={<Departments />} />
             <Route path="admin/designations" element={<Designations />} />
-            <Route path="admin/dropdown-settings" element={<DepartmentsRoles />} />
-            <Route path="admin/departments-roles" element={<DepartmentsRoles />} />
           </Route>
 
           {/* Root Redirects */}
@@ -381,8 +388,6 @@ const App = () => {
             <Route path="integrations" element={<Integrations />} />
             <Route path="departments" element={<Departments />} />
             <Route path="designations" element={<Designations />} />
-            <Route path="dropdown-settings" element={<DepartmentsRoles />} />
-            <Route path="departments-roles" element={<DepartmentsRoles />} />
           </Route>
 
           {/* EMPLOYEE MODULE */}

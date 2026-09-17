@@ -18,6 +18,7 @@ import ViewHolidaysDrawer from '../components/modals/ViewHolidaysDrawer';
 import CheckInButton from '../components/CheckInButton';
 import AttendanceSessionDetailModal from '@shared/components/AttendanceSessionDetailModal';
 import ExportFilterModal from '@shared/components/ExportFilterModal';
+import MeetingRequestsTable from '@shared/components/MeetingRequestsTable';
 
 // ─── LOCAL DATE HELPER ─────────────────────────
 export const getLocalYYYYMMDD = (d) => {
@@ -800,6 +801,25 @@ const parseTimeToMins = (tStr) => {
   return null;
 };
 
+const formatTargetHours = (totalHoursNum) => {
+  if (totalHoursNum === null || totalHoursNum === undefined || isNaN(Number(totalHoursNum))) return '0 hrs';
+  const val = Number(totalHoursNum);
+  const h = Math.floor(val);
+  const m = Math.round((val - h) * 60);
+  if (m > 0) {
+    return `${h} hrs ${m} mins`;
+  }
+  return `${h} hrs`;
+};
+
+const formatTimer = (seconds = 0) => {
+  const totalSecs = Math.max(0, parseInt(seconds) || 0);
+  const h = Math.floor(totalSecs / 3600);
+  const m = Math.floor((totalSecs % 3600) / 60);
+  const s = totalSecs % 60;
+  return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+};
+
 const getWorkingHours = (clockIn, clockOut, totalHours, record, activeLiveSecs) => {
   if (!record || record.status === 'Absent' || record.status === 'Leave') {
     return '--';
@@ -1042,6 +1062,13 @@ const Attendance = () => {
   const [statusFilter, setStatusFilter] = useState('All');
   const [dateFilter, setDateFilter] = useState(() => getLocalYYYYMMDD(new Date()));
   const [appViewMode, setAppViewMode] = useState('attendance'); // 'attendance' | 'timeTracker'
+  const [attendanceSubTab, setAttendanceSubTab] = useState(() => {
+    try {
+      const p = new URLSearchParams(window.location.search);
+      if (p.get('action') === 'new-offline-request' || p.get('tab') === 'meetingRequests') return 'meetingRequests';
+    } catch (_) {}
+    return 'history';
+  });
   const [viewMode, setViewMode] = useState('all'); // all | daily | weekly | monthly
   const [sortField, setSortField] = useState('date');
   const [sortDir, setSortDir] = useState('desc');
@@ -1078,8 +1105,16 @@ const Attendance = () => {
       setLiveSessionStatus(data);
       setTodayLiveStatus(data);
       timeFetchRef.current = Date.now();
-      setLiveActiveSeconds(data?.activeTime || 0);
-      setLiveIdleSeconds(data?.idleTime || 0);
+      const srvActive = data?.activeTime || 0;
+      const srvIdle = data?.idleTime || 0;
+      setLiveActiveSeconds(prev => {
+        if (!data?.hasActiveSession || !data?.isRunning) return srvActive;
+        return Math.max(prev, srvActive);
+      });
+      setLiveIdleSeconds(prev => {
+        if (!data?.hasActiveSession || !data?.isRunning) return srvIdle;
+        return Math.max(prev, srvIdle);
+      });
     } catch (err) { }
   }, []);
 
@@ -1091,12 +1126,18 @@ const Attendance = () => {
 
   useEffect(() => {
     let timerInterval = null;
-    if (liveSessionStatus && liveSessionStatus.hasActiveSession && liveSessionStatus.isRunning && liveSessionStatus.status === 'active') {
-      const baseActive = liveSessionStatus.activeTime || 0;
-      const baseTs = timeFetchRef.current || Date.now();
+    if (liveSessionStatus && liveSessionStatus.hasActiveSession && liveSessionStatus.isRunning) {
+      const status = liveSessionStatus.status;
+      const baseActive = Math.max(liveActiveSeconds, liveSessionStatus.activeTime || 0);
+      const baseIdle = Math.max(liveIdleSeconds, liveSessionStatus.idleTime || 0);
+      const baseTs = Date.now();
       timerInterval = setInterval(() => {
-        const elapsed = Math.floor((Date.now() - baseTs) / 1000);
-        setLiveActiveSeconds(baseActive + Math.max(0, elapsed));
+        const elapsed = Math.max(0, Math.floor((Date.now() - baseTs) / 1000));
+        if (status === 'active') {
+          setLiveActiveSeconds(baseActive + elapsed);
+        } else if (status === 'idle' || status === 'paused') {
+          setLiveIdleSeconds(baseIdle + elapsed);
+        }
       }, 1000);
     }
     return () => {
@@ -1196,38 +1237,88 @@ const Attendance = () => {
     return '--:--';
   }, [todayLiveStatus, todayRecord]);
 
-  const todayTotalHoursDisplay = useMemo(() => {
-    if (liveActiveSeconds > 0) {
-      const h = Math.floor(liveActiveSeconds / 3600);
-      const m = Math.floor((liveActiveSeconds % 3600) / 60);
-      return `${h}h ${m}m`;
-    }
+  const todayActiveSeconds = useMemo(() => {
+    if (liveActiveSeconds > 0) return liveActiveSeconds;
     if (todayLiveStatus?.activeTime && typeof todayLiveStatus.activeTime === 'number' && todayLiveStatus.activeTime > 0) {
-      const secs = todayLiveStatus.activeTime;
-      const h = Math.floor(secs / 3600);
-      const m = Math.floor((secs % 3600) / 60);
-      return `${h}h ${m}m`;
+      return todayLiveStatus.activeTime;
     }
     if (todayRecord) {
-      return getWorkingHours(todayRecord.clockIn, todayRecord.clockOut, todayRecord.totalHours, todayRecord, liveActiveSeconds);
+      const active = todayRecord.totalActiveTime ?? todayRecord.activeTime ?? todayRecord.trackedTime;
+      if (typeof active === 'number' && active > 0) return active;
+
+      const cInRaw = (todayRecord.clockIn && todayRecord.clockIn !== '--') ? todayRecord.clockIn : todayRecord.checkInTime;
+      const cOutRaw = (todayRecord.clockOut && todayRecord.clockOut !== '--') ? todayRecord.clockOut : todayRecord.checkOutTime;
+      if (cInRaw && cInRaw !== '--' && cInRaw !== '--:--') {
+        const inMins = parseTimeToMins(cInRaw);
+        const outMins = parseTimeToMins(cOutRaw);
+        if (inMins !== null && outMins !== null && outMins >= inMins) {
+          return (outMins - inMins) * 60;
+        }
+        const isTodayRec = todayRecord.date && (
+          (typeof todayRecord.date === 'string' && todayRecord.date.split('T')[0] === getLocalYYYYMMDD(new Date()))
+        );
+        if (isTodayRec && inMins !== null && (!cOutRaw || cOutRaw === '--' || cOutRaw === '--:--')) {
+          const now = new Date();
+          const nowParts = new Intl.DateTimeFormat('en-US', {
+            timeZone: 'Asia/Kolkata', hour: 'numeric', minute: 'numeric', hour12: false
+          }).formatToParts(now);
+          const curH = parseInt(nowParts.find(p => p.type === 'hour')?.value || '0', 10);
+          const curM = parseInt(nowParts.find(p => p.type === 'minute')?.value || '0', 10);
+          const nowMins = curH * 60 + curM;
+          if (nowMins >= inMins) {
+            return (nowMins - inMins) * 60;
+          }
+        }
+      }
+      const hoursVal = todayRecord.totalHours;
+      if (hoursVal !== undefined && hoursVal !== null && hoursVal !== '--') {
+        const numH = typeof hoursVal === 'number' ? hoursVal : parseFloat(String(hoursVal));
+        if (!isNaN(numH) && numH > 0) return Math.round(numH * 3600);
+      }
     }
-    return '--';
+    return 0;
   }, [liveActiveSeconds, todayLiveStatus, todayRecord]);
 
-  // ── Calculate Total Weekly Worked Hours (Mon - Fri / Sun) for Current User ──
+  const todayIdleSeconds = useMemo(() => {
+    if (liveIdleSeconds > 0) return liveIdleSeconds;
+    if (todayLiveStatus?.idleTime && typeof todayLiveStatus.idleTime === 'number' && todayLiveStatus.idleTime > 0) {
+      return todayLiveStatus.idleTime;
+    }
+    if (todayRecord) {
+      const idle = todayRecord.idleTime ?? todayRecord.inactiveTime ?? todayRecord.idle_time;
+      if (typeof idle === 'number' && idle > 0) return idle;
+    }
+    return 0;
+  }, [liveIdleSeconds, todayLiveStatus, todayRecord]);
+
+  // Box 1: Activity time only timer (e.g. 00:02:26)
+  const todayWorkingHoursDisplay = useMemo(() => {
+    return formatTimer(todayActiveSeconds);
+  }, [todayActiveSeconds]);
+
+  // Box 2: Inactivity time only timer (e.g. 00:00:00)
+  const todayInactiveHoursDisplay = useMemo(() => {
+    return formatTimer(todayIdleSeconds);
+  }, [todayIdleSeconds]);
+
+  // Box 3: Activity + Inactivity timer (e.g. 00:02:26 / 8.5 hrs)
+  const todayTotalHoursDisplay = useMemo(() => {
+    return formatTimer(todayActiveSeconds + todayIdleSeconds);
+  }, [todayActiveSeconds, todayIdleSeconds]);
+
+  // ── Calculate Total Weekly Worked Hours (Sunday to Saturday) for Current User ──
   const weeklyWorkedHoursData = useMemo(() => {
     const now = new Date();
     const currentDay = now.getDay();
-    const mondayDiff = currentDay === 0 ? -6 : 1 - currentDay;
-    const monday = new Date(now);
-    monday.setDate(now.getDate() + mondayDiff);
-    monday.setHours(0, 0, 0, 0);
-    const sunday = new Date(monday);
-    sunday.setDate(monday.getDate() + 6);
-    sunday.setHours(23, 59, 59, 999);
+    const sunday = new Date(now);
+    sunday.setDate(now.getDate() - currentDay);
+    sunday.setHours(0, 0, 0, 0);
+    const saturday = new Date(sunday);
+    saturday.setDate(sunday.getDate() + 6);
+    saturday.setHours(23, 59, 59, 999);
 
-    const monStr = getLocalYYYYMMDD(monday);
     const sunStr = getLocalYYYYMMDD(sunday);
+    const satStr = getLocalYYYYMMDD(saturday);
     const todayStr = getLocalYYYYMMDD(now);
 
     const currentLoggedInUser = JSON.parse(sessionStorage.getItem('user') || '{}');
@@ -1241,7 +1332,7 @@ const Attendance = () => {
       if (myId && uId && String(uId) !== String(myId)) return;
 
       const rDate = r.date ? String(r.date).split('T')[0] : '';
-      if (rDate >= monStr && rDate <= sunStr) {
+      if (rDate >= sunStr && rDate <= satStr) {
         if (rDate === todayStr) {
           hasTodaySeconds = true;
           if (liveActiveSeconds > 0) {
@@ -1700,6 +1791,35 @@ const Attendance = () => {
     }
   }, [viewContext, teamStatsPeriod, fetchTeamStats]);
 
+  const handlePeriodChange = useCallback((p) => {
+    setStatsPeriod(p);
+    setTeamStatsPeriod(p);
+    setChartPeriod(p);
+    if (viewContext === 'employee') {
+      fetchEmployeeStats(p);
+      fetchChartStats(p);
+    } else {
+      fetchTeamStats(p);
+    }
+    fetchSummaryChart(p);
+
+    const now = new Date();
+    if (p === 'today') {
+      setDateFilter(getLocalYYYYMMDD(now));
+    } else if (p === 'week') {
+      const currentDay = now.getDay();
+      const sunday = new Date(now);
+      sunday.setDate(now.getDate() - currentDay);
+      const saturday = new Date(sunday);
+      saturday.setDate(sunday.getDate() + 6);
+      setDateFilter(`${getLocalYYYYMMDD(sunday)}:${getLocalYYYYMMDD(saturday)}`);
+    } else if (p === 'month') {
+      const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+      const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+      setDateFilter(`${getLocalYYYYMMDD(firstDay)}:${getLocalYYYYMMDD(lastDay)}`);
+    }
+  }, [viewContext, fetchEmployeeStats, fetchChartStats, fetchTeamStats, fetchSummaryChart]);
+
   // Fetch data
   const fetchAttendance = useCallback(async () => {
     // Only show full loading spinner on initial load if no records exist yet
@@ -1744,12 +1864,15 @@ const Attendance = () => {
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
-    statsCacheRef.current = {};
-    chartCacheRef.current = {};
+    if (statsCacheRef.current) statsCacheRef.current = {};
+    if (chartCacheRef.current) chartCacheRef.current = {};
     try {
-      await fetchAttendance();
-      if (typeof fetchLiveTimeStatus === 'function') await fetchLiveTimeStatus();
-      if (typeof fetchDailyActivityLog === 'function') await fetchDailyActivityLog();
+      await Promise.allSettled([
+        fetchAttendance(),
+        fetchSummaryChart(chartPeriod),
+        typeof fetchLiveTimeStatus === 'function' ? fetchLiveTimeStatus() : Promise.resolve(),
+        typeof fetchDailyActivityLog === 'function' ? fetchDailyActivityLog() : Promise.resolve()
+      ]);
       toast.success('Attendance data refreshed!');
     } catch (e) {
       toast.error('Failed to refresh data');
@@ -1787,44 +1910,34 @@ const Attendance = () => {
     const today = new Date();
 
     if (viewMode === 'daily') {
-      const tenDaysAgo = new Date(today);
-      tenDaysAgo.setDate(today.getDate() - 9);
-      const startStr = getLocalYYYYMMDD(tenDaysAgo);
-      const endStr = getLocalYYYYMMDD(today);
-      filtered = filtered.filter(r => (r.date || '') >= startStr && (r.date || '') <= endStr);
+      const startStr = getLocalYYYYMMDD(today);
+      filtered = filtered.filter(r => (r.date || '') === startStr);
 
       if (viewContext === 'employee') {
-        const last10Dates = [];
-        for (let i = 0; i < 10; i++) {
-          const d = new Date(today);
-          d.setDate(today.getDate() - i);
-          last10Dates.push(getLocalYYYYMMDD(d));
-        }
-        const existingMap = new Map(filtered.map(r => [r.date, r]));
         const currentUser = JSON.parse(sessionStorage.getItem('user') || '{}');
-        filtered = last10Dates.map(dStr => {
-          if (existingMap.has(dStr)) return existingMap.get(dStr);
-          return {
-            _id: `daily_pad_${dStr}`,
+        const existingRec = filtered.find(r => r.date === startStr);
+        if (!existingRec) {
+          filtered = [{
+            _id: `daily_pad_${startStr}`,
             user: {
               _id: currentUser._id || currentUser.id,
               name: currentUser.name || userRole.toUpperCase(),
               role: userRole
             },
-            date: dStr,
+            date: startStr,
             status: 'Absent',
             clockIn: '--:--',
             clockOut: '--:--',
             workingHours: '--',
             inactiveTime: '--',
             totalHours: '--'
-          };
-        });
+          }];
+        }
       }
     } else if (viewMode === 'weekly') {
-      const day = today.getDay() || 7;
+      const currentDay = today.getDay();
       const startOfWeek = new Date(today);
-      startOfWeek.setDate(today.getDate() - day + 1);
+      startOfWeek.setDate(today.getDate() - currentDay);
       const endOfWeek = new Date(startOfWeek);
       endOfWeek.setDate(startOfWeek.getDate() + 6);
 
@@ -2144,8 +2257,8 @@ const Attendance = () => {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-10 h-10 border-3 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+        <div className="flex flex-col items-center gap-3">
+          <RefreshCw size={32} className="animate-spin text-emerald-500" />
           <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">Loading attendance data...</p>
         </div>
       </div>
@@ -2165,19 +2278,14 @@ const Attendance = () => {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          {appViewMode === 'attendance' && viewContext !== 'employee' && (
+          {appViewMode === 'attendance' && (
             <div className="flex items-center gap-1 bg-slate-100 dark:bg-[#133029] p-1 rounded-xl shrink-0">
               {['today', 'week', 'month'].map((p) => {
-                const currentPeriod = teamStatsPeriod;
+                const currentPeriod = statsPeriod;
                 return (
                   <button
                     key={p}
-                    onClick={() => {
-                      if (currentPeriod === p) return;
-                      setStatsPeriod(p);
-                      setTeamStatsPeriod(p);
-                      setChartPeriod(p);
-                    }}
+                    onClick={() => handlePeriodChange(p)}
                     className={`px-4 py-1.5 text-xs font-bold uppercase tracking-wider rounded-lg transition-all cursor-pointer ${currentPeriod === p
                       ? 'bg-emerald-600 text-white shadow-sm'
                       : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
@@ -2250,175 +2358,224 @@ const Attendance = () => {
         )}
 
         {/* Middle Column: Summary Cards (In Between Current Session & Calendar) */}
-        <div className="flex flex-col justify-between gap-2">
+        <div className={viewContext === 'team' ? "flex flex-col justify-between gap-2" : "grid grid-cols-2 gap-2.5 h-full"}>
           {viewContext === 'team' ? (
             <>
               {/* Card 1: Present Today */}
-              <div className="py-2.5 sm:py-3 px-4 sm:px-5 rounded-2xl bg-white dark:bg-[#181612] border border-slate-200/80 dark:border-[#38352e] hover:!border-[#10b981] dark:hover:!border-[#34d399] transition-colors duration-300 flex items-center gap-4 sm:gap-6 shadow-xs group flex-1">
-                <div className="w-9 sm:w-10 h-9 sm:h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
-                  <Users size={17} />
+              <div className="flex items-center justify-between gap-2.5 px-4 py-2.5 rounded-2xl flex-1 w-full transition-all duration-200 shadow-xs border border-slate-200/80 dark:border-[#38352e] hover:!border-[#10b981] dark:hover:!border-[#34d399] bg-white dark:bg-[#181612]">
+                <div className="flex items-center gap-2.5 overflow-hidden">
+                  <div className="w-8 h-8 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                    <Users size={16} />
+                  </div>
+                  <div className="flex flex-col min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                      <span className="text-[10px] font-extrabold text-slate-400 dark:text-[#829e92] uppercase tracking-wider truncate">
+                        Present Today
+                      </span>
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <div className="flex items-center gap-1.5 mb-0.5">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                    <span className="text-[10px] font-extrabold text-slate-400 dark:text-[#829e92] uppercase tracking-wider">
-                      Present Today
-                    </span>
-                  </div>
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-lg sm:text-xl font-black text-slate-900 dark:text-white tracking-tight">
-                      {teamPresentCount}
-                    </span>
-                    <span className="text-[10px] font-extrabold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-md">
-                      Members
-                    </span>
-                  </div>
+                <div className="shrink-0 pl-1 text-right flex items-center gap-1.5">
+                  <span className="text-lg sm:text-xl font-black text-slate-900 dark:text-white tracking-tight leading-none">
+                    {teamPresentCount}
+                  </span>
+                  <span className="text-[10px] font-extrabold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-md">
+                    Members
+                  </span>
                 </div>
               </div>
 
               {/* Card 2: Current Live */}
-              <div className="py-2.5 sm:py-3 px-4 sm:px-5 rounded-2xl bg-white dark:bg-[#181612] border border-slate-200/80 dark:border-[#38352e] hover:!border-[#3b82f6] dark:hover:!border-[#60a5fa] transition-colors duration-300 flex items-center gap-4 sm:gap-6 shadow-xs group flex-1">
-                <div className="w-9 sm:w-10 h-9 sm:h-10 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
-                  <Activity size={17} />
+              <div className="flex items-center justify-between gap-2.5 px-4 py-2.5 rounded-2xl flex-1 w-full transition-all duration-200 shadow-xs border border-slate-200/80 dark:border-[#38352e] hover:!border-[#3b82f6] dark:hover:!border-[#60a5fa] bg-white dark:bg-[#181612]">
+                <div className="flex items-center gap-2.5 overflow-hidden">
+                  <div className="w-8 h-8 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
+                    <Activity size={16} />
+                  </div>
+                  <div className="flex flex-col min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse shrink-0" />
+                      <span className="text-[10px] font-extrabold text-slate-900 dark:text-white uppercase tracking-wider truncate">
+                        Current Live
+                      </span>
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <div className="flex items-center gap-1.5 mb-0.5">
-                    <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
-                    <span className="text-[10px] font-extrabold text-slate-400 dark:text-[#829e92] uppercase tracking-wider">
-                      Current Live
-                    </span>
-                  </div>
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-lg sm:text-xl font-black text-slate-900 dark:text-white tracking-tight">
-                      {teamCurrentLiveCount}
-                    </span>
-                    <span className="text-[10px] font-extrabold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 px-2 py-0.5 rounded-md">
-                      Working
-                    </span>
-                  </div>
+                <div className="shrink-0 pl-1 text-right flex items-center gap-1.5">
+                  <span className="text-lg sm:text-xl font-black text-slate-900 dark:text-white tracking-tight leading-none">
+                    {teamCurrentLiveCount}
+                  </span>
+                  <span className="text-[10px] font-extrabold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 px-2 py-0.5 rounded-md">
+                    Working
+                  </span>
                 </div>
               </div>
 
               {/* Card 3: On Break */}
-              <div className="py-2.5 sm:py-3 px-4 sm:px-5 rounded-2xl bg-white dark:bg-[#181612] border border-slate-200/80 dark:border-[#38352e] hover:!border-[#f59e0b] dark:hover:!border-[#fbbf24] transition-colors duration-300 flex items-center gap-4 sm:gap-6 shadow-xs group flex-1">
-                <div className="w-9 sm:w-10 h-9 sm:h-10 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
-                  <Coffee size={17} />
+              <div className="flex items-center justify-between gap-2.5 px-4 py-2.5 rounded-2xl flex-1 w-full transition-all duration-200 shadow-xs border border-slate-200/80 dark:border-[#38352e] hover:!border-[#f59e0b] dark:hover:!border-[#fbbf24] bg-white dark:bg-[#181612]">
+                <div className="flex items-center gap-2.5 overflow-hidden">
+                  <div className="w-8 h-8 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
+                    <Coffee size={16} />
+                  </div>
+                  <div className="flex flex-col min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
+                      <span className="text-[10px] font-extrabold text-slate-900 dark:text-white uppercase tracking-wider truncate">
+                        On Break
+                      </span>
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <div className="flex items-center gap-1.5 mb-0.5">
-                    <span className="w-2 h-2 rounded-full bg-amber-500" />
-                    <span className="text-[10px] font-extrabold text-slate-400 dark:text-[#829e92] uppercase tracking-wider">
-                      On Break
-                    </span>
-                  </div>
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-lg sm:text-xl font-black text-slate-900 dark:text-white tracking-tight">
-                      {teamOnBreakCount}
-                    </span>
-                    <span className="text-[10px] font-extrabold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded-md">
-                      Paused
-                    </span>
-                  </div>
+                <div className="shrink-0 pl-1 text-right flex items-center gap-1.5">
+                  <span className="text-lg sm:text-xl font-black text-slate-900 dark:text-white tracking-tight leading-none">
+                    {teamOnBreakCount}
+                  </span>
+                  <span className="text-[10px] font-extrabold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded-md">
+                    Paused
+                  </span>
                 </div>
               </div>
 
               {/* Card 4: Total Hours */}
-              <div className="py-2.5 sm:py-3 px-4 sm:px-5 rounded-2xl bg-white dark:bg-[#181612] border border-slate-200/80 dark:border-[#38352e] hover:!border-purple-500 dark:hover:!border-purple-400 transition-colors duration-300 flex items-center gap-3.5 sm:gap-4 shadow-xs group flex-1">
-                <div className="w-9 sm:w-10 h-9 sm:h-10 rounded-xl bg-purple-500 text-white shadow-md shadow-purple-500/30 flex items-center justify-center shrink-0">
-                  <Timer size={16} strokeWidth={2.2} />
+              <div className="flex items-center justify-between gap-2.5 px-4 py-2.5 rounded-2xl flex-1 w-full transition-all duration-200 shadow-xs border border-slate-200/80 dark:border-[#38352e] hover:!border-purple-500 dark:hover:!border-purple-400 bg-white dark:bg-[#181612]">
+                <div className="flex items-center gap-2.5 overflow-hidden">
+                  <div className="w-8 h-8 rounded-xl bg-purple-500 text-white shadow-xs shadow-purple-500/30 flex items-center justify-center shrink-0">
+                    <Timer size={16} strokeWidth={2.2} />
+                  </div>
+                  <div className="flex flex-col min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-purple-500 shrink-0" />
+                      <span className="text-[10px] font-extrabold text-slate-900 dark:text-white uppercase tracking-wider truncate">
+                        Total Hours
+                      </span>
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <div className="flex items-center gap-1.5 mb-0.5">
-                    <span className="w-2 h-2 rounded-full bg-purple-500" />
-                    <span className="text-[10px] font-extrabold text-slate-400 dark:text-[#829e92] uppercase tracking-wider">
-                      Total Hours
-                    </span>
-                  </div>
-                  <div className="flex items-baseline gap-1.5">
-                    <p className="text-lg sm:text-xl font-black text-purple-600 dark:text-purple-400 tracking-tight font-mono">
-                      {teamWeeklyWorkedHoursData.formatted}
-                    </p>
-                    <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500">
-                      / {teamWeeklyWorkedHoursData.targetHours} hrs
-                    </span>
-                  </div>
+                <div className="shrink-0 pl-1 text-right flex items-baseline gap-1">
+                  <span className="text-base sm:text-lg font-black text-purple-600 dark:text-purple-400 tracking-tight font-mono leading-none">
+                    {teamWeeklyWorkedHoursData.formatted}
+                  </span>
+                  <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 dark:text-slate-500 whitespace-nowrap">
+                    / {formatTargetHours(teamWeeklyWorkedHoursData.targetHours)}
+                  </span>
                 </div>
               </div>
             </>
           ) : (
             <>
               {/* Card 1: Check-in Time */}
-              <div className="py-2.5 sm:py-3 px-4 sm:px-5 rounded-2xl bg-white dark:bg-[#181612] border border-slate-200/80 dark:border-[#38352e] hover:!border-[#10b981] dark:hover:!border-[#34d399] transition-colors duration-300 flex items-center gap-3.5 sm:gap-4 shadow-xs group flex-1">
-                <div className="w-9 sm:w-10 h-9 sm:h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+              <div className="py-2.5 sm:py-3 px-3.5 sm:px-4 rounded-2xl bg-white dark:bg-[#181612] border border-slate-200/80 dark:border-[#38352e] hover:!border-[#10b981] dark:hover:!border-[#34d399] transition-colors duration-300 flex items-center gap-3 shadow-xs group min-w-0">
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
                   <Clock size={17} />
                 </div>
-                <div>
+                <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5 mb-0.5">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                    <span className="text-[10px] font-extrabold text-slate-400 dark:text-[#829e92] uppercase tracking-wider">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                    <span className="text-[10px] font-extrabold text-slate-900 dark:text-white uppercase tracking-wider truncate">
                       Check-In Time
                     </span>
                   </div>
-                  <p className="text-lg sm:text-xl font-black text-emerald-600 dark:text-emerald-400 tracking-tight font-mono">
+                  <p className="text-base sm:text-lg font-black text-emerald-600 dark:text-emerald-400 tracking-tight font-mono truncate">
                     {todayCheckInDisplay}
                   </p>
                 </div>
               </div>
 
               {/* Card 2: Check-out Time */}
-              <div className="py-2.5 sm:py-3 px-4 sm:px-5 rounded-2xl bg-white dark:bg-[#181612] border border-slate-200/80 dark:border-[#38352e] hover:!border-[#3b82f6] dark:hover:!border-[#60a5fa] transition-colors duration-300 flex items-center gap-3.5 sm:gap-4 shadow-xs group flex-1">
-                <div className="w-9 sm:w-10 h-9 sm:h-10 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
+              <div className="py-2.5 sm:py-3 px-3.5 sm:px-4 rounded-2xl bg-white dark:bg-[#181612] border border-slate-200/80 dark:border-[#38352e] hover:!border-[#3b82f6] dark:hover:!border-[#60a5fa] transition-colors duration-300 flex items-center gap-3 shadow-xs group min-w-0">
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
                   <Square size={16} />
                 </div>
-                <div>
+                <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5 mb-0.5">
-                    <span className="w-2 h-2 rounded-full bg-blue-500" />
-                    <span className="text-[10px] font-extrabold text-slate-400 dark:text-[#829e92] uppercase tracking-wider">
+                    <span className="w-2 h-2 rounded-full bg-blue-500 shrink-0" />
+                    <span className="text-[10px] font-extrabold text-slate-900 dark:text-white uppercase tracking-wider truncate">
                       Check-Out Time
                     </span>
                   </div>
-                  <p className="text-lg sm:text-xl font-black text-blue-600 dark:text-blue-400 tracking-tight font-mono">
+                  <p className="text-base sm:text-lg font-black text-blue-600 dark:text-blue-400 tracking-tight font-mono truncate">
                     {todayCheckOutDisplay}
                   </p>
                 </div>
               </div>
 
-              {/* Card 3: Today's Hours */}
-              <div className="py-2.5 sm:py-3 px-4 sm:px-5 rounded-2xl bg-white dark:bg-[#181612] border border-slate-200/80 dark:border-[#38352e] hover:!border-[#f59e0b] dark:hover:!border-[#fbbf24] transition-colors duration-300 flex items-center gap-3.5 sm:gap-4 shadow-xs group flex-1">
-                <div className="w-9 sm:w-10 h-9 sm:h-10 rounded-xl bg-amber-500 text-white shadow-md shadow-amber-500/30 flex items-center justify-center shrink-0">
-                  <Clock size={16} strokeWidth={2.2} />
+              {/* Card 3: Working Hours */}
+              <div className="py-2.5 sm:py-3 px-3.5 sm:px-4 rounded-2xl bg-white dark:bg-[#181612] border border-slate-200/80 dark:border-[#38352e] hover:!border-teal-500 dark:hover:!border-teal-400 transition-colors duration-300 flex items-center gap-3 shadow-xs group min-w-0">
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-teal-50 dark:bg-teal-950/40 text-teal-600 dark:text-teal-400 flex items-center justify-center shrink-0">
+                  <Activity size={17} />
                 </div>
-                <div>
+                <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5 mb-0.5">
-                    <span className="w-2 h-2 rounded-full bg-amber-500" />
-                    <span className="text-[10px] font-extrabold text-slate-400 dark:text-[#829e92] uppercase tracking-wider">
-                      Today's Hours
+                    <span className="w-2 h-2 rounded-full bg-teal-500 shrink-0" />
+                    <span className="text-[10px] font-extrabold text-slate-900 dark:text-white uppercase tracking-wider truncate">
+                      Working Hours
                     </span>
                   </div>
-                  <p className="text-lg sm:text-xl font-black text-amber-600 dark:text-amber-400 tracking-tight font-mono">
-                    {todayTotalHoursDisplay}
+                  <p className="text-base sm:text-lg font-black text-teal-600 dark:text-teal-400 tracking-tight font-mono truncate">
+                    {todayWorkingHoursDisplay}
                   </p>
                 </div>
               </div>
 
-              {/* Card 4: Total Hours */}
-              <div className="py-2.5 sm:py-3 px-4 sm:px-5 rounded-2xl bg-white dark:bg-[#181612] border border-slate-200/80 dark:border-[#38352e] hover:!border-purple-500 dark:hover:!border-purple-400 transition-colors duration-300 flex items-center gap-3.5 sm:gap-4 shadow-xs group flex-1">
-                <div className="w-9 sm:w-10 h-9 sm:h-10 rounded-xl bg-purple-500 text-white shadow-md shadow-purple-500/30 flex items-center justify-center shrink-0">
-                  <Timer size={16} strokeWidth={2.2} />
+              {/* Card 4: Inactivity Hours */}
+              <div className="py-2.5 sm:py-3 px-3.5 sm:px-4 rounded-2xl bg-white dark:bg-[#181612] border border-slate-200/80 dark:border-[#38352e] hover:!border-rose-500 dark:hover:!border-rose-400 transition-colors duration-300 flex items-center gap-3 shadow-xs group min-w-0">
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-rose-50 dark:bg-rose-950/40 text-rose-500 dark:text-rose-400 flex items-center justify-center shrink-0">
+                  <Coffee size={17} />
                 </div>
-                <div>
+                <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5 mb-0.5">
-                    <span className="w-2 h-2 rounded-full bg-purple-500" />
-                    <span className="text-[10px] font-extrabold text-slate-400 dark:text-[#829e92] uppercase tracking-wider">
-                      Total Hours
+                    <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0" />
+                    <span className="text-[10px] font-extrabold text-slate-900 dark:text-white uppercase tracking-wider truncate">
+                      Inactivity Hours
                     </span>
                   </div>
-                  <div className="flex items-baseline gap-1.5">
-                    <p className="text-lg sm:text-xl font-black text-purple-600 dark:text-purple-400 tracking-tight font-mono">
+                  <p className="text-base sm:text-lg font-black text-rose-600 dark:text-rose-400 tracking-tight font-mono truncate">
+                    {todayInactiveHoursDisplay}
+                  </p>
+                </div>
+              </div>
+
+              {/* Card 5: Today's Hours */}
+              <div className="py-2.5 sm:py-3 px-3.5 sm:px-4 rounded-2xl bg-white dark:bg-[#181612] border border-slate-200/80 dark:border-[#38352e] hover:!border-[#f59e0b] dark:hover:!border-[#fbbf24] transition-colors duration-300 flex items-center gap-3 shadow-xs group min-w-0">
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-amber-500 text-white shadow-md shadow-amber-500/30 flex items-center justify-center shrink-0">
+                  <Clock size={16} strokeWidth={2.2} />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5 mb-0.5">
+                    <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
+                    <span className="text-[10px] font-extrabold text-slate-900 dark:text-white uppercase tracking-wider truncate">
+                      Today's Hours
+                    </span>
+                  </div>
+                  <div className="flex items-baseline gap-1 min-w-0 flex-wrap">
+                    <p className="text-base sm:text-lg font-black text-amber-600 dark:text-amber-400 tracking-tight font-mono truncate">
+                      {todayTotalHoursDisplay}
+                    </p>
+                    <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 dark:text-slate-500 shrink-0 whitespace-nowrap">
+                      / {formatTargetHours(8.5)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Card 6: Weekly Hours */}
+              <div className="py-2.5 sm:py-3 px-3.5 sm:px-4 rounded-2xl bg-white dark:bg-[#181612] border border-slate-200/80 dark:border-[#38352e] hover:!border-purple-500 dark:hover:!border-purple-400 transition-colors duration-300 flex items-center gap-3 shadow-xs group min-w-0">
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-purple-500 text-white shadow-md shadow-purple-500/30 flex items-center justify-center shrink-0">
+                  <Timer size={16} strokeWidth={2.2} />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5 mb-0.5">
+                    <span className="w-2 h-2 rounded-full bg-purple-500 shrink-0" />
+                    <span className="text-[10px] font-extrabold text-slate-900 dark:text-white uppercase tracking-wider truncate">
+                      Weekly Hours
+                    </span>
+                  </div>
+                  <div className="flex items-baseline gap-1 min-w-0 flex-wrap">
+                    <p className="text-base sm:text-lg font-black text-purple-600 dark:text-purple-400 tracking-tight font-mono truncate">
                       {weeklyWorkedHoursData.formatted}
                     </p>
-                    <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500">
-                      / 42.5 hrs
+                    <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 dark:text-slate-500 shrink-0 whitespace-nowrap">
+                      / {formatTargetHours(42.5)}
                     </span>
                   </div>
                 </div>
@@ -2487,7 +2644,6 @@ const Attendance = () => {
                   <Calendar size={16} className="text-emerald-500" />
                   <span>{calendarMonth.toLocaleString('default', { month: 'long', year: 'numeric' })}</span>
                 </h3>
-                <p className="text-[10px] text-slate-400 dark:text-[#829e92]">Monthly Attendance Calendar</p>
               </div>
               <div className="flex items-center gap-1">
                 <button
@@ -2717,7 +2873,34 @@ const Attendance = () => {
         </Card>
       )}
 
-      {/* ── ATTENDANCE HISTORY TABLE ── */}
+      {/* ── ATTENDANCE SUB-TAB NAVIGATION ── */}
+      <div className="flex items-center gap-2 mb-3">
+        <button
+          onClick={() => setAttendanceSubTab('history')}
+          className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
+            attendanceSubTab === 'history'
+              ? 'bg-emerald-600 text-white shadow-sm'
+              : 'bg-white dark:bg-[#071e17] text-slate-600 dark:text-slate-300 border border-[#e2eae7] dark:border-[#133029] hover:bg-slate-50 dark:hover:bg-[#0d2a22]'
+          }`}
+        >
+          <Calendar size={14} />
+          <span>Attendance History</span>
+        </button>
+
+        <button
+          onClick={() => setAttendanceSubTab('meetingRequests')}
+          className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
+            attendanceSubTab === 'meetingRequests'
+              ? 'bg-emerald-600 text-white shadow-sm'
+              : 'bg-white dark:bg-[#071e17] text-slate-600 dark:text-slate-300 border border-[#e2eae7] dark:border-[#133029] hover:bg-slate-50 dark:hover:bg-[#0d2a22]'
+          }`}
+        >
+          <Timer size={14} />
+          <span>Meeting & Offline Requests</span>
+        </button>
+      </div>
+
+      {attendanceSubTab === 'history' ? (
       <Card className="!p-4">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 mb-2.5">
           <h3 className="text-[14px] font-extrabold text-slate-900 dark:text-white tracking-tight shrink-0">
@@ -2727,6 +2910,27 @@ const Attendance = () => {
 
           {/* Filters & View Mode Tabs in Same Row */}
           <div className="flex flex-wrap items-center gap-2">
+            {/* Quick Period Buttons: Today | Week | Month */}
+            <div className="bg-slate-100 dark:bg-[#133029] p-0.5 rounded-xl border border-slate-200/80 dark:border-[#38352e] inline-flex items-center">
+              {['today', 'week', 'month'].map((p) => {
+                const isActive = statsPeriod === p;
+                return (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => handlePeriodChange(p)}
+                    className={`px-3 py-1 rounded-lg text-[11px] font-bold uppercase transition-all cursor-pointer ${
+                      isActive
+                        ? 'bg-[#00a76b] text-white shadow-xs'
+                        : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white'
+                    }`}
+                  >
+                    {p}
+                  </button>
+                );
+              })}
+            </div>
+
             {/* Status Filter */}
             <StatusFilterDropdown
               value={statusFilter}
@@ -2827,11 +3031,24 @@ const Attendance = () => {
                 const hasCheckedIn = !!rawIn && rawIn !== '--' && rawIn !== '--:--' && formatTime12h(rawIn) !== '--:--';
 
                 const isSessionRunning = !!(record.isRunning || record.isLiveActive || record.sessionStatus === 'active');
-                const rawOut = (isToday && isSessionRunning) ? null : ((record.clockOut && record.clockOut !== '--' && record.clockOut !== '--:--')
+                let rawOut = (isToday && isSessionRunning) ? null : ((record.clockOut && record.clockOut !== '--' && record.clockOut !== '--:--')
                   ? record.clockOut
                   : ((record.clock_out && record.clock_out !== '--' && record.clock_out !== '--:--')
                     ? record.clock_out
                     : record.checkOutTime));
+
+                // 🛡️ Historical Checkout Safeguard: Past day sessions cannot display next-day checkout or empty if checked in
+                if (!isToday && !isAbsentOrLeave && hasCheckedIn) {
+                  if (!rawOut || rawOut === '--' || rawOut === '--:--') {
+                    rawOut = '23:59';
+                  } else if (typeof rawOut === 'string' && (rawOut.includes('T') || rawOut.includes('-'))) {
+                    const outDateStr = rawOut.split('T')[0];
+                    const recDateStr = typeof record.date === 'string' ? record.date.split('T')[0] : '';
+                    if (recDateStr && outDateStr > recDateStr) {
+                      rawOut = '23:59';
+                    }
+                  }
+                }
                 const hasCheckedOutTime = !!rawOut && rawOut !== '--' && rawOut !== '--:--' && formatTime12h(rawOut) !== '--:--';
 
                 // Show override ONLY if the user was present, checked in, and has completed checkout today
@@ -2973,6 +3190,16 @@ const Attendance = () => {
           )}
         </div>
       </Card>
+      ) : (
+        <MeetingRequestsTable
+          userRole={userRole}
+          currentUserId={sessionStorage.getItem('userId')}
+          onStatusChanged={() => {
+            fetchLiveTimeStatus();
+            fetchAttendance();
+          }}
+        />
+      )}
 
       {/* View Holidays Drawer */}
       <ViewHolidaysDrawer
@@ -3038,7 +3265,7 @@ const Attendance = () => {
       <ExportFilterModal
         isOpen={showExportModal}
         onClose={() => setShowExportModal(false)}
-        title="Export Attendance Records (My Attendance)"
+        title="Export Attendance"
         subtitle="Filter attendance records and choose which columns to include in your export file."
         allData={baseAttendanceRecords}
         filteredData={filteredRecords}

@@ -15,6 +15,7 @@ const PendingApprovalQueue = ({ onAction, onCountsUpdate }) => {
   const [totalPages, setTotalPages] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
   const [searchTerm, setSearchTerm] = useState('');
+  const currentUserId = sessionStorage.getItem('userId') || '';
 
   const [requestFilter, setRequestFilter] = useState('pending');
   const [filterDropdownOpen, setFilterDropdownOpen] = useState(false);
@@ -110,7 +111,12 @@ const PendingApprovalQueue = ({ onAction, onCountsUpdate }) => {
   const confirmBulkApproveSubmit = async () => {
     try {
       setIsBulkApproving(true);
-      const res = await axios.put('/api/leaves/manager/bulk-approve', { ids: leaves.map(l => l._id) }, {
+      const eligibleLeaves = leaves.filter(l => String(l.user?._id || l.user || '') !== String(currentUserId));
+      if (!eligibleLeaves.length) {
+        toast.error('No subordinate leave requests available for bulk approval.');
+        return;
+      }
+      const res = await axios.put('/api/leaves/manager/bulk-approve', { ids: eligibleLeaves.map(l => l._id) }, {
         headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` }
       });
       toast.success(res.data.message || 'Bulk approval successful');
@@ -321,22 +327,28 @@ const PendingApprovalQueue = ({ onAction, onCountsUpdate }) => {
                   </td>
                   {(requestFilter === 'pending' || requestFilter === 'cancellation_pending') && (
                     <td className="py-2.5 text-right">
-                      <div className="flex justify-end gap-1.5">
-                        <button
-                          onClick={() => handleApprove(leave._id)}
-                          className="p-1.5 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 rounded-lg transition-colors cursor-pointer border-none bg-transparent"
-                          title="Approve"
-                        >
-                          <CheckCircle2 size={16} />
-                        </button>
-                        <button
-                          onClick={() => handleReject(leave._id)}
-                          className="p-1.5 hover:bg-red-50 dark:hover:bg-red-950/30 text-red-600 dark:text-red-400 rounded-lg transition-colors cursor-pointer border-none bg-transparent"
-                          title="Reject"
-                        >
-                          <XCircle size={16} />
-                        </button>
-                      </div>
+                      {currentUserId && String(leave.user?._id || leave.user || '') === String(currentUserId) ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-800/60">
+                          Awaiting HR/Admin
+                        </span>
+                      ) : (
+                        <div className="flex justify-end gap-1.5">
+                          <button
+                            onClick={() => handleApprove(leave._id)}
+                            className="p-1.5 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 rounded-lg transition-colors cursor-pointer border-none bg-transparent"
+                            title="Approve"
+                          >
+                            <CheckCircle2 size={16} />
+                          </button>
+                          <button
+                            onClick={() => handleReject(leave._id)}
+                            className="p-1.5 hover:bg-red-50 dark:hover:bg-red-950/30 text-red-600 dark:text-red-400 rounded-lg transition-colors cursor-pointer border-none bg-transparent"
+                            title="Reject"
+                          >
+                            <XCircle size={16} />
+                          </button>
+                        </div>
+                      )}
                     </td>
                   )}
                 </tr>

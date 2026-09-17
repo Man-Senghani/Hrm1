@@ -23,12 +23,15 @@ import {
   MapPin,
   Phone,
   FileText,
-  Download
+  Download,
+  Trash2
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
 import CustomDatePicker from '../../components/CustomDatePicker';
 import { compressImageAndConvertToBase64 } from '@shared/utils/imageCompressor';
+import EditableSelect from '@shared/components/EditableSelect';
+import { resolveRoleFromDesignation, getRoleAccessMetadata } from '@shared/utils/roleResolver';
 
 // ─── Premium Custom Dropdown ──────────────────────────────────────────────────
 const StyledSelect = ({ name, value, onChange, options, placeholder, required, error }) => {
@@ -146,6 +149,7 @@ const CreateUser = () => {
   const [errors, setErrors] = useState({});
 
   const defaultDepartments = [
+    'Admin',
     'Engineering',
     'Sales',
     'Marketing',
@@ -159,17 +163,115 @@ const CreateUser = () => {
     ? departments.map(d => typeof d === 'string' ? d : d.name).filter(Boolean)
     : defaultDepartments;
 
+  const defaultDesignations = [
+    'Admin',
+    'Software Engineer',
+    'Senior Software Engineer',
+    'Frontend Developer',
+    'Backend Developer',
+    'Full Stack Developer',
+    'UI/UX Designer',
+    'QA Tester',
+    'Product Manager',
+    'HR Executive',
+    'Support Staff',
+    'Operations Lead'
+  ];
+
+  const [designationList, setDesignationList] = useState(defaultDesignations);
+
+  const handleAddDepartment = async (name) => {
+    try {
+      const res = await axios.post('/api/departments', { name }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.data) {
+        setDepartments(prev => [...prev, res.data]);
+        toast.success(`Department "${name}" added`);
+      }
+    } catch {
+      setDepartments(prev => [...prev, { name }]);
+      toast.success(`Department "${name}" added`);
+    }
+  };
+
+  const handleEditDepartment = async (oldName, newName) => {
+    try {
+      const dept = departments.find(d => (typeof d === 'string' ? d : d.name) === oldName);
+      if (dept && dept._id) {
+        await axios.put(`/api/departments/${dept._id}`, { name: newName }, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+      }
+      setDepartments(prev => prev.map(d => {
+        if (typeof d === 'string') return d === oldName ? newName : d;
+        return d.name === oldName ? { ...d, name: newName } : d;
+      }));
+      toast.success(`Department updated to "${newName}"`);
+    } catch {
+      setDepartments(prev => prev.map(d => {
+        if (typeof d === 'string') return d === oldName ? newName : d;
+        return d.name === oldName ? { ...d, name: newName } : d;
+      }));
+    }
+  };
+
+  const handleDeleteDepartment = async (nameToDelete) => {
+    try {
+      const dept = departments.find(d => (typeof d === 'string' ? d : d.name) === nameToDelete);
+      if (dept && dept._id) {
+        await axios.delete(`/api/departments/${dept._id}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+      }
+      setDepartments(prev => prev.filter(d => (typeof d === 'string' ? d : d.name) !== nameToDelete));
+      toast.success(`Department "${nameToDelete}" deleted`);
+    } catch {
+      setDepartments(prev => prev.filter(d => (typeof d === 'string' ? d : d.name) !== nameToDelete));
+    }
+  };
+
+  const handleAddDesignation = async (name) => {
+    setDesignationList(prev => prev.includes(name) ? prev : [...prev, name]);
+    toast.success(`Designation "${name}" added`);
+  };
+
+  const handleEditDesignation = async (oldName, newName) => {
+    setDesignationList(prev => prev.map(d => d === oldName ? newName : d));
+    toast.success(`Designation updated to "${newName}"`);
+  };
+
+  const handleDeleteDesignation = async (nameToDelete) => {
+    setDesignationList(prev => prev.filter(d => d !== nameToDelete));
+    toast.success(`Designation "${nameToDelete}" deleted`);
+  };
+
+  const handleReorderDepartments = (newDeptNames) => {
+    setDepartments(prev => {
+      const existingMap = new Map();
+      prev.forEach(d => {
+        const name = typeof d === 'string' ? d : d.name;
+        existingMap.set(name, d);
+      });
+      return newDeptNames.map(name => existingMap.get(name) || { name });
+    });
+  };
+
+  const handleReorderDesignations = (newDesigNames) => {
+    setDesignationList(newDesigNames);
+  };
+
   const defaultRoles = [
-    { value: 'admin', label: '🛡️  System Admin' },
-    { value: 'hr', label: '🧑‍💼  HR Officer' },
-    { value: 'manager', label: '👔  Manager' },
-    { value: 'employee', label: '🧑‍💻  Employee' },
+    { value: 'admin', label: 'System Admin' },
+    { value: 'hr', label: 'HR Officer' },
+    { value: 'manager', label: 'Manager' },
+    { value: 'employee', label: 'Employee' },
   ];
 
   const roleOptions = systemRoles.length > 0
     ? systemRoles.map(r => ({
         value: r.roleKey,
-        label: `${r.icon ? r.icon + '  ' : ''}${r.label}`
+        label: r.label
       }))
     : defaultRoles;
 
@@ -253,6 +355,20 @@ const CreateUser = () => {
       fetchManagers();
       fetchDepartments();
       fetchSystemRoles();
+
+      const fetchExistingDesignations = async () => {
+        try {
+          const res = await axios.get('/api/personnel/all', {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          const list = Array.isArray(res.data) ? res.data : [];
+          const loaded = list.map(e => e.designation || e.position).filter(Boolean);
+          if (loaded.length > 0) {
+            setDesignationList(prev => Array.from(new Set([...prev, ...loaded])));
+          }
+        } catch {}
+      };
+      fetchExistingDesignations();
     }
   }, [formData.role, token]);
 
@@ -293,6 +409,30 @@ const CreateUser = () => {
       if (!passwordRegex.test(value)) {
         newErrors.password = 'Password must be minimum 8 characters, 1 special symbol, minimum 1 capital letter, and minimum 1 number.';
       }
+    }
+
+    if (name === 'department') {
+      const isDeptAdmin = value?.trim().toLowerCase() === 'admin';
+      const newDesignation = isDeptAdmin ? 'Admin' : formData.designation;
+      const autoRole = isDeptAdmin ? 'admin' : (newDesignation ? resolveRoleFromDesignation(newDesignation, formData.role) : formData.role);
+      if (isDeptAdmin && newErrors.designation) {
+        delete newErrors.designation;
+      }
+      setErrors(newErrors);
+      setFormData(prev => ({
+        ...prev,
+        department: value,
+        designation: newDesignation,
+        role: autoRole
+      }));
+      return;
+    }
+
+    if (name === 'designation') {
+      const autoRole = resolveRoleFromDesignation(value, formData.role);
+      setErrors(newErrors);
+      setFormData(prev => ({ ...prev, designation: value, role: autoRole }));
+      return;
     }
 
     setErrors(newErrors);
@@ -363,8 +503,8 @@ const CreateUser = () => {
         newErrors.password = 'Password must be minimum 8 characters, 1 special symbol, minimum 1 capital letter, and minimum 1 number.';
       }
     }
-    if (!formData.role) newErrors.role = 'System Role is required.';
     if (!formData.department) newErrors.department = 'Department is required.';
+    if (!formData.designation) newErrors.designation = 'Designation is required.';
     if (!formData.gender) newErrors.gender = 'Gender is required.';
     if (!formData.joinDate) newErrors.joinDate = 'Join Date is required.';
 
@@ -383,7 +523,7 @@ const CreateUser = () => {
       }
     }
 
-    if (!['hr', 'manager', 'admin'].includes(formData.role) && !formData.reportingManager) {
+    if (formData.role !== 'admin' && !formData.reportingManager) {
       newErrors.reportingManager = 'Reporting Manager is required.';
     }
     if (!formData.address) newErrors.address = 'Local Address is required.';
@@ -402,7 +542,9 @@ const CreateUser = () => {
         email: formData.email,
         personalEmail: formData.personalEmail,
         password: formData.password,
-        role: formData.role,
+        role: formData.role || 'employee',
+        employeeId: nextId || undefined,
+        employmentType: 'full-time',
         department: formData.department,
         designation: (formData.designation || '').trim(),
         phone: formData.phone,
@@ -411,7 +553,7 @@ const CreateUser = () => {
         permanentAddress: formData.permanentAddress,
         dob: formData.dob,
         joinDate: formData.joinDate,
-        reportingManager: formData.role === 'employee' ? formData.reportingManager : null
+        reportingManager: formData.role !== 'admin' ? formData.reportingManager : null
       };
 
       // 1. Create User Core
@@ -578,7 +720,9 @@ const CreateUser = () => {
               
               {/* Profile Picture */}
               <div className="relative group mb-4">
-                <div className="w-32 h-32 rounded-2xl bg-slate-100 dark:bg-[#221e19] border-2 border-dashed border-slate-200 dark:border-[#38352e] flex items-center justify-center overflow-hidden transition-all group-hover:border-[#00a76b]">
+                <div className={`w-32 h-32 rounded-2xl bg-slate-100 dark:bg-[#221e19] flex items-center justify-center overflow-hidden transition-all ${
+                  previewUrl ? 'border-none' : 'border-2 border-dashed border-slate-200 dark:border-[#38352e] group-hover:border-[#00a76b]'
+                }`}>
                   {previewUrl ? (
                     <img src={previewUrl} alt="Preview" className="w-full h-full object-cover" />
                   ) : (
@@ -611,13 +755,6 @@ const CreateUser = () => {
               {/* Real-Time Live Data Summary */}
               <div className="w-full mt-5 pt-5 border-t border-slate-100 dark:border-[#28241e] space-y-3 text-left">
                 <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 dark:text-slate-400 mb-2">Live Employee Card</p>
-
-                <div className="flex justify-between items-center text-xs">
-                  <span className="font-semibold text-slate-500 dark:text-slate-400">System Role</span>
-                  <span className="font-bold text-[#00a76b] uppercase bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-md text-[10px]">
-                    {formData.role || 'employee'}
-                  </span>
-                </div>
 
                 <div className="flex justify-between items-center text-xs">
                   <span className="font-semibold text-slate-500 dark:text-slate-400">Department</span>
@@ -669,7 +806,7 @@ const CreateUser = () => {
                   <span className="font-bold text-slate-800 dark:text-slate-200">{formatDDMMYYYY(formData.dob) || 'Not selected'}</span>
                 </div>
 
-                {!['hr', 'manager', 'admin'].includes(formData.role) && (
+                {formData.role !== 'admin' && (
                   <div className="flex justify-between items-center text-xs">
                     <span className="font-semibold text-slate-500 dark:text-slate-400">Manager</span>
                     <span className="font-bold text-slate-800 dark:text-slate-200 truncate max-w-[160px]">
@@ -862,46 +999,67 @@ const CreateUser = () => {
                 <h3 className="text-base font-bold text-slate-900 dark:text-white tracking-tight">Role & Organization Setup</h3>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                {/* Role */}
-                <div className="space-y-1.5">
-                  <label className="text-[11px] font-extrabold text-slate-600 dark:text-slate-300 uppercase tracking-wider">System Role <span className="text-red-500">*</span></label>
-                  <StyledSelect
-                    name="role"
-                    value={formData.role}
-                    onChange={handleChange}
-                    placeholder="Select Role"
-                    options={roleOptions}
-                  />
-                </div>
-
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {/* Department */}
                 <div className="space-y-1.5">
                   <label className="text-[11px] font-extrabold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Department <span className="text-red-500">*</span></label>
-                  <StyledSelect
+                  <EditableSelect
                     name="department"
                     value={formData.department}
                     onChange={handleChange}
-                    placeholder="Select Department"
+                    placeholder="Select or add Department"
+                    label="Department"
                     error={errors.department}
-                    options={departmentList.map(d => ({ value: d, label: d }))}
+                    options={departmentList}
+                    onAddOption={handleAddDepartment}
+                    onEditOption={handleEditDepartment}
+                    onDeleteOption={handleDeleteDepartment}
+                    onReorder={handleReorderDepartments}
                   />
                   {errors.department && <p className="text-red-500 text-[10px] font-semibold">{errors.department}</p>}
                 </div>
 
                 {/* Designation */}
                 <div className="space-y-1.5">
-                  <label className="text-[11px] font-extrabold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Designation</label>
-                  <input
-                    type="text"
+                  <label className="text-[11px] font-extrabold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Designation <span className="text-red-500">*</span></label>
+                  <EditableSelect
                     name="designation"
                     value={formData.designation}
                     onChange={handleChange}
-                    placeholder="e.g. Software Engineer"
-                    className="w-full h-11 px-3.5 bg-white dark:bg-[#1a1714] border border-slate-200 dark:border-[#38352e] rounded-xl text-xs font-semibold text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-[#00a76b] focus:ring-1 focus:ring-[#00a76b] transition-all"
+                    placeholder="Select or add Designation"
+                    label="Designation"
+                    error={errors.designation}
+                    options={designationList}
+                    onAddOption={handleAddDesignation}
+                    onEditOption={handleEditDesignation}
+                    onDeleteOption={handleDeleteDesignation}
+                    onReorder={handleReorderDesignations}
                   />
+                  {errors.designation && <p className="text-red-500 text-[10px] font-semibold">{errors.designation}</p>}
                 </div>
+              </div>
 
+              {/* Portal Access Auto-Resolution Indicator */}
+              {formData.designation && (
+                (() => {
+                  const accessMeta = getRoleAccessMetadata(formData.role);
+                  return (
+                    <div className={`flex flex-wrap items-center justify-between gap-2 px-3.5 py-2.5 rounded-xl border text-xs font-semibold ${accessMeta.badgeBg} ${accessMeta.border}`}>
+                      <div className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-current shrink-0" />
+                        <span className={accessMeta.badgeText}>
+                          Assigned Portal Access: <strong className="uppercase font-bold tracking-wide">{accessMeta.label}</strong>
+                        </span>
+                      </div>
+                      <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+                        {accessMeta.subtext}
+                      </span>
+                    </div>
+                  );
+                })()
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 {/* Gender */}
                 <div className="space-y-1.5">
                   <label className="text-[11px] font-extrabold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Gender <span className="text-red-500">*</span></label>
@@ -911,9 +1069,9 @@ const CreateUser = () => {
                     onChange={handleChange}
                     placeholder="Select Gender"
                     options={[
-                      { value: 'Male', label: '♂  Male' },
-                      { value: 'Female', label: '♀  Female' },
-                      { value: 'Other', label: '⚧  Other' },
+                      { value: 'Male', label: 'Male' },
+                      { value: 'Female', label: 'Female' },
+                      { value: 'Other', label: 'Other' },
                     ]}
                   />
                 </div>
@@ -933,33 +1091,37 @@ const CreateUser = () => {
                 {/* Birth Date */}
                 <div className="space-y-1.5">
                   <label className="text-[11px] font-extrabold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Date of Birth <span className="text-red-500">*</span></label>
-                  <input
-                    required type="date" name="dob" value={formData.dob} onChange={handleChange} max={maxDobDate}
-                    autoComplete="off"
-                    className="w-full h-11 px-3.5 bg-white dark:bg-[#1a1714] border border-slate-200 dark:border-[#38352e] rounded-xl text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-[#00a76b] focus:ring-1 focus:ring-[#00a76b]"
+                  <CustomDatePicker
+                    name="dob"
+                    value={formData.dob}
+                    onChange={handleChange}
+                    maxDate={maxDobDate}
+                    placeholder="Select date of birth"
                   />
                   {errors.dob && <p className="text-red-500 text-[10px] font-semibold">{errors.dob}</p>}
                 </div>
-
-                {/* Reporting Manager */}
-                {!['hr', 'manager', 'admin'].includes(formData.role) && (
-                  <div className="space-y-1.5">
-                    <label className="text-[11px] font-extrabold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Reporting Manager <span className="text-red-500">*</span></label>
-                    <StyledSelect
-                      name="reportingManager"
-                      value={formData.reportingManager}
-                      onChange={handleChange}
-                      placeholder="Select Manager"
-                      error={errors.reportingManager}
-                      options={[
-                        ...managers
-                          .filter(m => ['manager', 'admin'].includes(m.role?.toLowerCase()))
-                          .map(m => ({ value: m._id, label: `${m.name || m.fullName} (${m.role?.toUpperCase()})` }))
-                      ]}
-                    />
-                  </div>
-                )}
               </div>
+
+              {/* Reporting Manager */}
+              {formData.role !== 'admin' && (
+                <div className="space-y-1.5 max-w-md">
+                  <label className="text-[11px] font-extrabold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Reporting Manager <span className="text-red-500">*</span></label>
+                  <StyledSelect
+                    name="reportingManager"
+                    value={formData.reportingManager}
+                    onChange={handleChange}
+                    placeholder="Select Manager"
+                    error={errors.reportingManager}
+                    options={[
+                      ...managers.map(m => ({
+                        value: m._id,
+                        label: `${m.name || m.fullName} (${(m.role || 'Manager').toUpperCase()})`
+                      }))
+                    ]}
+                  />
+                  {errors.reportingManager && <p className="text-red-500 text-[10px] font-semibold">{errors.reportingManager}</p>}
+                </div>
+              )}
 
               {/* Residential Addresses */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
@@ -1005,7 +1167,7 @@ const CreateUser = () => {
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 {/* Adharcard */}
-                <div className={`p-4 rounded-xl border border-dashed transition-all flex flex-col justify-between ${adharFile ? 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-400' : 'bg-slate-50/50 dark:bg-[#1a1714] border-slate-200 dark:border-[#38352e]'}`}>
+                <div className={`p-3.5 sm:p-4 rounded-xl border border-dashed transition-all flex flex-col justify-between ${adharFile ? 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-400' : 'bg-slate-50/50 dark:bg-[#1a1714] border-slate-200 dark:border-[#38352e]'}`}>
                   <div 
                     onClick={() => adharFile && handlePreviewDoc('Adharcard', adharFile)}
                     className={`flex items-center gap-3 mb-3 ${adharFile ? 'cursor-pointer group' : ''}`}
@@ -1019,26 +1181,44 @@ const CreateUser = () => {
                       <p className="text-[10px] text-slate-400 font-semibold">{adharFile ? (adharFile.type === 'application/pdf' || adharFile.name?.toLowerCase().endsWith('.pdf') ? 'PDF Attached' : 'Attached') : ''}</p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    {adharFile && (
-                      <button
-                        type="button"
-                        onClick={() => handlePreviewDoc('Adharcard', adharFile)}
-                        className="h-9 px-3 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg transition-colors flex items-center justify-center gap-1 shrink-0 cursor-pointer shadow-xs"
-                        title="View Document"
-                      >
-                        <Eye size={14} /> View
-                      </button>
+                  <div className="w-full">
+                    {adharFile ? (
+                      <div className="grid grid-cols-3 gap-1.5 w-full">
+                        <button
+                          type="button"
+                          onClick={() => handlePreviewDoc('Adharcard', adharFile)}
+                          className="h-8 px-1 text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors flex items-center justify-center gap-1 cursor-pointer shadow-xs whitespace-nowrap"
+                          title="View Document"
+                        >
+                          <Eye size={12} className="shrink-0" />
+                          <span>View</span>
+                        </button>
+                        <label className="h-8 px-1 text-[11px] font-bold bg-slate-900 hover:bg-[#00a76b] dark:bg-[#25201b] dark:hover:bg-[#00a76b] text-white font-bold rounded-lg cursor-pointer flex items-center justify-center gap-1 transition-colors shadow-xs whitespace-nowrap" title="Change Document">
+                          <RefreshCw size={11} className="shrink-0" />
+                          <span>Change</span>
+                          <input type="file" className="hidden" accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf" onChange={(e) => handleDocumentChange(e, setAdharFile, 'Adharcard')} />
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => { setAdharFile(null); toast.success('Adharcard removed'); }}
+                          className="h-8 px-1 text-[11px] font-bold bg-rose-600 hover:bg-rose-700 text-white rounded-lg transition-colors flex items-center justify-center gap-1 cursor-pointer shadow-xs whitespace-nowrap"
+                          title="Delete Document"
+                        >
+                          <Trash2 size={12} className="shrink-0" />
+                          <span>Delete</span>
+                        </button>
+                      </div>
+                    ) : (
+                      <label className="h-8 text-[11px] sm:text-xs bg-slate-900 hover:bg-[#00a76b] dark:bg-[#25201b] dark:hover:bg-[#00a76b] text-white font-bold rounded-lg cursor-pointer flex items-center justify-center gap-1.5 transition-colors w-full shadow-xs">
+                        <Plus size={13} /> Upload File
+                        <input type="file" className="hidden" accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf" onChange={(e) => handleDocumentChange(e, setAdharFile, 'Adharcard')} />
+                      </label>
                     )}
-                    <label className="h-9 text-xs bg-slate-900 hover:bg-[#00a76b] dark:bg-[#25201b] dark:hover:bg-[#00a76b] text-white font-bold rounded-lg cursor-pointer flex items-center justify-center transition-colors w-full">
-                      {adharFile ? 'Change File' : 'Upload File'}
-                      <input type="file" className="hidden" accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf" onChange={(e) => handleDocumentChange(e, setAdharFile, 'Adharcard')} />
-                    </label>
                   </div>
                 </div>
 
                 {/* Bank Details */}
-                <div className={`p-4 rounded-xl border border-dashed transition-all flex flex-col justify-between ${bankFile ? 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-400' : 'bg-slate-50/50 dark:bg-[#1a1714] border-slate-200 dark:border-[#38352e]'}`}>
+                <div className={`p-3.5 sm:p-4 rounded-xl border border-dashed transition-all flex flex-col justify-between ${bankFile ? 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-400' : 'bg-slate-50/50 dark:bg-[#1a1714] border-slate-200 dark:border-[#38352e]'}`}>
                   <div 
                     onClick={() => bankFile && handlePreviewDoc('Bank Details', bankFile)}
                     className={`flex items-center gap-3 mb-3 ${bankFile ? 'cursor-pointer group' : ''}`}
@@ -1052,26 +1232,44 @@ const CreateUser = () => {
                       <p className="text-[10px] text-slate-400 font-semibold">{bankFile ? (bankFile.type === 'application/pdf' || bankFile.name?.toLowerCase().endsWith('.pdf') ? 'PDF Attached' : 'Attached') : ''}</p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    {bankFile && (
-                      <button
-                        type="button"
-                        onClick={() => handlePreviewDoc('Bank Details', bankFile)}
-                        className="h-9 px-3 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg transition-colors flex items-center justify-center gap-1 shrink-0 cursor-pointer shadow-xs"
-                        title="View Document"
-                      >
-                        <Eye size={14} /> View
-                      </button>
+                  <div className="w-full">
+                    {bankFile ? (
+                      <div className="grid grid-cols-3 gap-1.5 w-full">
+                        <button
+                          type="button"
+                          onClick={() => handlePreviewDoc('Bank Details', bankFile)}
+                          className="h-8 px-1 text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors flex items-center justify-center gap-1 cursor-pointer shadow-xs whitespace-nowrap"
+                          title="View Document"
+                        >
+                          <Eye size={12} className="shrink-0" />
+                          <span>View</span>
+                        </button>
+                        <label className="h-8 px-1 text-[11px] font-bold bg-slate-900 hover:bg-[#00a76b] dark:bg-[#25201b] dark:hover:bg-[#00a76b] text-white font-bold rounded-lg cursor-pointer flex items-center justify-center gap-1 transition-colors shadow-xs whitespace-nowrap" title="Change Document">
+                          <RefreshCw size={11} className="shrink-0" />
+                          <span>Change</span>
+                          <input type="file" className="hidden" accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf" onChange={(e) => handleDocumentChange(e, setBankFile, 'Bank Details')} />
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => { setBankFile(null); toast.success('Bank Details removed'); }}
+                          className="h-8 px-1 text-[11px] font-bold bg-rose-600 hover:bg-rose-700 text-white rounded-lg transition-colors flex items-center justify-center gap-1 cursor-pointer shadow-xs whitespace-nowrap"
+                          title="Delete Document"
+                        >
+                          <Trash2 size={12} className="shrink-0" />
+                          <span>Delete</span>
+                        </button>
+                      </div>
+                    ) : (
+                      <label className="h-8 text-[11px] sm:text-xs bg-slate-900 hover:bg-[#00a76b] dark:bg-[#25201b] dark:hover:bg-[#00a76b] text-white font-bold rounded-lg cursor-pointer flex items-center justify-center gap-1.5 transition-colors w-full shadow-xs">
+                        <Plus size={13} /> Upload File
+                        <input type="file" className="hidden" accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf" onChange={(e) => handleDocumentChange(e, setBankFile, 'Bank Details')} />
+                      </label>
                     )}
-                    <label className="h-9 text-xs bg-slate-900 hover:bg-[#00a76b] dark:bg-[#25201b] dark:hover:bg-[#00a76b] text-white font-bold rounded-lg cursor-pointer flex items-center justify-center transition-colors w-full">
-                      {bankFile ? 'Change File' : 'Upload File'}
-                      <input type="file" className="hidden" accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf" onChange={(e) => handleDocumentChange(e, setBankFile, 'Bank Details')} />
-                    </label>
                   </div>
                 </div>
 
                 {/* PAN Card */}
-                <div className={`p-4 rounded-xl border border-dashed transition-all flex flex-col justify-between ${panFile ? 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-400' : 'bg-slate-50/50 dark:bg-[#1a1714] border-slate-200 dark:border-[#38352e]'}`}>
+                <div className={`p-3.5 sm:p-4 rounded-xl border border-dashed transition-all flex flex-col justify-between ${panFile ? 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-400' : 'bg-slate-50/50 dark:bg-[#1a1714] border-slate-200 dark:border-[#38352e]'}`}>
                   <div 
                     onClick={() => panFile && handlePreviewDoc('PAN Card', panFile)}
                     className={`flex items-center gap-3 mb-3 ${panFile ? 'cursor-pointer group' : ''}`}
@@ -1085,21 +1283,39 @@ const CreateUser = () => {
                       <p className="text-[10px] text-slate-400 font-semibold">{panFile ? (panFile.type === 'application/pdf' || panFile.name?.toLowerCase().endsWith('.pdf') ? 'PDF Attached' : 'Attached') : ''}</p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    {panFile && (
-                      <button
-                        type="button"
-                        onClick={() => handlePreviewDoc('PAN Card', panFile)}
-                        className="h-9 px-3 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg transition-colors flex items-center justify-center gap-1 shrink-0 cursor-pointer shadow-xs"
-                        title="View Document"
-                      >
-                        <Eye size={14} /> View
-                      </button>
+                  <div className="w-full">
+                    {panFile ? (
+                      <div className="grid grid-cols-3 gap-1.5 w-full">
+                        <button
+                          type="button"
+                          onClick={() => handlePreviewDoc('PAN Card', panFile)}
+                          className="h-8 px-1 text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors flex items-center justify-center gap-1 cursor-pointer shadow-xs whitespace-nowrap"
+                          title="View Document"
+                        >
+                          <Eye size={12} className="shrink-0" />
+                          <span>View</span>
+                        </button>
+                        <label className="h-8 px-1 text-[11px] font-bold bg-slate-900 hover:bg-[#00a76b] dark:bg-[#25201b] dark:hover:bg-[#00a76b] text-white font-bold rounded-lg cursor-pointer flex items-center justify-center gap-1 transition-colors shadow-xs whitespace-nowrap" title="Change Document">
+                          <RefreshCw size={11} className="shrink-0" />
+                          <span>Change</span>
+                          <input type="file" className="hidden" accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf" onChange={(e) => handleDocumentChange(e, setPanFile, 'PAN Card')} />
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => { setPanFile(null); toast.success('PAN Card removed'); }}
+                          className="h-8 px-1 text-[11px] font-bold bg-rose-600 hover:bg-rose-700 text-white rounded-lg transition-colors flex items-center justify-center gap-1 cursor-pointer shadow-xs whitespace-nowrap"
+                          title="Delete Document"
+                        >
+                          <Trash2 size={12} className="shrink-0" />
+                          <span>Delete</span>
+                        </button>
+                      </div>
+                    ) : (
+                      <label className="h-8 text-[11px] sm:text-xs bg-slate-900 hover:bg-[#00a76b] dark:bg-[#25201b] dark:hover:bg-[#00a76b] text-white font-bold rounded-lg cursor-pointer flex items-center justify-center gap-1.5 transition-colors w-full shadow-xs">
+                        <Plus size={13} /> Upload File
+                        <input type="file" className="hidden" accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf" onChange={(e) => handleDocumentChange(e, setPanFile, 'PAN Card')} />
+                      </label>
                     )}
-                    <label className="h-9 text-xs bg-slate-900 hover:bg-[#00a76b] dark:bg-[#25201b] dark:hover:bg-[#00a76b] text-white font-bold rounded-lg cursor-pointer flex items-center justify-center transition-colors w-full">
-                      {panFile ? 'Change File' : 'Upload File'}
-                      <input type="file" className="hidden" accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf" onChange={(e) => handleDocumentChange(e, setPanFile, 'PAN Card')} />
-                    </label>
                   </div>
                 </div>
               </div>

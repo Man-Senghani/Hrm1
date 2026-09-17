@@ -421,10 +421,10 @@ const HREmployees = () => {
         <div className="flex items-center gap-3">
           <button
             onClick={() => setShowExportModal(true)}
-            className="verdant-btn-outline h-10 px-5 flex items-center gap-2 text-sm font-semibold rounded-full border border-gray-200 dark:border-[#1a2d29] bg-white dark:bg-[#111c18] hover:bg-gray-50 dark:hover:bg-[#162722] text-[#374151] dark:text-[#cbd5e1] transition-all shadow-sm cursor-pointer"
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all shadow-sm cursor-pointer"
           >
-            <Download size={15} />
-            <span>Export</span>
+            <Download size={14} />
+            Export CSV
           </button>
           <button
             onClick={() => navigate('/create-user')}

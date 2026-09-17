@@ -361,13 +361,48 @@ exports.getEmployeesByManager = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
+// Helper to resolve employee by ID, User ID, employeeId, or sanitized ID
+const findEmployeeByIdOrUser = async (id) => {
+  if (!id) return null;
+  const rawId = id.toString();
+  const sanitizedId = rawId.replace(/l/g, 'f');
+  let employee = null;
+
+  if (mongoose.Types.ObjectId.isValid(rawId)) {
+    employee = await Employee.findById(rawId);
+    if (!employee) {
+      employee = await Employee.findOne({ userId: rawId });
+    }
+  }
+
+  if (!employee && mongoose.Types.ObjectId.isValid(sanitizedId)) {
+    employee = await Employee.findById(sanitizedId);
+    if (!employee) {
+      employee = await Employee.findOne({ userId: sanitizedId });
+    }
+  }
+
+  if (!employee) {
+    employee = await Employee.findOne({ employeeId: rawId });
+  }
+
+  if (!employee && rawId.length >= 10) {
+    const prefix = rawId.substring(0, 10);
+    if (/^[0-9a-fA-F]+$/.test(prefix)) {
+      employee = await Employee.findOne({ _id: { $regex: new RegExp(`^${prefix}`) } });
+    }
+  }
+
+  return employee;
+};
+
 // POST /api/employees/:id/profile-image
 exports.updateEmployeeProfileImage = async (req, res) => {
   try {
     const { image } = req.body;
     if (!image) return res.status(400).json({ message: 'No image provided' });
 
-    const employee = await Employee.findById(req.params.id);
+    const employee = await findEmployeeByIdOrUser(req.params.id);
     if (!employee) return res.status(404).json({ message: 'Employee not found' });
 
     const { saveBase64Image } = require('../utils/fileUpload');
@@ -381,7 +416,9 @@ exports.updateEmployeeProfileImage = async (req, res) => {
     await employee.save();
 
     // Update User
-    await User.findByIdAndUpdate(employee.userId, { profileImage: imagePath });
+    if (employee.userId) {
+      await User.findByIdAndUpdate(employee.userId, { profileImage: imagePath });
+    }
 
     res.json(employee);
   } catch (error) {
@@ -395,11 +432,11 @@ exports.updateEmployeeDocument = async (req, res, field) => {
     const { document } = req.body;
     if (!document) return res.status(400).json({ message: 'No document provided' });
 
-    const employee = await Employee.findById(req.params.id);
+    const employee = await findEmployeeByIdOrUser(req.params.id);
     if (!employee) return res.status(404).json({ message: 'Employee not found' });
 
     // Ensure an employee can only upload their own document
-    if (req.user.role === 'employee' && employee.userId.toString() !== req.user.id) {
+    if (req.user && req.user.role === 'employee' && employee.userId && employee.userId.toString() !== req.user.id) {
       return res.status(403).json({ message: 'Not authorized to modify this document' });
     }
 
@@ -414,6 +451,42 @@ exports.updateEmployeeDocument = async (req, res, field) => {
     await employee.save();
 
     res.json(employee);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// DELETE /api/employees/:id/:docType
+exports.deleteEmployeeDocument = async (req, res, field) => {
+  try {
+    const employee = await findEmployeeByIdOrUser(req.params.id);
+    if (!employee) return res.status(404).json({ message: 'Employee not found' });
+
+    // Ensure an employee can only delete their own document
+    if (req.user && req.user.role === 'employee' && employee.userId && employee.userId.toString() !== req.user.id) {
+      return res.status(403).json({ message: 'Not authorized to modify this document' });
+    }
+
+    const oldPath = employee[field];
+    employee[field] = '';
+    await employee.save();
+
+    // Clean up physical file on disk if stored locally
+    if (oldPath && typeof oldPath === 'string' && !oldPath.startsWith('http')) {
+      try {
+        const fs = require('fs');
+        const path = require('path');
+        const relative = oldPath.startsWith('/') ? oldPath.slice(1) : oldPath;
+        const fullPath = path.join(__dirname, '..', relative);
+        if (fs.existsSync(fullPath)) {
+          fs.unlinkSync(fullPath);
+        }
+      } catch (fileErr) {
+        console.warn('Could not delete physical document file:', fileErr.message);
+      }
+    }
+
+    res.json({ message: `${field} deleted successfully`, employee });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
