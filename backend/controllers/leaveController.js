@@ -82,7 +82,35 @@ const updateLeaveBalanceForUser = async (userId, date) => {
   return balance;
 };
 
-const wrapEmailInTemplate = (contentHtml, titleText) => {
+const getAppBaseUrl = (req) => {
+  const envUrl = process.env.FRONTEND_URL || process.env.CLIENT_URL || process.env.APP_URL || process.env.RENDER_EXTERNAL_URL;
+  if (envUrl) return envUrl.replace(/\/+$/, '');
+
+  if (req) {
+    const origin = req.get('origin') || req.get('referer');
+    if (origin) {
+      try {
+        const parsed = new URL(origin);
+        return parsed.origin;
+      } catch (e) {}
+    }
+    const host = req.get('host');
+    if (host) {
+      const protocol = req.protocol || 'http';
+      return `${protocol}://${host}`;
+    }
+  }
+
+  if (process.env.NODE_ENV === 'production') {
+    return 'https://hrm1-1-zli1.onrender.com';
+  }
+
+  const port = process.env.PORT || 5000;
+  return `http://localhost:${port}`;
+};
+
+const wrapEmailInTemplate = (contentHtml, titleText, targetUrl) => {
+  const ctaUrl = targetUrl || getAppBaseUrl();
   return `
     <!DOCTYPE html>
     <html>
@@ -194,12 +222,12 @@ const wrapEmailInTemplate = (contentHtml, titleText) => {
           <div class="content">
             ${contentHtml}
             <div class="cta-container">
-              <a href="http://192.168.1.210:4000" class="cta-button">Go to Dashboard</a>
+              <a href="${ctaUrl}" class="cta-button">Go to Dashboard</a>
             </div>
           </div>
           <div class="footer">
             <p>Sent by FluidHR Workforce OS. All access logged.</p>
-            <p>Visit our website at <a href="http://192.168.1.210:4000">fluidhr.workforce.os</a></p>
+            <p>Visit our website at <a href="${ctaUrl}">${ctaUrl}</a></p>
           </div>
         </div>
       </div>
@@ -239,7 +267,14 @@ const createInAppAndEmailNotification = async (req, { userId, title, message, ty
 
     const targetUser = await User.findById(userId);
     if (targetUser && targetUser.email) {
-      const finalHtml = wrapEmailInTemplate(emailHtml || `<p>${message}</p>`, subject || title);
+      const baseUrl = getAppBaseUrl(req);
+      let targetDashboardUrl = baseUrl;
+      if (targetUser.role === 'admin') targetDashboardUrl += '/admin';
+      else if (targetUser.role === 'hr') targetDashboardUrl += '/hr';
+      else if (targetUser.role === 'manager') targetDashboardUrl += '/manager';
+      else if (targetUser.role === 'employee') targetDashboardUrl += '/employee';
+
+      const finalHtml = wrapEmailInTemplate(emailHtml || `<p>${message}</p>`, subject || title, targetDashboardUrl);
       await sendEmail({
         email: targetUser.email,
         subject: subject || title,
@@ -254,6 +289,36 @@ const createInAppAndEmailNotification = async (req, { userId, title, message, ty
   }
 };
 
+const getReportingManagerUserId = async (userDoc) => {
+  if (!userDoc) return null;
+  try {
+    const Employee = require('../models/Employee');
+    const User = require('../models/User');
+
+    let rawManagerId = userDoc.reportingManager;
+    if (!rawManagerId) {
+      const empDoc = await Employee.findOne({ userId: userDoc._id || userDoc.id });
+      if (empDoc) {
+        rawManagerId = empDoc.reportingManager || empDoc.managerId;
+      }
+    }
+
+    if (!rawManagerId) return null;
+
+    let targetUser = await User.findById(rawManagerId);
+    if (targetUser) return targetUser._id;
+
+    const managerEmpDoc = await Employee.findById(rawManagerId);
+    if (managerEmpDoc && managerEmpDoc.userId) {
+      targetUser = await User.findById(managerEmpDoc.userId);
+      if (targetUser) return targetUser._id;
+    }
+  } catch (err) {
+    console.error('Error resolving reporting manager user ID:', err);
+  }
+  return null;
+};
+
 const checkUserLeaveBalance = async (userId, leaveTypeInput, daysRequested, excludeLeaveId = null) => {
   const lType = (leaveTypeInput || '').toLowerCase().trim();
 
@@ -264,7 +329,9 @@ const checkUserLeaveBalance = async (userId, leaveTypeInput, daysRequested, excl
     emergency: 5,
     compOff: 3,
     optionalHoliday: 1,
-    otherLeaves: 1
+    otherLeaves: 1,
+    maternity: 180,
+    paternity: 15
   };
 
   try {
@@ -276,6 +343,8 @@ const checkUserLeaveBalance = async (userId, leaveTypeInput, daysRequested, excl
       else if (type.includes('casual')) quotas.casual = p.annualAllowance || quotas.casual;
       else if (type.includes('earned') || type.includes('annual')) quotas.earned = p.annualAllowance || quotas.earned;
       else if (type.includes('emergency')) quotas.emergency = p.annualAllowance || quotas.emergency;
+      else if (type.includes('maternity')) quotas.maternity = p.annualAllowance || quotas.maternity;
+      else if (type.includes('paternity')) quotas.paternity = p.annualAllowance || quotas.paternity;
       else if (type.includes('comp')) quotas.compOff = p.annualAllowance || quotas.compOff;
       else if (type.includes('optional')) quotas.optionalHoliday = p.annualAllowance || quotas.optionalHoliday;
     });
@@ -291,6 +360,8 @@ const checkUserLeaveBalance = async (userId, leaveTypeInput, daysRequested, excl
   if (lType.includes('sick') || lType === 'sl') { catKey = 'sick'; categoryName = 'Sick Leave'; }
   else if (lType.includes('earned') || lType.includes('annual') || lType === 'el') { catKey = 'earned'; categoryName = 'Earned Leave'; }
   else if (lType.includes('emergency') || lType === 'eml') { catKey = 'emergency'; categoryName = 'Emergency Leave'; }
+  else if (lType.includes('maternity') || lType === 'ml') { catKey = 'maternity'; categoryName = 'Maternity Leave'; }
+  else if (lType.includes('paternity') || lType === 'pl') { catKey = 'paternity'; categoryName = 'Paternity Leave'; }
   else if (lType.includes('comp') || lType === 'co') { catKey = 'compOff'; categoryName = 'Compensatory Off'; }
   else if (lType.includes('optional') || lType === 'oh') { catKey = 'optionalHoliday'; categoryName = 'Optional Holiday'; }
   else if (lType.includes('casual') || lType === 'cl') { catKey = 'casual'; categoryName = 'Casual Leave'; }
@@ -306,6 +377,8 @@ const checkUserLeaveBalance = async (userId, leaveTypeInput, daysRequested, excl
       else if (catKey === 'sick' && balance.sickLeave !== undefined) directBalanceVal = balance.sickLeave;
       else if (catKey === 'earned' && balance.earnedLeave !== undefined) directBalanceVal = balance.earnedLeave;
       else if (catKey === 'emergency' && balance.emergencyLeave !== undefined) directBalanceVal = balance.emergencyLeave;
+      else if (catKey === 'maternity' && balance.maternityLeave !== undefined) directBalanceVal = balance.maternityLeave;
+      else if (catKey === 'paternity' && balance.paternityLeave !== undefined) directBalanceVal = balance.paternityLeave;
       else if (catKey === 'compOff' && balance.compOff !== undefined) directBalanceVal = balance.compOff;
       else if (catKey === 'optionalHoliday' && balance.otherLeaves !== undefined) directBalanceVal = balance.otherLeaves;
     }
@@ -322,6 +395,8 @@ const checkUserLeaveBalance = async (userId, leaveTypeInput, daysRequested, excl
     if (catKey === 'sick') return lt.includes('sick') || lt === 'sl';
     if (catKey === 'earned') return lt.includes('earned') || lt.includes('annual') || lt === 'el';
     if (catKey === 'emergency') return lt.includes('emergency') || lt === 'eml';
+    if (catKey === 'maternity') return lt.includes('maternity') || lt === 'ml';
+    if (catKey === 'paternity') return lt.includes('paternity') || lt === 'pl';
     if (catKey === 'compOff') return lt.includes('comp') || lt === 'co';
     if (catKey === 'optionalHoliday') return lt.includes('optional') || lt === 'oh';
     return lt.includes('casual') || lt === 'cl';
@@ -376,6 +451,34 @@ exports.applyLeave = async (req, res) => {
       return res.status(400).json({ message: 'Cannot apply for leave for dates that have already passed.' });
     }
 
+    // 🛡️ OVERLAP CHECK: Ensure user does not already have an active leave for the selected dates
+    const reqStart = new Date(startDate);
+    reqStart.setHours(0, 0, 0, 0);
+
+    const reqEnd = new Date(endDate || startDate);
+    reqEnd.setHours(23, 59, 59, 999);
+
+    const activeStatuses = ['pending', 'manager_approved', 'hr_approved', 'approved', 'cancellation_pending'];
+    const existingLeaves = await Leave.find({
+      user: req.user.id,
+      status: { $in: activeStatuses }
+    });
+
+    const hasOverlap = existingLeaves.some(l => {
+      const lStart = new Date(l.startDate);
+      lStart.setHours(0, 0, 0, 0);
+      const lEnd = new Date(l.endDate || l.startDate);
+      lEnd.setHours(23, 59, 59, 999);
+
+      return lStart <= reqEnd && lEnd >= reqStart;
+    });
+
+    if (hasOverlap) {
+      return res.status(400).json({
+        message: 'You have already applied for leave on the selected date(s). Overlapping leave requests are not allowed.'
+      });
+    }
+
     const employee = await User.findById(req.user.id);
     if (!employee) return res.status(404).json({ message: 'User not found' });
 
@@ -387,9 +490,11 @@ exports.applyLeave = async (req, res) => {
       });
     }
 
+    const managerUserId = await getReportingManagerUserId(employee);
+
     const leave = await Leave.create({
       user: req.user.id,
-      managerId: employee.reportingManager,
+      managerId: managerUserId,
       leaveType: leaveType.toLowerCase(),
       startDate,
       endDate,
@@ -445,10 +550,10 @@ exports.applyLeave = async (req, res) => {
         });
       }
     } else {
-      // 2. If an Employee/HR is requesting leave, notify their Reporting Manager
-      if (employee.reportingManager) {
+      // 2. If an Employee is requesting leave, notify their Reporting Manager
+      if (managerUserId) {
         await createInAppAndEmailNotification(req, {
-          userId: employee.reportingManager,
+          userId: managerUserId,
           title: 'New Leave Request',
           message: notificationMessage,
           type: 'leave_created',
@@ -813,9 +918,10 @@ exports.cancelLeave = async (req, res) => {
     const formattedEnd = new Date(leave.endDate).toLocaleDateString('en-GB');
     const message = `${employee.name} has cancelled their pending leave request from ${formattedStart} to ${formattedEnd}.`;
 
-    if (employee.reportingManager) {
+    const managerUserId = await getReportingManagerUserId(employee);
+    if (managerUserId) {
       await createInAppAndEmailNotification(req, {
-        userId: employee.reportingManager,
+        userId: managerUserId,
         title: 'Leave Request Cancelled',
         message,
         type: 'leave_cancelled',
@@ -881,6 +987,36 @@ exports.updateLeave = async (req, res) => {
       return res.status(400).json({ message: 'Start date cannot be later than end date.' });
     }
 
+    if (startDate || endDate) {
+      const targetStart = new Date(startDate || leave.startDate);
+      targetStart.setHours(0, 0, 0, 0);
+
+      const targetEnd = new Date(endDate || leave.endDate || targetStart);
+      targetEnd.setHours(23, 59, 59, 999);
+
+      const activeStatuses = ['pending', 'manager_approved', 'hr_approved', 'approved', 'cancellation_pending'];
+      const existingLeaves = await Leave.find({
+        _id: { $ne: leave._id },
+        user: leave.user,
+        status: { $in: activeStatuses }
+      });
+
+      const hasOverlap = existingLeaves.some(l => {
+        const lStart = new Date(l.startDate);
+        lStart.setHours(0, 0, 0, 0);
+        const lEnd = new Date(l.endDate || l.startDate);
+        lEnd.setHours(23, 59, 59, 999);
+
+        return lStart <= targetEnd && lEnd >= targetStart;
+      });
+
+      if (hasOverlap) {
+        return res.status(400).json({
+          message: 'You have already applied for leave on the selected date(s). Overlapping leave requests are not allowed.'
+        });
+      }
+    }
+
     if (leaveType) leave.leaveType = leaveType;
     if (startDate) leave.startDate = startDate;
     if (endDate) leave.endDate = endDate;
@@ -931,12 +1067,12 @@ exports.getMyLeaveQuotas = async (req, res) => {
     const LeavePolicy = require('../models/LeavePolicy');
 
     let quotas = {
-      sick: 10,
-      earned: 20,
-      casual: 12,
-      emergency: 5,
-      compOff: 3,
-      optionalHoliday: 1,
+      sick: 0,
+      earned: 0,
+      casual: 0,
+      emergency: 0,
+      compOff: 0,
+      optionalHoliday: 0,
       otherLeaves: 0
     };
 
@@ -951,6 +1087,36 @@ exports.getMyLeaveQuotas = async (req, res) => {
         else if (type.includes('comp') && p.annualAllowance > 0) quotas.compOff = p.annualAllowance;
         else if (type.includes('optional') && p.annualAllowance > 0) quotas.optionalHoliday = p.annualAllowance;
       });
+    } catch (err) { }
+
+    try {
+      const userId = req.user?._id || req.user?.id;
+      if (userId) {
+        const now = new Date();
+        const month = now.getMonth() + 1;
+        const year = now.getFullYear();
+
+        const Employee = require('../models/Employee');
+        let userObjId = userId;
+        const empDoc = await Employee.findById(userId);
+        if (empDoc && empDoc.userId) {
+          userObjId = empDoc.userId;
+        }
+
+        let userBalance = await LeaveBalance.findOne({ employeeId: userObjId, month, year });
+        if (!userBalance) {
+          userBalance = await LeaveBalance.findOne({ employeeId: userObjId }).sort({ year: -1, month: -1 });
+        }
+
+        if (userBalance) {
+          if (userBalance.casualLeave !== undefined && userBalance.casualLeave > 0) quotas.casual = userBalance.casualLeave;
+          if (userBalance.sickLeave !== undefined && userBalance.sickLeave > 0) quotas.sick = userBalance.sickLeave;
+          if (userBalance.earnedLeave !== undefined && userBalance.earnedLeave > 0) quotas.earned = userBalance.earnedLeave;
+          if (userBalance.emergencyLeave !== undefined && userBalance.emergencyLeave > 0) quotas.emergency = userBalance.emergencyLeave;
+          if (userBalance.compOff !== undefined && userBalance.compOff > 0) quotas.compOff = userBalance.compOff;
+          if (userBalance.otherLeaves !== undefined && userBalance.otherLeaves > 0) quotas.optionalHoliday = userBalance.otherLeaves;
+        }
+      }
     } catch (err) { }
 
     Object.keys(quotas).forEach(k => {
@@ -1564,14 +1730,27 @@ exports.allocateLeave = async (req, res) => {
     const LeaveAllocationHistory = require('../models/LeaveAllocationHistory');
 
     let targetUserIds = [];
-    if (userId === 'managers') {
+    const Employee = require('../models/Employee');
+
+    if (userId === 'all') {
+      const allUsers = await User.find({ role: { $in: ['employee', 'manager', 'hr', 'admin'] } });
+      targetUserIds = allUsers.map(u => u._id);
+    } else if (userId === 'managers') {
       const managers = await User.find({ role: 'manager' });
       targetUserIds = managers.map(u => u._id);
     } else if (userId === 'employees') {
       const employees = await User.find({ role: 'employee' });
       targetUserIds = employees.map(u => u._id);
+    } else if (userId === 'hr') {
+      const hrs = await User.find({ role: 'hr' });
+      targetUserIds = hrs.map(u => u._id);
     } else {
-      targetUserIds = [userId];
+      const empDoc = await Employee.findById(userId);
+      if (empDoc && empDoc.userId) {
+        targetUserIds = [empDoc.userId];
+      } else {
+        targetUserIds = [userId];
+      }
     }
 
     if (targetUserIds.length === 0) {
@@ -1591,12 +1770,12 @@ exports.allocateLeave = async (req, res) => {
     const year = now.getFullYear();
 
     const defaultBase = {
-      casualLeave: 12,
-      sickLeave: 10,
-      earnedLeave: 20,
-      emergencyLeave: 5,
-      compOff: 3,
-      otherLeaves: 1
+      casualLeave: 0,
+      sickLeave: 0,
+      earnedLeave: 0,
+      emergencyLeave: 0,
+      compOff: 0,
+      otherLeaves: 0
     };
 
     const promises = targetUserIds.map(async (targetId) => {
@@ -1786,9 +1965,10 @@ exports.requestLeaveCancellation = async (req, res) => {
     const formattedEnd = new Date(leave.endDate).toLocaleDateString('en-GB');
     const message = `${employee.name} has requested cancellation for their approved leave from ${formattedStart} to ${formattedEnd}.`;
 
-    if (employee.reportingManager) {
+    const managerUserId = await getReportingManagerUserId(employee);
+    if (managerUserId) {
       await createInAppAndEmailNotification(req, {
-        userId: employee.reportingManager,
+        userId: managerUserId,
         title: 'Leave Cancellation Requested',
         message,
         type: 'leave_cancellation_requested',
@@ -1992,11 +2172,11 @@ exports.getTeamLeaveBalances = async (req, res) => {
       return {
         _id: emp._id,
         user: emp,
-        earnedLeave: b?.earnedLeave ?? 1.5,
-        sickLeave: b?.sickLeave ?? 10,
-        casualLeave: b?.casualLeave ?? 12,
-        compOff: b?.compOff ?? 3,
-        otherLeaves: b?.otherLeaves ?? 1,
+        earnedLeave: b?.earnedLeave ?? 0,
+        sickLeave: b?.sickLeave ?? 0,
+        casualLeave: b?.casualLeave ?? 0,
+        compOff: b?.compOff ?? 0,
+        otherLeaves: b?.otherLeaves ?? 0,
         usedLeave: b?.usedLeave ?? 0
       };
     }));

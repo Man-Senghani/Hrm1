@@ -92,9 +92,20 @@ const AllocateLeaveModal = ({ isOpen, onClose, onSuccess }) => {
   };
 
   const employeeOptions = [
+    { value: 'all', label: 'All Staff (Everyone)' },
     { value: 'employees', label: 'All Employees' },
     { value: 'managers', label: 'All Managers' },
-    ...employees.map(emp => ({ value: emp._id, label: emp.name || emp.email }))
+    { value: 'hr', label: 'All HR' },
+    ...employees
+      .filter(emp => {
+        const empRole = (emp.role || emp.userId?.role || '').toLowerCase();
+        return empRole !== 'employee';
+      })
+      .map(emp => {
+        const uId = emp.userId?._id || emp.userId || emp._id;
+        const uName = emp.userId?.name || emp.fullName || emp.name || emp.email;
+        return { value: uId, label: uName };
+      })
   ];
 
   return createPortal(
@@ -126,10 +137,10 @@ const AllocateLeaveModal = ({ isOpen, onClose, onSuccess }) => {
                   options={[
                     { value: 'casual', label: 'Casual Leave' },
                     { value: 'sick', label: 'Sick Leave' },
-                    { value: 'earned', label: 'Earned Leave' },
-                    { value: 'emergency', label: 'Emergency Leave' },
-                    { value: 'compOff', label: 'Comp Off' },
-                    { value: 'optional', label: 'Optional Holiday' }
+                    // { value: 'earned', label: 'Earned Leave' },
+                    // { value: 'emergency', label: 'Emergency Leave' },
+                    // { value: 'maternity', label: 'Maternity Leave' },
+                    // { value: 'paternity', label: 'Paternity Leave' }
                   ]}
                 />
               </div>

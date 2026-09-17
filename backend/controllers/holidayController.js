@@ -2,8 +2,11 @@ const Holiday = require('../models/Holiday');
 
 exports.getHolidays = async (req, res) => {
   try {
+    const count = await Holiday.countDocuments({});
+    if (count === 0) {
+      await performBulkImport();
+    }
     const query = {};
-    // If not requesting all holidays explicitly, or if the requester is not an admin/hr, filter active ones
     const isHrOrAdmin = req.user && (req.user.role === 'hr' || req.user.role === 'admin');
     if (req.query.all !== 'true' && !isHrOrAdmin) {
       query.isActive = { $ne: false };
@@ -60,88 +63,126 @@ const safeFetchJson = async (url) => {
 };
 
 const FALLBACK_HOLIDAYS = [
+  // 2025
+  { localName: "Republic Day", date: "2025-01-26", type: "public" },
+  { localName: "Maha Shivratri", date: "2025-02-26", type: "public" },
+  { localName: "Holi", date: "2025-03-14", type: "public" },
+  { localName: "Good Friday", date: "2025-04-18", type: "public" },
+  { localName: "Ambedkar Jayanti", date: "2025-04-14", type: "public" },
+  { localName: "Bakrid / Eid al-Adha", date: "2025-06-07", type: "public" },
+  { localName: "Muharram", date: "2025-07-06", type: "public" },
+  { localName: "Independence Day", date: "2025-08-15", type: "public" },
+  { localName: "Raksha Bandhan", date: "2025-08-09", type: "public" },
+  { localName: "Janmashtami", date: "2025-08-16", type: "public" },
+  { localName: "Ganesh Chaturthi", date: "2025-08-27", type: "public" },
+  { localName: "Gandhi Jayanti", date: "2025-10-02", type: "public" },
+  { localName: "Dussehra", date: "2025-10-02", type: "public" },
+  { localName: "Diwali", date: "2025-10-20", type: "public" },
+  { localName: "Guru Nanak Jayanti", date: "2025-11-05", type: "public" },
+  { localName: "Christmas Day", date: "2025-12-25", type: "public" },
+
   // 2026
-  { localName: "Republic Day", date: "2026-01-26" },
-  { localName: "Maha Shivratri", date: "2026-02-15" },
-  { localName: "Holi", date: "2026-03-04" },
-  { localName: "Good Friday", date: "2026-04-03" },
-  { localName: "Ambedkar Jayanti", date: "2026-04-14" },
-  { localName: "Ram Navami", date: "2026-04-16" },
-  { localName: "Mahavir Jayanti", date: "2026-04-30" },
-  { localName: "Bakrid / Eid al-Adha", date: "2026-05-27" },
-  { localName: "Muharram", date: "2026-06-26" },
-  { localName: "Independence Day", date: "2026-08-15" },
-  { localName: "Raksha Bandhan", date: "2026-08-28" },
-  { localName: "Janmashtami", date: "2026-09-04" },
-  { localName: "Ganesh Chaturthi", date: "2026-09-14" },
-  { localName: "Milad-un-Nabi", date: "2026-09-15" },
-  { localName: "Gandhi Jayanti", date: "2026-10-02" },
-  { localName: "Dussehra", date: "2026-10-20" },
-  { localName: "Diwali", date: "2026-11-08" },
-  { localName: "Guru Nanak Jayanti", date: "2026-11-24" },
-  { localName: "Christmas Day", date: "2026-12-25" },
+  { localName: "Republic Day", date: "2026-01-26", type: "public" },
+  { localName: "Maha Shivratri", date: "2026-02-15", type: "public" },
+  { localName: "Holi", date: "2026-03-04", type: "public" },
+  { localName: "Good Friday", date: "2026-04-03", type: "public" },
+  { localName: "Ambedkar Jayanti", date: "2026-04-14", type: "public" },
+  { localName: "Ram Navami", date: "2026-04-16", type: "public" },
+  { localName: "Mahavir Jayanti", date: "2026-04-30", type: "public" },
+  { localName: "Bakrid / Eid al-Adha", date: "2026-05-27", type: "public" },
+  { localName: "Muharram", date: "2026-06-26", type: "public" },
+  { localName: "Independence Day", date: "2026-08-15", type: "public" },
+  { localName: "Raksha Bandhan", date: "2026-08-28", type: "public" },
+  { localName: "Janmashtami", date: "2026-09-04", type: "public" },
+  { localName: "Ganesh Chaturthi", date: "2026-09-14", type: "public" },
+  { localName: "Milad-un-Nabi", date: "2026-09-15", type: "public" },
+  { localName: "Gandhi Jayanti", date: "2026-10-02", type: "public" },
+  { localName: "Dussehra", date: "2026-10-20", type: "public" },
+  { localName: "Diwali", date: "2026-11-08", type: "public" },
+  { localName: "Guru Nanak Jayanti", date: "2026-11-24", type: "public" },
+  { localName: "Christmas Day", date: "2026-12-25", type: "public" },
 
   // 2027
-  { localName: "Republic Day", date: "2027-01-26" },
-  { localName: "Maha Shivratri", date: "2027-03-06" },
-  { localName: "Holi", date: "2027-03-22" },
-  { localName: "Good Friday", date: "2027-03-26" },
-  { localName: "Ambedkar Jayanti", date: "2027-04-14" },
-  { localName: "Ram Navami", date: "2027-04-15" },
-  { localName: "Bakrid / Eid al-Adha", date: "2027-05-17" },
-  { localName: "Independence Day", date: "2027-08-15" },
-  { localName: "Raksha Bandhan", date: "2027-08-17" },
-  { localName: "Janmashtami", date: "2027-08-25" },
-  { localName: "Ganesh Chaturthi", date: "2027-09-04" },
-  { localName: "Gandhi Jayanti", date: "2027-10-02" },
-  { localName: "Dussehra", date: "2027-10-09" },
-  { localName: "Diwali", date: "2027-10-29" },
-  { localName: "Christmas Day", date: "2027-12-25" }
+  { localName: "Republic Day", date: "2027-01-26", type: "public" },
+  { localName: "Maha Shivratri", date: "2027-03-06", type: "public" },
+  { localName: "Holi", date: "2027-03-22", type: "public" },
+  { localName: "Good Friday", date: "2027-03-26", type: "public" },
+  { localName: "Ambedkar Jayanti", date: "2027-04-14", type: "public" },
+  { localName: "Ram Navami", date: "2027-04-15", type: "public" },
+  { localName: "Bakrid / Eid al-Adha", date: "2027-05-17", type: "public" },
+  { localName: "Independence Day", date: "2027-08-15", type: "public" },
+  { localName: "Raksha Bandhan", date: "2027-08-17", type: "public" },
+  { localName: "Janmashtami", date: "2027-08-25", type: "public" },
+  { localName: "Ganesh Chaturthi", date: "2027-09-04", type: "public" },
+  { localName: "Gandhi Jayanti", date: "2027-10-02", type: "public" },
+  { localName: "Dussehra", date: "2027-10-09", type: "public" },
+  { localName: "Diwali", date: "2027-10-29", type: "public" },
+  { localName: "Christmas Day", date: "2027-12-25", type: "public" },
+
+  // 2028
+  { localName: "Republic Day", date: "2028-01-26", type: "public" },
+  { localName: "Maha Shivratri", date: "2028-02-24", type: "public" },
+  { localName: "Holi", date: "2028-03-11", type: "public" },
+  { localName: "Good Friday", date: "2028-04-14", type: "public" },
+  { localName: "Ambedkar Jayanti", date: "2028-04-14", type: "public" },
+  { localName: "Bakrid / Eid al-Adha", date: "2028-05-05", type: "public" },
+  { localName: "Independence Day", date: "2028-08-15", type: "public" },
+  { localName: "Raksha Bandhan", date: "2028-08-05", type: "public" },
+  { localName: "Janmashtami", date: "2028-08-13", type: "public" },
+  { localName: "Ganesh Chaturthi", date: "2028-08-24", type: "public" },
+  { localName: "Dussehra", date: "2028-09-28", type: "public" },
+  { localName: "Gandhi Jayanti", date: "2028-10-02", type: "public" },
+  { localName: "Diwali", date: "2028-10-17", type: "public" },
+  { localName: "Guru Nanak Jayanti", date: "2028-11-01", type: "public" },
+  { localName: "Christmas Day", date: "2028-12-25", type: "public" }
 ];
 
 const performBulkImport = async () => {
   try {
-    const currentYear = new Date().getFullYear();
-    const nextYear = currentYear + 1;
+    const yearsToImport = [2025, 2026, 2027, 2028];
+    let rawHolidays = [];
 
-    const [resThisYear, resNextYear] = await Promise.all([
-      safeFetchJson(`https://date.nager.at/api/v3/PublicHolidays/${currentYear}/IN`),
-      safeFetchJson(`https://date.nager.at/api/v3/PublicHolidays/${nextYear}/IN`)
-    ]);
+    for (const yr of yearsToImport) {
+      const yearData = await safeFetchJson(`https://date.nager.at/api/v3/PublicHolidays/${yr}/IN`);
+      if (Array.isArray(yearData) && yearData.length > 0) {
+        rawHolidays.push(...yearData);
+      }
+    }
 
-    let rawHolidays = [...resThisYear, ...resNextYear];
-    if (rawHolidays.length === 0) {
-      console.log('Using static holiday fallbacks due to API unreachable/offline state');
-      rawHolidays = FALLBACK_HOLIDAYS;
+    const combined = [...rawHolidays];
+    for (const fb of FALLBACK_HOLIDAYS) {
+      const fbDateStr = fb.date;
+      const existsInRaw = combined.some(r => r.date === fbDateStr || (r.date && r.date.startsWith(fbDateStr)));
+      if (!existsInRaw) {
+        combined.push(fb);
+      }
     }
 
     let importedCount = 0;
-    for (const h of rawHolidays) {
-      // Normalize date to compare start of day
+    for (const h of combined) {
       const searchDate = new Date(h.date);
+      if (isNaN(searchDate.getTime())) continue;
       searchDate.setHours(0,0,0,0);
       const nextDay = new Date(searchDate);
       nextDay.setDate(nextDay.getDate() + 1);
 
+      const holidayName = h.localName || h.name;
       const existing = await Holiday.findOne({
-        $or: [
-          { date: { $gte: searchDate, $lt: nextDay } },
-          { name: { $regex: new RegExp(`^${h.localName || h.name}$`, 'i') } }
-        ]
+        date: { $gte: searchDate, $lt: nextDay }
       });
 
       if (!existing) {
         const holiday = new Holiday({
-          name: h.localName || h.name,
+          name: holidayName,
           date: new Date(h.date),
           type: 'public',
-          description: 'Imported from Public Holiday Calendar'
+          description: 'Public Holiday'
         });
         await holiday.save();
         importedCount++;
       }
     }
-    console.log(`[CRON] Successfully imported ${importedCount} holidays from Google Public Calendar!`);
+    console.log(`[CRON] Successfully imported/updated ${importedCount} holidays!`);
     return importedCount;
   } catch (error) {
     console.error('Import failed:', error);
@@ -154,8 +195,9 @@ exports.performBulkImport = performBulkImport;
 exports.bulkImportHolidays = async (req, res) => {
   try {
     const importedCount = await performBulkImport();
-    res.status(200).json({ message: `Successfully imported ${importedCount} holidays from Google Public Calendar!` });
+    res.status(200).json({ message: `Successfully imported ${importedCount} holidays!` });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 };
+

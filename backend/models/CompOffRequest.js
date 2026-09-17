@@ -14,6 +14,16 @@ const compOffRequestSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+  isFullDay: {
+    type: Boolean,
+    default: true
+  },
+  fromTime: {
+    type: String
+  },
+  toTime: {
+    type: String
+  },
   status: {
     type: String,
     enum: ['pending', 'approved', 'rejected'],

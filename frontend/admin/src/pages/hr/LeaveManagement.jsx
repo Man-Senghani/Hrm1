@@ -76,33 +76,62 @@ const Leaves = () => {
   const triggerRefresh = () => setRefreshTrigger(prev => prev + 1);
 
   const scrollToRequests = (filterType) => {
-    setRequestFilter(filterType);
+    if (filterType === 'on_leave_today') {
+      const todayStr = new Date().toISOString().split('T')[0];
+      setFilterStartDate(todayStr);
+      setFilterEndDate(todayStr);
+      setRequestFilter('approved');
+    } else {
+      setFilterStartDate('');
+      setFilterEndDate('');
+      setRequestFilter(filterType);
+    }
     if (leaveRequestsRef.current) {
       leaveRequestsRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   };
 
-  const handleApproveLeave = async (id) => {
+  const handleApproveLeave = async (id, leaveItem) => {
     try {
-      await axios.put(`/api/leaves/hr-approve/${id}`, {}, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      toast.success('Leave request approved successfully');
+      if (leaveItem?.isCompOff) {
+        await axios.put(`/api/comp-off/${id}/status`, { status: 'approved' }, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+      } else if (leaveItem?.isOnDuty) {
+        await axios.put(`/api/on-duty/${id}/status`, { status: 'approved' }, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+      } else {
+        await axios.put(`/api/leaves/hr-approve/${id}`, {}, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+      }
+      toast.success('Request approved successfully');
       triggerRefresh();
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to approve leave');
+      toast.error(err.response?.data?.message || 'Failed to approve request');
     }
   };
 
-  const handleRejectLeave = async (id) => {
+  const handleRejectLeave = async (id, leaveItem) => {
     try {
-      await axios.put(`/api/leaves/reject/${id}`, {}, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      toast.success('Leave request rejected successfully');
+      if (leaveItem?.isCompOff) {
+        await axios.put(`/api/comp-off/${id}/status`, { status: 'rejected' }, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+      } else if (leaveItem?.isOnDuty) {
+        await axios.put(`/api/on-duty/${id}/status`, { status: 'rejected' }, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+      } else {
+        await axios.put(`/api/leaves/reject/${id}`, {}, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+      }
+      toast.success('Request rejected successfully');
       triggerRefresh();
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to reject leave');
+      toast.error(err.response?.data?.message || 'Failed to reject request');
     }
   };
 
@@ -180,8 +209,14 @@ const Leaves = () => {
   });
 
   // Counts and filters for the request filter tabs
+  const todayStr = new Date().toISOString().split('T')[0];
   const countAll = dateFilteredLeaves.length;
   const countPending = dateFilteredLeaves.filter(l => l.status?.toLowerCase() === 'pending' || l.status?.toLowerCase() === 'cancellation_pending').length;
+  const countUpcoming = dateFilteredLeaves.filter(l => {
+    const sDate = l.startDate ? l.startDate.split('T')[0] : (l.createdAt ? l.createdAt.split('T')[0] : '');
+    const status = l.status?.toLowerCase();
+    return sDate >= todayStr && status !== 'rejected' && status !== 'cancelled';
+  }).length;
   const countApproved = dateFilteredLeaves.filter(l => l.status?.toLowerCase() === 'approved').length;
   const countCancellation = dateFilteredLeaves.filter(l => l.status?.toLowerCase() === 'cancellation_pending').length;
   const countRejected = dateFilteredLeaves.filter(l => l.status?.toLowerCase() === 'rejected').length;
@@ -192,6 +227,11 @@ const Leaves = () => {
     if (requestFilter === 'pending') {
       return l.status?.toLowerCase() === 'pending' || l.status?.toLowerCase() === 'cancellation_pending';
     }
+    if (requestFilter === 'upcoming') {
+      const sDate = l.startDate ? l.startDate.split('T')[0] : (l.createdAt ? l.createdAt.split('T')[0] : '');
+      const status = l.status?.toLowerCase();
+      return sDate >= todayStr && status !== 'rejected' && status !== 'cancelled';
+    }
     return l.status?.toLowerCase() === requestFilter;
   });
 
@@ -200,19 +240,59 @@ const Leaves = () => {
     const fetchData = async () => {
       try {
         const endpoint = role === 'admin' ? '/api/leaves' : '/api/leaves/hr';
-        const [leavesRes, statsRes] = await Promise.all([
+        const [leavesRes, statsRes, compOffRes, onDutyRes] = await Promise.all([
           axios.get(endpoint, { headers: { Authorization: `Bearer ${token}` } }),
-          axios.get('/api/hr-dashboard/summary', { headers: { Authorization: `Bearer ${token}` } })
+          axios.get('/api/hr-dashboard/summary', { headers: { Authorization: `Bearer ${token}` } }),
+          axios.get('/api/comp-off/all', { headers: { Authorization: `Bearer ${token}` } }).catch(() => ({ data: [] })),
+          axios.get('/api/on-duty/all', { headers: { Authorization: `Bearer ${token}` } }).catch(() => ({ data: [] }))
         ]);
         let leavesData = leavesRes.data || [];
+
+        const compOffItems = (compOffRes.data || []).map(co => ({
+          _id: co._id,
+          user: co.employeeId || { name: 'Unknown' },
+          leaveType: 'comp-off',
+          startDate: co.dateWorked || co.createdAt,
+          endDate: co.dateWorked || co.createdAt,
+          isFullDay: co.isFullDay,
+          fromTime: co.fromTime,
+          toTime: co.toTime,
+          totalDays: co.isFullDay !== false ? 1 : 0.5,
+          reason: co.reason || 'Comp-Off Request',
+          status: co.status,
+          createdAt: co.createdAt,
+          isCompOff: true
+        }));
+
+        const onDutyItems = (onDutyRes.data || []).map(od => ({
+          _id: od._id,
+          user: od.employeeId || { name: 'Unknown' },
+          leaveType: 'on-duty',
+          startDate: od.startDate || od.createdAt,
+          endDate: od.endDate || od.startDate || od.createdAt,
+          isFullDay: od.isFullDay,
+          fromTime: od.fromTime,
+          toTime: od.toTime,
+          totalDays: od.isFullDay !== false ? 1 : 0.5,
+          reason: od.reason ? `${od.reason}${od.location ? ` (${od.location})` : ''}` : 'On-Duty Request',
+          status: od.status,
+          createdAt: od.createdAt,
+          isOnDuty: true
+        }));
+
+        let combinedLeaves = [...leavesData, ...compOffItems, ...onDutyItems];
+
+        // Filter out orphaned records where user account was deleted
+        combinedLeaves = combinedLeaves.filter(l => l.user && typeof l.user === 'object' && (l.user._id || l.user.id) && l.user.name && l.user.name !== 'Unknown');
+
         if (role === 'hr' && user) {
           const currentUserId = String(user._id || user.id || '');
-          leavesData = leavesData.filter(l => {
+          combinedLeaves = combinedLeaves.filter(l => {
             const leaveUserId = String(l.user?._id || l.user?.id || l.user || l.employeeId || '');
             return leaveUserId !== currentUserId;
           });
         }
-        setLeaves(leavesData);
+        setLeaves(combinedLeaves);
         if (statsRes.data && statsRes.data.data) {
           setStats(statsRes.data.data.stats);
         }
@@ -293,7 +373,7 @@ const Leaves = () => {
                 setViewMode('employee');
                 setTimeout(() => window.dispatchEvent(new CustomEvent('open-leave-modal', { detail: 'apply-leave' })), 100);
               }}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg text-xs font-bold flex items-center gap-2 shadow-md transition-colors whitespace-nowrap cursor-pointer"
+              className="bg-[#00a76b] hover:bg-[#008f5b] text-white px-5 py-2.5 rounded-lg text-xs font-bold flex items-center gap-2 shadow-md transition-colors whitespace-nowrap cursor-pointer"
             >
               <Plus size={16} /> Apply for Leave
             </button>
@@ -310,9 +390,9 @@ const Leaves = () => {
             {[
               { label: 'Total Leave Requests', val: totalRequests, sub: 'This Month', icon: CheckSquare, color: 'text-indigo-600 dark:text-indigo-400', bg: 'bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-100 dark:border-indigo-900/40', borderColor: '#6366f1', glowColor: 'rgba(99, 102, 241, 0.35)', filter: 'all' },
               { label: 'Pending Approvals', val: pendingRequests, sub: 'Requests', icon: Clock, color: 'text-purple-600 dark:text-purple-400', bg: 'bg-purple-50 dark:bg-purple-950/60 border border-purple-100 dark:border-purple-900/40', borderColor: '#a855f7', glowColor: 'rgba(168, 85, 247, 0.35)', filter: 'pending' },
-              { label: 'Employees On Leave', val: stats?.employeesOnLeave || 0, sub: 'Today', icon: Users, color: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50 dark:bg-amber-950/60 border border-amber-100 dark:border-amber-900/40', borderColor: '#f59e0b', glowColor: 'rgba(245, 158, 11, 0.35)' },
+              { label: 'Employees On Leave', val: stats?.employeesOnLeave || 0, sub: 'Today', icon: Users, color: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50 dark:bg-amber-950/60 border border-amber-100 dark:border-amber-900/40', borderColor: '#f59e0b', glowColor: 'rgba(245, 158, 11, 0.35)', filter: 'on_leave_today' },
               { label: 'Employees Present Today', val: stats?.employeesPresent !== undefined ? stats.employeesPresent : 0, sub: 'Present', icon: CheckCircle2, color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-100 dark:border-emerald-900/40', borderColor: '#10b981', glowColor: 'rgba(16, 185, 129, 0.35)' },
-              { label: 'Upcoming Holidays', val: stats?.upcomingHolidays || 0, sub: 'In 30 Days', icon: Calendar, color: 'text-pink-600 dark:text-pink-400', bg: 'bg-pink-50 dark:bg-pink-950/60 border border-pink-100 dark:border-pink-900/40', borderColor: '#ec4899', glowColor: 'rgba(236, 72, 153, 0.35)' }
+              { label: 'Upcoming Holidays', val: stats?.upcomingHolidays || 0, sub: 'In 30 Days', icon: Calendar, color: 'text-pink-600 dark:text-pink-400', bg: 'bg-pink-50 dark:bg-pink-950/60 border border-pink-100 dark:border-pink-900/40', borderColor: '#ec4899', glowColor: 'rgba(236, 72, 153, 0.35)', filter: 'upcoming' }
             ].map((stat, i) => {
               const isClickable = !!stat.filter;
               const isHovered = hoveredTeamCardIndex === i;
@@ -350,7 +430,7 @@ const Leaves = () => {
           </div>
 
           {/* 3. Employee Leave Requests (Full Width 100% - Row 2) */}
-          <div ref={leaveRequestsRef} className="w-full bg-white dark:bg-[#1e293b] border border-gray-100 dark:border-gray-800 rounded-2xl shadow-sm p-6 flex flex-col justify-between mb-8 overflow-hidden transition-all duration-200 hover:border-emerald-500 h-auto">
+          <div ref={leaveRequestsRef} className="w-full bg-white dark:bg-[#1e293b] border border-gray-100 dark:border-gray-800 rounded-2xl shadow-sm p-6 flex flex-col justify-between mb-8 transition-all duration-200 hover:border-emerald-500 min-h-[360px] h-auto relative z-10">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
               <div>
                 <h3 className="text-lg font-bold text-gray-900 dark:text-white">Employee Leave Requests</h3>
@@ -393,6 +473,7 @@ const Leaves = () => {
                   >
                     {requestFilter === 'all' && `All (${countAll})`}
                     {requestFilter === 'pending' && `Pending (${countPending})`}
+                    {requestFilter === 'upcoming' && `Upcoming (${countUpcoming})`}
                     {requestFilter === 'approved' && `Approved (${countApproved})`}
                     {requestFilter === 'cancellation_pending' && `Cancellation Requested (${countCancellation})`}
                     {requestFilter === 'rejected' && `Rejected (${countRejected})`}
@@ -403,10 +484,11 @@ const Leaves = () => {
                   {filterDropdownOpen && (
                     <>
                       <div className="fixed inset-0 z-40" onClick={() => setFilterDropdownOpen(false)} />
-                      <div className="absolute right-0 mt-1 w-48 bg-white dark:bg-[#1e293b] border border-gray-150 dark:border-gray-800 rounded-xl shadow-xl z-50 py-1 overflow-hidden animate-in fade-in slide-in-from-top-1 duration-150">
+                      <div className="absolute right-0 mt-1 w-52 bg-white dark:bg-[#1e293b] border border-gray-200 dark:border-gray-700 rounded-xl shadow-2xl z-50 py-1 overflow-hidden animate-in fade-in slide-in-from-top-1 duration-150">
                         {[
                           { value: 'all', label: 'All', count: countAll },
                           { value: 'pending', label: 'Pending', count: countPending },
+                          { value: 'upcoming', label: 'Upcoming', count: countUpcoming },
                           { value: 'approved', label: 'Approved', count: countApproved },
                           { value: 'cancellation_pending', label: 'Cancellation Requested', count: countCancellation },
                           { value: 'rejected', label: 'Rejected', count: countRejected },
@@ -428,7 +510,15 @@ const Leaves = () => {
             </div>
 
             {filteredLeaves.length === 0 ? (
-              <div className="flex-1 flex items-center justify-center text-gray-500 font-medium py-12">No leave requests found.</div>
+              <div className="flex-1 flex flex-col items-center justify-center py-12 text-center my-auto">
+                <div className="w-12 h-12 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-100 dark:border-emerald-900/60 flex items-center justify-center mb-3 shadow-xs">
+                  <CheckCircle2 size={24} className="text-emerald-600 dark:text-emerald-400" />
+                </div>
+                <h4 className="text-sm font-bold text-gray-900 dark:text-white">No Leave Requests Found</h4>
+                <p className="text-xs text-gray-400 dark:text-gray-500 mt-1 max-w-xs font-medium">
+                  There are currently no employee leave applications matching your selected status filter.
+                </p>
+              </div>
             ) : (
               <>
                 <div className="overflow-x-auto overflow-y-hidden flex-1">
@@ -475,6 +565,11 @@ const Leaves = () => {
                             </td>
                             <td className="py-2 font-bold text-gray-900 dark:text-white">
                               {leave.totalDays || 0} day(s)
+                              {leave.fromTime && leave.toTime && (
+                                <span className="block text-[10px] font-normal text-emerald-600 dark:text-emerald-400">
+                                  {leave.fromTime} - {leave.toTime}
+                                </span>
+                              )}
                             </td>
                             <td className="py-2 text-gray-500 dark:text-gray-400 font-medium max-w-[150px] truncate" title={leave.reason}>
                               {leave.reason || '-'}
@@ -488,14 +583,14 @@ const Leaves = () => {
                               <td className="py-2 text-right">
                                 <div className="flex justify-end gap-1.5">
                                   <button
-                                    onClick={(e) => { e.stopPropagation(); handleRejectLeave(leave._id); }}
+                                    onClick={(e) => { e.stopPropagation(); handleRejectLeave(leave._id, leave); }}
                                     className="p-1.5 hover:bg-red-50 dark:hover:bg-red-950/30 text-red-600 dark:text-red-400 rounded-lg transition-colors cursor-pointer border-none bg-transparent"
                                     title="Reject"
                                   >
                                     <XCircle size={16} />
                                   </button>
                                   <button
-                                    onClick={(e) => { e.stopPropagation(); handleApproveLeave(leave._id); }}
+                                    onClick={(e) => { e.stopPropagation(); handleApproveLeave(leave._id, leave); }}
                                     className="p-1.5 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 rounded-lg transition-colors cursor-pointer border-none bg-transparent"
                                     title="Approve"
                                   >
@@ -541,14 +636,11 @@ const Leaves = () => {
           {/* 4. Quick Actions Row - Row 3 */}
           <div className="mb-8">
             <h3 className="text-sm font-bold text-gray-900 dark:text-white mb-4 ml-1">Quick Actions</h3>
-            <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-7 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-4 gap-3">
               {[
                 { label: 'Create Policy', icon: FileText, color: 'text-purple-600 dark:text-purple-400', borderColor: '#8b5cf6', glowColor: 'rgba(139, 92, 246, 0.45)', bgIcon: 'bg-purple-50 dark:bg-purple-950/50 border border-purple-100 dark:border-purple-900/40', onClick: () => setActiveModal('createPolicy') },
                 { label: 'Allocate Leave', icon: ArrowRight, color: 'text-emerald-600 dark:text-emerald-400', borderColor: '#10b981', glowColor: 'rgba(16, 185, 129, 0.45)', bgIcon: 'bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-100 dark:border-emerald-900/40', onClick: () => setActiveModal('allocateLeave') },
-                { label: 'On Duty Requests', icon: Briefcase, color: 'text-blue-600 dark:text-blue-400', borderColor: '#3b82f6', glowColor: 'rgba(59, 130, 246, 0.45)', bgIcon: 'bg-blue-50 dark:bg-blue-950/50 border border-blue-100 dark:border-blue-900/40', onClick: () => setActiveModal('onDutyApproval') },
                 { label: 'Add Holiday', icon: Calendar, color: 'text-pink-600 dark:text-pink-400', borderColor: '#ec4899', glowColor: 'rgba(236, 72, 153, 0.45)', bgIcon: 'bg-pink-50 dark:bg-pink-950/50 border border-pink-100 dark:border-pink-900/40', onClick: () => setActiveModal('addHoliday') },
-                { label: 'Compensatory Off approval', icon: HandCoins, color: 'text-teal-600 dark:text-teal-400', borderColor: '#14b8a6', glowColor: 'rgba(20, 184, 166, 0.45)', bgIcon: 'bg-teal-50 dark:bg-teal-950/50 border border-teal-100 dark:border-teal-900/40', onClick: () => setActiveModal('compOff') },
-                { label: 'Leave Encashment', icon: DollarSign, color: 'text-rose-600 dark:text-rose-400', borderColor: '#ef4444', glowColor: 'rgba(239, 68, 68, 0.45)', bgIcon: 'bg-rose-50 dark:bg-rose-950/50 border border-rose-100 dark:border-rose-900/40', onClick: () => setActiveModal('leaveEncashment') },
                 { label: 'Download Report', icon: Upload, color: 'text-indigo-600 dark:text-indigo-400', borderColor: '#6366f1', glowColor: 'rgba(99, 102, 241, 0.45)', bgIcon: 'bg-indigo-50 dark:bg-indigo-950/50 border border-indigo-100 dark:border-indigo-900/40', isRotate: true, onClick: handleDownloadReport }
               ].map((action, i) => {
                 const isHovered = hoveredQuickActionIndex === i;
@@ -577,9 +669,9 @@ const Leaves = () => {
 
           {/* 5. 3-Column Grid: Holiday Management, Company Shutdowns, Leave Allocation Summary - Row 4 */}
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 mb-8">
-            <div className="h-[400px] overflow-hidden"><HolidayManagement refreshTrigger={refreshTrigger} /></div>
-            <div className="h-[400px] overflow-hidden"><CompanyShutdowns /></div>
-            <div className="h-[400px] overflow-hidden"><LeaveAllocationSummary refreshTrigger={refreshTrigger} /></div>
+            <div className="h-auto overflow-hidden"><HolidayManagement refreshTrigger={refreshTrigger} /></div>
+            <div className="h-auto overflow-hidden"><CompanyShutdowns /></div>
+            <div className="h-auto overflow-hidden"><LeaveAllocationSummary refreshTrigger={refreshTrigger} /></div>
           </div>
 
           {/* 7. Leave Policy Overview (Full Width - Row 6) */}
@@ -624,6 +716,12 @@ const Leaves = () => {
                   <p className="text-xs font-black text-gray-900 dark:text-white mt-0.5">
                     {selectedLeaveDetails.totalDays} {selectedLeaveDetails.totalDays === 1 ? 'Day' : 'Days'}
                   </p>
+                  {selectedLeaveDetails.fromTime && selectedLeaveDetails.toTime && (
+                    <p className="text-[11px] font-bold text-[#00a76b] mt-1 flex items-center gap-1">
+                      <Clock size={12} />
+                      {selectedLeaveDetails.fromTime} - {selectedLeaveDetails.toTime}
+                    </p>
+                  )}
                 </div>
                 <div className="p-3 bg-gray-50 dark:bg-gray-900 rounded-xl border border-gray-155 dark:border-gray-800">
                   <p className="text-[10px] font-bold text-gray-400 uppercase">Status</p>

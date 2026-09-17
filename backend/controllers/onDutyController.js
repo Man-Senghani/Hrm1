@@ -50,10 +50,12 @@ exports.getAllRequests = async (req, res) => {
     const targetUsers = await User.find({ role: { $in: allowedRoles } }).select('_id');
     const targetUserIds = targetUsers.map(u => u._id);
 
-    const requests = await OnDutyRequest.find({ employeeId: { $in: targetUserIds } })
+    let requests = await OnDutyRequest.find({ employeeId: { $in: targetUserIds } })
       .populate('employeeId', 'name role profileImage')
       .populate('approverId', 'name')
       .sort({ createdAt: -1 });
+
+    requests = requests.filter(r => r.employeeId != null);
     res.status(200).json(requests);
   } catch (error) {
     res.status(500).json({ message: error.message });

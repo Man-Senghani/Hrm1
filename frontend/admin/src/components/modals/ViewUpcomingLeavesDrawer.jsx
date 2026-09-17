@@ -51,7 +51,9 @@ const ViewUpcomingLeavesDrawer = ({ isOpen, onClose, leaves }) => {
                     </div>
                     <div className="flex-1 flex flex-col justify-between">
                       <div>
-                        <h4 className="font-bold text-gray-950 dark:text-white text-xs capitalize">{l.leaveType} Leave</h4>
+                        <h4 className="font-bold text-gray-950 dark:text-white text-xs capitalize">
+                          {l.isCompOff ? 'Comp-Off Request' : l.isOnDuty ? 'On-Duty Request' : `${l.leaveType} Leave`}
+                        </h4>
                         <p className="text-[10px] text-gray-500 mt-0.5 line-clamp-1"><span className="font-semibold">Reason:</span> {l.reason || 'N/A'}</p>
                         <p className="text-[9px] text-gray-400 mt-0.5">Until: {endDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</p>
                       </div>

@@ -118,6 +118,7 @@ const OnDutyRequestModal = ({ isOpen, onClose }) => {
                 <CustomDatePicker
                   name="startDate"
                   value={formData.startDate}
+                  minDate={`${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(new Date().getDate()).padStart(2, '0')}`}
                   onChange={(e) => setFormData({...formData, startDate: e.target.value})}
                   placeholder="dd-mm-yyyy"
                   className="w-full bg-gray-50 dark:bg-[#0f172a] border border-gray-250 dark:border-gray-700 rounded-xl h-10 flex items-center text-xs text-gray-900 dark:text-white"
@@ -128,6 +129,7 @@ const OnDutyRequestModal = ({ isOpen, onClose }) => {
                 <CustomDatePicker
                   name="endDate"
                   value={formData.endDate}
+                  minDate={formData.startDate || `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(new Date().getDate()).padStart(2, '0')}`}
                   onChange={(e) => setFormData({...formData, endDate: e.target.value})}
                   placeholder="dd-mm-yyyy"
                   align="right"

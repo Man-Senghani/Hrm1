@@ -99,7 +99,7 @@ const LeaveManagement = () => {
               setViewMode('employee');
               setTimeout(() => window.dispatchEvent(new CustomEvent('open-leave-modal', { detail: 'apply-leave' })), 100);
             }} 
-            className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg text-xs font-bold flex items-center gap-2 shadow-md transition-colors whitespace-nowrap cursor-pointer"
+            className="bg-[#00a76b] hover:bg-[#008f5b] text-white px-5 py-2.5 rounded-lg text-xs font-bold flex items-center gap-2 shadow-md transition-colors whitespace-nowrap cursor-pointer"
           >
             <Plus size={16} /> Apply for Leave
           </button>

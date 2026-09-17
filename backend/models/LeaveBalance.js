@@ -44,6 +44,14 @@ const leaveBalanceSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
+  maternityLeave: {
+    type: Number,
+    default: 180
+  },
+  paternityLeave: {
+    type: Number,
+    default: 15
+  },
   carryForward: {
     type: Number,
     default: 0

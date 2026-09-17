@@ -3,11 +3,14 @@ const LeaveBalance = require('../models/LeaveBalance');
 
 exports.createRequest = async (req, res) => {
   try {
-    const { dateWorked, reason } = req.body;
+    const { dateWorked, reason, isFullDay, fromTime, toTime } = req.body;
     const request = new CompOffRequest({
       employeeId: req.user.id || req.user._id,
       dateWorked,
-      reason
+      reason,
+      isFullDay,
+      fromTime,
+      toTime
     });
     await request.save();
     res.status(201).json({ message: 'Comp-Off request submitted successfully', request });
@@ -33,10 +36,12 @@ exports.getAllRequests = async (req, res) => {
     const targetUsers = await User.find({ role: { $in: allowedRoles } }).select('_id');
     const targetUserIds = targetUsers.map(u => u._id);
 
-    const requests = await CompOffRequest.find({ employeeId: { $in: targetUserIds } })
-      .populate('employeeId', 'name')
+    let requests = await CompOffRequest.find({ employeeId: { $in: targetUserIds } })
+      .populate('employeeId', 'name email role employeeId')
       .populate('approverId', 'name')
       .sort({ createdAt: -1 });
+
+    requests = requests.filter(r => r.employeeId != null);
     res.status(200).json(requests);
   } catch (error) {
     res.status(500).json({ message: 'Error fetching requests', error: error.message });
