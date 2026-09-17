@@ -7,6 +7,7 @@ import {
   ChevronUp, RefreshCw, AlertTriangle, ShieldCheck, X
 } from 'lucide-react';
 import ExportFilterModal from '@shared/components/ExportFilterModal';
+import CustomDatePicker from '../../components/CustomDatePicker';
 
 const MODULES = [
   'All', 'Auth', 'Dashboard', 'Employees', 'Attendance', 'Leave', 'Payroll', 
@@ -293,7 +294,7 @@ const AuditLogs = () => {
               placeholder="Search keyword..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-3 py-2 bg-slate-50 dark:bg-[#111c18] border border-[#e2eae7] dark:border-[#1a2d29] rounded-xl text-xs font-semibold text-slate-800 dark:text-white focus:outline-none focus:bg-white"
+              className="w-full h-9 pl-9 pr-3 bg-slate-50 dark:bg-[#111c18] border border-[#e2eae7] dark:border-[#1a2d29] rounded-xl text-xs font-semibold text-slate-800 dark:text-white focus:outline-none focus:bg-white"
             />
           </div>
 
@@ -301,7 +302,7 @@ const AuditLogs = () => {
             <select
               value={selectedModule}
               onChange={(e) => setSelectedModule(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-50 dark:bg-[#111c18] border border-[#e2eae7] dark:border-[#1a2d29] rounded-xl text-xs font-semibold text-slate-800 dark:text-white focus:outline-none cursor-pointer"
+              className="w-full h-9 px-3 bg-slate-50 dark:bg-[#111c18] border border-[#e2eae7] dark:border-[#1a2d29] rounded-xl text-xs font-semibold text-slate-800 dark:text-white focus:outline-none cursor-pointer"
             >
               <option disabled>Select Module</option>
               {MODULES.map(m => (
@@ -314,7 +315,7 @@ const AuditLogs = () => {
             <select
               value={selectedStatus}
               onChange={(e) => setSelectedStatus(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-50 dark:bg-[#111c18] border border-[#e2eae7] dark:border-[#1a2d29] rounded-xl text-xs font-semibold text-slate-800 dark:text-white focus:outline-none cursor-pointer"
+              className="w-full h-9 px-3 bg-slate-50 dark:bg-[#111c18] border border-[#e2eae7] dark:border-[#1a2d29] rounded-xl text-xs font-semibold text-slate-800 dark:text-white focus:outline-none cursor-pointer"
             >
               <option value="All">All Statuses</option>
               <option value="Success">Success</option>
@@ -329,27 +330,32 @@ const AuditLogs = () => {
               placeholder="Filter by Username..."
               value={selectedUser}
               onChange={(e) => setSelectedUser(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-50 dark:bg-[#111c18] border border-[#e2eae7] dark:border-[#1a2d29] rounded-xl text-xs font-semibold text-slate-800 dark:text-white focus:outline-none"
+              className="w-full h-9 px-3 bg-slate-50 dark:bg-[#111c18] border border-[#e2eae7] dark:border-[#1a2d29] rounded-xl text-xs font-semibold text-slate-800 dark:text-white focus:outline-none"
             />
           </div>
         </div>
 
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pt-2">
-          <div className="flex items-center gap-3 w-full sm:w-auto">
+          <div className="flex items-center gap-3 w-full sm:w-auto flex-wrap">
             <span className="text-[10px] font-black uppercase text-slate-400">Date Range:</span>
-            <input
-              type="date"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              className="px-3 py-1.5 bg-slate-50 dark:bg-[#111c18] border border-[#e2eae7] dark:border-[#1a2d29] rounded-xl text-xs font-semibold text-slate-800 dark:text-white focus:outline-none"
-            />
-            <span className="text-slate-400 text-xs">to</span>
-            <input
-              type="date"
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-              className="px-3 py-1.5 bg-slate-50 dark:bg-[#111c18] border border-[#e2eae7] dark:border-[#1a2d29] rounded-xl text-xs font-semibold text-slate-800 dark:text-white focus:outline-none"
-            />
+            <div className="w-40">
+              <CustomDatePicker
+                name="startDate"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                placeholder="From date"
+              />
+            </div>
+            <span className="text-slate-400 text-xs font-bold">→</span>
+            <div className="w-40">
+              <CustomDatePicker
+                name="endDate"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                placeholder="To date"
+                minDate={startDate || ''}
+              />
+            </div>
           </div>
 
           <div className="flex gap-2 w-full sm:w-auto justify-end">

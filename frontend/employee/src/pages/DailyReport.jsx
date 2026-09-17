@@ -8,6 +8,7 @@ import {
   Lock, ShieldAlert
 } from 'lucide-react';
 import CustomDatePicker from '@shared/components/CustomDatePicker';
+import CustomDateRangePicker from '@shared/components/CustomDateRangePicker';
 import CustomSelect from '@shared/components/CustomSelect';
 import MultiProjectSelect from '@shared/components/MultiProjectSelect';
 import StatusSelect from '@shared/components/StatusSelect';
@@ -330,8 +331,8 @@ const DailyReport = () => {
   // Filters
   const [filterProject, setFilterProject] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
-  const [filterStartDate, setFilterStartDate] = useState('');
-  const [filterEndDate, setFilterEndDate] = useState('');
+  const [filterStartDate, setFilterStartDate] = useState(getTodayStr);
+  const [filterEndDate, setFilterEndDate] = useState(getTodayStr);
   const [searchQuery, setSearchQuery] = useState('');
 
   // Fetch project list options
@@ -731,7 +732,7 @@ const DailyReport = () => {
           </div>
           <div className="flex items-baseline gap-1 whitespace-nowrap shrink-0 ml-1">
             <span className="text-lg sm:text-xl font-bold text-purple-600 dark:text-purple-400 font-mono">{totalHours.toFixed(1)}</span>
-            <span className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 whitespace-nowrap">/ 42.5 hrs</span>
+            <span className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 whitespace-nowrap">/ 42 hrs 30 mins</span>
           </div>
         </div>
       </div>
@@ -769,7 +770,7 @@ const DailyReport = () => {
         </div>
 
         {/* Filters */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 my-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 my-4">
           {/* Project Filter */}
           <CustomSelect
             options={[
@@ -791,37 +792,16 @@ const DailyReport = () => {
             iconMap={STATUS_ICONS}
           />
 
-          {/* Start Date Filter */}
-          <div className="relative">
-            <CustomDatePicker
-              name="filterStartDate"
-              value={filterStartDate}
-              onChange={(e) => setFilterStartDate(e.target.value)}
-              placeholder="Start Date"
-            />
-          </div>
-
-          {/* End Date Filter */}
-          <div className="relative flex items-center gap-1.5">
-            <div className="flex-1 min-w-0">
-              <CustomDatePicker
-                name="filterEndDate"
-                value={filterEndDate}
-                onChange={(e) => setFilterEndDate(e.target.value)}
-                placeholder="End Date"
-              />
-            </div>
-            {(filterStartDate || filterEndDate) && (
-              <button
-                type="button"
-                onClick={() => { setFilterStartDate(''); setFilterEndDate(''); }}
-                className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-xl transition-colors shrink-0 cursor-pointer"
-                title="Clear date range"
-              >
-                <X size={15} />
-              </button>
-            )}
-          </div>
+          {/* Consolidated Date Range Filter */}
+          <CustomDateRangePicker
+            startDate={filterStartDate}
+            endDate={filterEndDate}
+            onChange={({ startDate, endDate }) => {
+              setFilterStartDate(startDate);
+              setFilterEndDate(endDate);
+            }}
+            placeholder="Filter Date Range"
+          />
         </div>
 
         {/* Reports History Table */}
@@ -1564,13 +1544,6 @@ const DailyReport = () => {
                   </button>
                 );
               })()}
-              <button
-                type="button"
-                onClick={() => setSelectedReport(null)}
-                className="px-6 py-2.5 rounded-xl bg-slate-100 dark:bg-[#111c18] hover:bg-slate-200 dark:hover:bg-[#1a2d29] text-slate-700 dark:text-slate-200 text-xs font-bold transition-colors cursor-pointer"
-              >
-                Close Details
-              </button>
             </div>
           </div>
         </div>,

@@ -62,6 +62,7 @@ const MeetingRequestsTable = ({
   const [newSubmitting, setNewSubmitting] = useState(false);
 
   const isReviewer = ['admin', 'hr', 'manager'].includes(userRole.toLowerCase());
+  const effectiveUserId = currentUserId || sessionStorage.getItem('userId') || '';
 
   // 📡 Fetch Requests
   const fetchRequests = useCallback(async () => {
@@ -424,7 +425,8 @@ const MeetingRequestsTable = ({
             ) : (
               requests.map((item) => {
                 const badge = STATUS_BADGES[item.status] || STATUS_BADGES.pending;
-                const canReview = isReviewer && item.status === 'pending';
+                const isOwnRequest = Boolean(effectiveUserId && String(item.employeeId || '') === String(effectiveUserId));
+                const canReview = isReviewer && !isOwnRequest && item.status === 'pending';
 
                 return (
                   <tr
@@ -509,6 +511,10 @@ const MeetingRequestsTable = ({
                             <X size={14} />
                           </button>
                         </div>
+                      ) : isOwnRequest && item.status === 'pending' ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-800/60">
+                          Awaiting Review
+                        </span>
                       ) : (
                         <span className="text-[10px] text-slate-400 dark:text-[#829e92]">
                           {item.reviewedAt ? new Date(item.reviewedAt).toLocaleDateString() : 'Logged'}

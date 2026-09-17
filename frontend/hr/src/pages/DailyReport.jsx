@@ -8,6 +8,7 @@ import {
   Lock, ShieldAlert
 } from 'lucide-react';
 import CustomDatePicker from '@shared/components/CustomDatePicker';
+import CustomDateRangePicker from '@shared/components/CustomDateRangePicker';
 import CustomSelect from '@shared/components/CustomSelect';
 import MultiProjectSelect from '@shared/components/MultiProjectSelect';
 import StatusSelect from '@shared/components/StatusSelect';
@@ -355,8 +356,8 @@ const DailyReportHR = () => {
   const [mySearch, setMySearch] = useState('');
   const [myProjectFilter, setMyProjectFilter] = useState('all');
   const [myStatusFilter, setMyStatusFilter] = useState('all');
-  const [myStartDateFilter, setMyStartDateFilter] = useState('');
-  const [myEndDateFilter, setMyEndDateFilter] = useState('');
+  const [myStartDateFilter, setMyStartDateFilter] = useState(getTodayStr);
+  const [myEndDateFilter, setMyEndDateFilter] = useState(getTodayStr);
 
   // Pagination
   const [page, setPage] = useState(1);
@@ -1053,7 +1054,7 @@ const DailyReportHR = () => {
               </div>
               <div className="flex items-baseline gap-1 whitespace-nowrap shrink-0 ml-1">
                 <span className="text-lg sm:text-xl font-bold text-purple-600 dark:text-purple-400 font-mono">{myTotalHours.toFixed(1)}</span>
-                <span className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 whitespace-nowrap">/ 42.5 hrs</span>
+                <span className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 whitespace-nowrap">/ 42 hrs 30 mins</span>
               </div>
             </div>
           </div>
@@ -1066,17 +1067,32 @@ const DailyReportHR = () => {
                 <p className="text-xs text-slate-500 dark:text-slate-400">View and filter your personal daily work updates.</p>
               </div>
 
-              <button
-                onClick={fetchMyReports}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-50 dark:bg-[#111c18] border border-slate-200 dark:border-[#1a2d29] text-xs font-bold text-slate-600 dark:text-slate-300 hover:border-emerald-500 transition-colors cursor-pointer self-start md:self-auto"
-              >
-                <RefreshCw size={14} className={loadingMyReports ? 'animate-spin' : ''} />
-                Refresh My History
-              </button>
+              <div className="flex items-center gap-3">
+                {(myProjectFilter !== 'all' || myStatusFilter !== 'all' || myStartDateFilter || myEndDateFilter) && (
+                  <button
+                    onClick={() => {
+                      setMyProjectFilter('all');
+                      setMyStatusFilter('all');
+                      setMyStartDateFilter('');
+                      setMyEndDateFilter('');
+                    }}
+                    className="text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer"
+                  >
+                    Clear Filters
+                  </button>
+                )}
+                <button
+                  onClick={fetchMyReports}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-50 dark:bg-[#111c18] border border-slate-200 dark:border-[#1a2d29] text-xs font-bold text-slate-600 dark:text-slate-300 hover:border-emerald-500 transition-colors cursor-pointer self-start md:self-auto"
+                >
+                  <RefreshCw size={14} className={loadingMyReports ? 'animate-spin' : ''} />
+                  Refresh My History
+                </button>
+              </div>
             </div>
 
             {/* My Reports Filters */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 my-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 my-4">
               <CustomSelect
                 options={[
                   { label: 'All Projects', value: 'all' },
@@ -1096,35 +1112,15 @@ const DailyReportHR = () => {
                 iconMap={STATUS_ICONS}
               />
 
-              <div className="relative">
-                <CustomDatePicker
-                  name="myStartDateFilter"
-                  value={myStartDateFilter}
-                  onChange={(e) => setMyStartDateFilter(e.target.value)}
-                  placeholder="Start Date"
-                />
-              </div>
-
-              <div className="relative flex items-center gap-1.5">
-                <div className="flex-1 min-w-0">
-                  <CustomDatePicker
-                    name="myEndDateFilter"
-                    value={myEndDateFilter}
-                    onChange={(e) => setMyEndDateFilter(e.target.value)}
-                    placeholder="End Date"
-                  />
-                </div>
-                {(myStartDateFilter || myEndDateFilter) && (
-                  <button
-                    type="button"
-                    onClick={() => { setMyStartDateFilter(''); setMyEndDateFilter(''); }}
-                    className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-xl transition-colors shrink-0 cursor-pointer"
-                    title="Clear date range"
-                  >
-                    <X size={15} />
-                  </button>
-                )}
-              </div>
+              <CustomDateRangePicker
+                startDate={myStartDateFilter}
+                endDate={myEndDateFilter}
+                onChange={({ startDate, endDate }) => {
+                  setMyStartDateFilter(startDate);
+                  setMyEndDateFilter(endDate);
+                }}
+                placeholder="Filter Date Range"
+              />
             </div>
 
             {/* My Reports Table */}
@@ -2555,10 +2551,10 @@ const DailyReportHR = () => {
               </div>
             </div>
 
-            {/* Drawer Footer */}
-            <div className="p-5 border-t border-slate-100 dark:border-[#1a2d29] bg-slate-50/50 dark:bg-[#111c18]/50 flex items-center justify-between shrink-0">
-              {viewTab === 'my' ? (
-                (() => {
+            {/* Drawer Footer (Only render if there are actions in 'my' tab) */}
+            {viewTab === 'my' && (
+              <div className="p-5 border-t border-slate-100 dark:border-[#1a2d29] bg-slate-50/50 dark:bg-[#111c18]/50 flex items-center justify-start shrink-0">
+                {(() => {
                   const isPastCutoff = selectedReport.reportDate < getTodayStr();
                   const reqStatus = selectedReport.editRequest?.status || 'none';
                   const isApproved = reqStatus === 'approved';
@@ -2605,16 +2601,9 @@ const DailyReportHR = () => {
                       <span>Request Edit Access</span>
                     </button>
                   );
-                })()
-              ) : <div />}
-              <button
-                type="button"
-                onClick={() => setSelectedReport(null)}
-                className="px-6 py-2.5 rounded-xl bg-slate-100 dark:bg-[#111c18] hover:bg-slate-200 dark:hover:bg-[#1a2d29] text-slate-700 dark:text-slate-200 text-xs font-bold transition-colors cursor-pointer"
-              >
-                Close Details
-              </button>
-            </div>
+                })()}
+              </div>
+            )}
           </div>
         </div>,
         document.body

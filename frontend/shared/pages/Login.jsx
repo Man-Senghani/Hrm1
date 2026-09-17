@@ -378,6 +378,7 @@ const Login = () => {
                 <EntryInput 
                   label="Email"
                   type="email" 
+                  required={true}
                   value={email}
                   onKeyDown={(e) => {
                     if (e.key === ' ' || e.code === 'Space') {
@@ -404,6 +405,7 @@ const Login = () => {
                   <EntryInput 
                     label="Password"
                     type="password" 
+                    required={true}
                     value={password}
                     onChange={(e) => {
                       setPassword(e.target.value);

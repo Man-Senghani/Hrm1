@@ -199,9 +199,16 @@ const EmployeeDetail = () => {
               <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 dark:text-slate-400 mb-2">Live Employee Card</p>
 
               <div className="flex justify-between items-center text-xs">
-                <span className="font-semibold text-slate-500 dark:text-slate-400">System Role</span>
-                <span className="font-bold text-[#00a76b] uppercase bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-md text-[10px] border border-emerald-200 dark:border-emerald-800">
-                  {employee.userId?.role || employee.role || 'employee'}
+                <span className="font-semibold text-slate-500 dark:text-slate-400">Department</span>
+                <span className="font-bold text-slate-800 dark:text-slate-200 truncate max-w-[170px]">
+                  {employee.department || 'Not selected'}
+                </span>
+              </div>
+
+              <div className="flex justify-between items-center text-xs">
+                <span className="font-semibold text-slate-500 dark:text-slate-400">Designation</span>
+                <span className="font-bold text-slate-800 dark:text-slate-200 truncate max-w-[170px]">
+                  {employee.designation || employee.position || 'Not specified'}
                 </span>
               </div>
 
@@ -243,12 +250,14 @@ const EmployeeDetail = () => {
                 <span className="font-bold text-slate-800 dark:text-slate-200">{formatDDMMYYYY(employee.dob)}</span>
               </div>
 
-              <div className="flex justify-between items-center text-xs">
-                <span className="font-semibold text-slate-500 dark:text-slate-400">Hierarchy Manager</span>
-                <span className="font-bold text-slate-800 dark:text-slate-200 truncate max-w-[160px]">
-                  {employee.managerId?.name || employee.managerId?.fullName || 'Core Root'}
-                </span>
-              </div>
+              {(employee.userId?.role || employee.role)?.toLowerCase() !== 'admin' && (
+                <div className="flex justify-between items-center text-xs">
+                  <span className="font-semibold text-slate-500 dark:text-slate-400">Hierarchy Manager</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-200 truncate max-w-[160px]">
+                    {employee.managerId?.name || employee.managerId?.fullName || 'Not assigned'}
+                  </span>
+                </div>
+              )}
 
               <div className="flex flex-col text-xs pt-1 space-y-2">
                 <div>
@@ -296,17 +305,21 @@ const EmployeeDetail = () => {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
               <div>
-                <p className="text-[11px] font-extrabold text-slate-400 dark:text-slate-400 uppercase tracking-wider mb-1">Authorization Role</p>
-                <p className="text-sm font-extrabold text-slate-900 dark:text-white uppercase">{employee.userId?.role || employee.role || 'N/A'}</p>
+                <p className="text-[11px] font-extrabold text-slate-400 dark:text-slate-400 uppercase tracking-wider mb-1">Department</p>
+                <p className="text-sm font-extrabold text-slate-900 dark:text-white">{employee.department || 'N/A'}</p>
               </div>
               <div>
                 <p className="text-[11px] font-extrabold text-slate-400 dark:text-slate-400 uppercase tracking-wider mb-1">Designation</p>
                 <p className="text-sm font-extrabold text-slate-900 dark:text-white">{employee.designation || employee.position || 'N/A'}</p>
               </div>
-              <div>
-                <p className="text-[11px] font-extrabold text-slate-400 dark:text-slate-400 uppercase tracking-wider mb-1">Hierarchy Manager</p>
-                <p className="text-sm font-extrabold text-slate-900 dark:text-white">{employee.managerId?.name || employee.managerId?.fullName || 'Core Root'}</p>
-              </div>
+              {(employee.userId?.role || employee.role)?.toLowerCase() !== 'admin' && (
+                <div>
+                  <p className="text-[11px] font-extrabold text-slate-400 dark:text-slate-400 uppercase tracking-wider mb-1">Reporting Manager</p>
+                  <p className="text-sm font-extrabold text-slate-900 dark:text-white">
+                    {employee.managerId?.name || employee.managerId?.fullName || employee.reportingManager?.name || employee.reportingManager?.fullName || 'Not assigned'}
+                  </p>
+                </div>
+              )}
               <div>
                 <p className="text-[11px] font-extrabold text-slate-400 dark:text-slate-400 uppercase tracking-wider mb-1">Employment Type</p>
                 <p className="text-sm font-extrabold text-slate-900 dark:text-white">{employee.employmentType || 'Full-time'}</p>

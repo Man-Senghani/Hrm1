@@ -110,6 +110,7 @@ const ForgotPassword = () => {
                   <EntryInput 
                     label="Email"
                     type="email" 
+                    required={true}
                     value={email}
                     onKeyDown={(e) => {
                       if (e.key === ' ' || e.code === 'Space') {

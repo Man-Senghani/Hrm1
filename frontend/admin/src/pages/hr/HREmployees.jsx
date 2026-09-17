@@ -416,15 +416,10 @@ const HREmployees = () => {
     (filterStatus.length > 0 && !filterStatus.includes('all') ? filterStatus.length : 0);
 
   return (
-    <div className="p-4 md:p-8 space-y-6 max-w-[1600px] mx-auto animate-fade-in pb-16 text-slate-800 dark:text-slate-100 font-sans">
-      {/* 1. Top Bar / Breadcrumb Header */}
+    <div className="animate-fade-in w-full space-y-6 pb-16 text-slate-800 dark:text-slate-100 font-sans">
+      {/* 1. Top Bar / Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-gray-100 dark:border-[#162722] pb-6">
         <div>
-          <div className="flex items-center gap-2 text-xs font-semibold text-gray-500 dark:text-slate-400 mb-1">
-            <span>Workforce Management</span>
-            <span>/</span>
-            <span className="text-[#00a76b] dark:text-[#00a76b]">Employees</span>
-          </div>
           <h1 className="text-2xl md:text-3xl font-semibold text-gray-900 dark:text-white tracking-tight">
             Employee Directory
           </h1>

@@ -38,6 +38,18 @@ router.post('/:id/pan-card', protect, authorize('admin', 'hr', 'employee'), (req
   const { updateEmployeeDocument } = require('../controllers/employeeController');
   updateEmployeeDocument(req, res, 'panCard');
 });
+router.delete('/:id/adhar-card', protect, authorize('admin', 'hr', 'employee'), (req, res) => {
+  const { deleteEmployeeDocument } = require('../controllers/employeeController');
+  deleteEmployeeDocument(req, res, 'adharCard');
+});
+router.delete('/:id/bank-details', protect, authorize('admin', 'hr', 'employee'), (req, res) => {
+  const { deleteEmployeeDocument } = require('../controllers/employeeController');
+  deleteEmployeeDocument(req, res, 'bankDetails');
+});
+router.delete('/:id/pan-card', protect, authorize('admin', 'hr', 'employee'), (req, res) => {
+  const { deleteEmployeeDocument } = require('../controllers/employeeController');
+  deleteEmployeeDocument(req, res, 'panCard');
+});
 router.delete('/:id', protect, authorize('admin', 'hr'), deleteEmployee);
 router.patch('/:id/status', protect, authorize('admin', 'hr', 'manager'), updateEmployeeStatus);
 router.put('/:id/status', protect, authorize('admin', 'hr', 'manager'), updateEmployeeStatus);

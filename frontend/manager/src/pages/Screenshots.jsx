@@ -465,15 +465,9 @@ const Screenshots = () => {
       {/* ── 1. HEADER SECTION ── */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-200/80 dark:border-[#38352e] pb-5">
         <div>
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-semibold text-slate-900 dark:text-white tracking-tight">
-              Screenshots
-            </h1>
-            <span className="bg-emerald-50 dark:bg-emerald-950/60 text-[#00a76b] text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-900/40 flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#00a76b] animate-pulse"></span>
-              Live Sync Active
-            </span>
-          </div>
+          <h1 className="text-2xl font-semibold text-slate-900 dark:text-white tracking-tight">
+            Screenshots
+          </h1>
         </div>
       </div>
 
@@ -1073,13 +1067,10 @@ const Screenshots = () => {
             <div className="flex-1 p-6 space-y-6 overflow-y-auto custom-scrollbar">
               {/* 1. Employee Role */}
               <div>
-                <div className="flex items-center justify-between mb-2.5">
+                <div className="mb-2.5">
                   <label className="text-xs font-bold text-slate-800 dark:text-slate-200">
                     Employee Role
                   </label>
-                  {folderFilterRole !== 'all' && (
-                    <span className="text-[10px] font-bold text-[#00a76b] capitalize">{folderFilterRole}</span>
-                  )}
                 </div>
                 <div className="grid grid-cols-4 gap-2">
                   {['all', 'employee', 'hr', 'manager'].map((r) => (
@@ -1101,15 +1092,10 @@ const Screenshots = () => {
 
               {/* 2. Activity Date Window */}
               <div>
-                <div className="flex items-center justify-between mb-2.5">
+                <div className="mb-2.5">
                   <label className="text-xs font-bold text-slate-800 dark:text-slate-200">
                     Activity Date Window
                   </label>
-                  {folderFilterDate !== 'all' && (
-                    <span className="text-[10px] font-bold text-[#00a76b]">
-                      {folderFilterDate === 'last7days' ? 'Last 7 Days' : folderFilterDate}
-                    </span>
-                  )}
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   {[
@@ -1136,15 +1122,10 @@ const Screenshots = () => {
 
               {/* 3. Activity Status */}
               <div>
-                <div className="flex items-center justify-between mb-2.5">
+                <div className="mb-2.5">
                   <label className="text-xs font-bold text-slate-800 dark:text-slate-200">
                     Activity Status
                   </label>
-                  {folderFilterActivity !== 'all' && (
-                    <span className="text-[10px] font-bold text-[#00a76b]">
-                      {folderFilterActivity === 'active' ? 'With Captures' : 'Zero Captures'}
-                    </span>
-                  )}
                 </div>
                 <div className="grid grid-cols-3 gap-2">
                   {[

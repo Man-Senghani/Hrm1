@@ -87,8 +87,11 @@ const Profile = () => {
   const userRole = safeUserData.role || sessionStorage.getItem('role') || '';
   const userDept = (safeUserData.department && typeof safeUserData.department === 'object') ? (safeUserData.department.name || '') : (safeUserData.department || safeUserData.dept || '');
   const currentRole = (userRole || '').toLowerCase();
-  const showReportingManager = !['hr', 'admin', 'manager'].includes(currentRole) && 
-    !(typeof window !== 'undefined' && (window.location.pathname.startsWith('/hr') || window.location.pathname.startsWith('/admin')));
+  const isDeptAdmin = (userDept || '').trim().toLowerCase() === 'admin';
+  const displayDesignation = isDeptAdmin
+    ? 'Admin'
+    : (safeUserData.designation || safeUserData.position || (currentRole === 'admin' ? 'Admin' : ''));
+  const showReportingManager = currentRole !== 'admin';
 
   const empId = safeUserData.employeeId || '';
   const personalEmail = safeUserData.personalEmail || '';
@@ -110,7 +113,11 @@ const Profile = () => {
     ? (typeof safeUserData.reportingManager === 'object'
       ? (safeUserData.reportingManager.name || safeUserData.reportingManager.fullName || '')
       : safeUserData.reportingManager)
-    : '';
+    : (safeUserData.managerId
+      ? (typeof safeUserData.managerId === 'object'
+        ? (safeUserData.managerId.name || safeUserData.managerId.fullName || '')
+        : safeUserData.managerId)
+      : '');
 
   const handleDocumentUpload = async (type, file) => {
     if (!file) return;
@@ -258,12 +265,81 @@ const Profile = () => {
               <h1 style={{ fontSize: 28, fontWeight: 600, color: isDark ? '#fff' : '#2c302e', margin: 0, letterSpacing: '-0.5px' }}>My profile</h1>
               <p style={{ fontSize: 14, color: isDark ? '#a3b3af' : '#8c918f', margin: '4px 0 0' }}>Personal information.</p>
             </div>
+          </div>
 
+          {/* Action Buttons: Edit / Save / Cancel */}
+          <div>
+            {!isEditing ? (
+              <button 
+                type="button"
+                onClick={handleEditClick} 
+                className="verdant-btn-outline" 
+                style={{ 
+                  height: 38, 
+                  padding: '0 18px', 
+                  fontSize: 13, 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: 8, 
+                  borderRadius: 12, 
+                  cursor: 'pointer',
+                  fontWeight: 600
+                }}
+              >
+                <Edit2 size={15} />
+                <span>Edit Profile</span>
+              </button>
+            ) : (
+              <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                <button 
+                  type="button"
+                  onClick={handleSaveProfile} 
+                  disabled={loading} 
+                  style={{ 
+                    height: 38, 
+                    padding: '0 18px', 
+                    fontSize: 13, 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: 8, 
+                    borderRadius: 12,
+                    background: '#00a76b',
+                    color: '#fff',
+                    border: '1px solid #00a76b',
+                    fontWeight: 600,
+                    cursor: loading ? 'not-allowed' : 'pointer'
+                  }}
+                >
+                  {loading ? <RefreshCw size={15} className="animate-spin" /> : <Save size={15} />}
+                  <span>Save</span>
+                </button>
+                <button 
+                  type="button"
+                  onClick={() => setIsEditing(false)} 
+                  disabled={loading} 
+                  className="verdant-btn-outline" 
+                  style={{ 
+                    height: 38, 
+                    padding: '0 18px', 
+                    fontSize: 13, 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: 8, 
+                    borderRadius: 12, 
+                    cursor: 'pointer',
+                    fontWeight: 600
+                  }}
+                >
+                  <X size={15} />
+                  <span>Cancel</span>
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
         {/* PROFILE METADATA GRID */}
-        <div style={{ display: 'flex', gap: 24, alignItems: 'stretch', flexWrap: 'wrap', marginBottom: 24 }}>
+        <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start', flexWrap: 'wrap', marginBottom: 24 }}>
 
           {/* LEFT COLUMN: IDENTITY & DOCUMENTS VAULT */}
           <div style={{ flex: '0 0 320px', width: '100%', display: 'flex', flexDirection: 'column', gap: 24 }}>
@@ -424,7 +500,7 @@ const Profile = () => {
         {/* RIGHT: DETAILS FORMS */}
         <div style={{ flex: '1 1 500px', display: 'flex', flexDirection: 'column', gap: 24 }}>
             {/* PERSONAL DETAILS CARD */}
-            <div className="verdant-card" style={{ height: '100%' }}>
+            <div className="verdant-card" style={{ height: 'auto' }}>
               <h3 style={{ fontSize: 15, fontWeight: 700, color: isDark ? '#fff' : '#3b3e3c', marginBottom: 24, marginTop: 0 }}>Personal details</h3>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px 24px' }}>
 
@@ -471,7 +547,7 @@ const Profile = () => {
             </div>
 
             {/* EMPLOYMENT DETAILS CARD */}
-            <div className="verdant-card" style={{ flex: 1 }}>
+            <div className="verdant-card" style={{ height: 'auto' }}>
               <h3 style={{ fontSize: 15, fontWeight: 700, color: isDark ? '#fff' : '#3b3e3c', marginBottom: 24, marginTop: 0 }}>Employment details</h3>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px 24px' }}>
 
@@ -481,13 +557,13 @@ const Profile = () => {
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <label style={{ fontSize: 11, fontWeight: 700, color: isDark ? '#a3b3af' : '#939084', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Designation</label>
-                  <input type="text" readOnly value={safeUserData.designation || safeUserData.position || ''} className="verdant-input" />
+                  <label style={{ fontSize: 11, fontWeight: 700, color: isDark ? '#a3b3af' : '#939084', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Department</label>
+                  <input type="text" readOnly value={userDept} className="verdant-input" />
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <label style={{ fontSize: 11, fontWeight: 700, color: isDark ? '#a3b3af' : '#939084', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Department</label>
-                  <input type="text" readOnly value={userDept} className="verdant-input" />
+                  <label style={{ fontSize: 11, fontWeight: 700, color: isDark ? '#a3b3af' : '#939084', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Designation</label>
+                  <input type="text" readOnly value={displayDesignation} className="verdant-input" />
                 </div>
 
                 {showReportingManager && (
@@ -507,25 +583,7 @@ const Profile = () => {
           </div>
         </div>
 
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
-          {!isEditing ? (
-            <button onClick={handleEditClick} className="verdant-btn-outline" style={{ height: 36, padding: '0 16px', fontSize: 12 }}>
-              <Edit2 size={14} />
-              Edit Profile
-            </button>
-          ) : (
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={handleSaveProfile} disabled={loading} className="verdant-btn-outline" style={{ height: 36, padding: '0 16px', fontSize: 12 }}>
-                {loading ? <RefreshCw size={14} className="animate-spin" /> : <Save size={14} />}
-                Save
-              </button>
-              <button onClick={() => setIsEditing(false)} disabled={loading} className="verdant-btn-outline" style={{ height: 36, padding: '0 16px', fontSize: 12 }}>
-                <X size={14} />
-                Cancel
-              </button>
-            </div>
-          )}
-        </div>
+
 
         {/* DOCUMENT VIEW POPUP MODAL */}
         {viewingDoc && (

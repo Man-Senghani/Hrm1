@@ -132,11 +132,12 @@ const ResetPassword = () => {
                )}
             </div>
 
-            {verifying ? null : userDetails ? (
+             {verifying ? null : userDetails ? (
               <form onSubmit={handleSubmit} noValidate className="space-y-5">
                  <EntryInput 
-                    label="NEW PASSWORD"
-                    type={showPassword ? 'text' : 'password'}
+                    label="New Password"
+                    type="password"
+                    required={true}
                     value={password}
                     onChange={(e) => {
                       setPassword(e.target.value);
@@ -144,22 +145,12 @@ const ResetPassword = () => {
                     }}
                     placeholder="Enter new password"
                     icon={<Lock size={20} />}
-                    rightElement={
-                      password.length > 0 && (
-                        <button
-                          type="button" 
-                          onClick={() => setShowPassword(!showPassword)}
-                          className="text-[#939084] hover:text-[#00a76b] transition-all bg-transparent border-none cursor-pointer flex items-center justify-center p-1"
-                        >
-                          {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                        </button>
-                      )
-                    }
                   />
 
                  <EntryInput 
-                    label="CONFIRM PASSWORD"
-                    type={showConfirmPassword ? 'text' : 'password'} 
+                    label="Confirm Password"
+                    type="password" 
+                    required={true}
                     value={confirmPassword}
                     onChange={(e) => {
                       setConfirmPassword(e.target.value);
@@ -167,58 +158,45 @@ const ResetPassword = () => {
                     }}
                     placeholder="Confirm new password"
                     icon={<Lock size={20} />}
-                    rightElement={
-                      confirmPassword.length > 0 && (
-                        <button
-                          type="button" 
-                          onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                          className="text-[#939084] hover:text-[#00a76b] transition-all bg-transparent border-none cursor-pointer flex items-center justify-center p-1"
-                        >
-                          {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                        </button>
-                      )
-                    }
                   />
 
-                 <div className="empty:hidden mt-2 mb-2">
-                   {error && (
-                     <div className="w-full bg-[#fff8f6] border border-[#00a76b] p-3 rounded-[4px] flex items-start gap-3 animate-fade-in">
-                       <AlertCircle size={20} className="text-[#00a76b] shrink-0" />
-                       <span className="text-[14px] text-[#00a76b] font-bold">{error}</span>
-                     </div>
-                   )}
-                   {success && (
-                     <div className="w-full bg-[#f6fff8] border border-[#24a148] p-3 rounded-[4px] flex items-start gap-3 animate-fade-in">
-                       <CheckCircle size={20} className="text-[#24a148] shrink-0" />
-                       <span className="text-[14px] text-[#24a148] font-bold">{success}</span>
-                     </div>
-                   )}
-                 </div>
-
-                 <div className="pt-2">
-                    {success ? (
-                      <Link to="/login">
-                        <EntryButton 
-                          type="button" 
-                          variant="primary"
-                          className="h-[52px] text-[15px] font-bold bg-[#00a76b] text-[#fffefb] hover:bg-[#008f5a] w-full rounded-[6px] flex items-center justify-center"
-                        >
-                           Back to Login
-                           <ArrowRight size={20} className="ml-3" />
-                        </EntryButton>
-                      </Link>
-                    ) : (
-                      <EntryButton 
-                        type="submit" 
-                        disabled={loading}
-                        variant="primary"
-                        className="h-[52px] text-[15px] font-bold bg-[#00a76b] text-[#fffefb] hover:bg-[#008f5a] w-full rounded-[6px] flex items-center justify-center"
-                      >
-                         {loading ? 'Updating...' : 'Update Password'}
-                         {!loading && <ArrowRight size={20} className="ml-3" />}
-                      </EntryButton>
+                  <div className="empty:hidden mt-2 mb-2">
+                    {error && (
+                      <div className="w-full bg-[#fff8f6] border border-[#d93838] p-3 rounded-[4px] flex items-start gap-3 animate-fade-in">
+                        <AlertCircle size={20} className="text-[#d93838] shrink-0" />
+                        <span className="text-[14px] text-[#d93838] font-bold">{error}</span>
+                      </div>
                     )}
-                 </div>
+                    {success && (
+                      <div className="w-full bg-[#f6fff8] border border-[#24a148] p-3 rounded-[4px] flex items-start gap-3 animate-fade-in">
+                        <CheckCircle size={20} className="text-[#24a148] shrink-0" />
+                        <span className="text-[14px] text-[#24a148] font-bold">{success}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="pt-2">
+                     {success ? (
+                       <Link to="/login" className="block w-full">
+                         <button 
+                           type="button" 
+                           className="h-[52px] text-[15px] font-bold bg-[#00a76b] text-[#fffefb] hover:bg-[#008f5a] w-full rounded-[6px] flex items-center justify-center gap-2 cursor-pointer border-none transition-all shadow-sm active:scale-[0.98]"
+                         >
+                            <span>Back to Login</span>
+                            <ArrowRight size={18} />
+                         </button>
+                       </Link>
+                     ) : (
+                       <button 
+                         type="submit" 
+                         disabled={loading}
+                         className="h-[52px] text-[15px] font-bold bg-[#00a76b] text-[#fffefb] hover:bg-[#008f5a] w-full rounded-[6px] flex items-center justify-center gap-2 cursor-pointer border-none transition-all shadow-sm active:scale-[0.98] disabled:opacity-50"
+                       >
+                          <span>{loading ? 'Updating...' : 'Update Password'}</span>
+                          {!loading && <ArrowRight size={18} />}
+                       </button>
+                     )}
+                  </div>
               </form>
             ) : (
               <div className="space-y-5">
@@ -230,15 +208,14 @@ const ResetPassword = () => {
                   </div>
                 </div>
                 <div className="pt-2">
-                  <Link to="/forgot-password">
-                    <EntryButton 
+                  <Link to="/forgot-password" className="block w-full">
+                    <button 
                       type="button" 
-                      variant="primary"
-                      className="h-[52px] text-[15px] font-bold bg-[#00a76b] text-[#fffefb] hover:bg-[#008f5a] w-full rounded-[6px]"
+                      className="h-[52px] text-[15px] font-bold bg-[#00a76b] text-[#fffefb] hover:bg-[#008f5a] w-full rounded-[6px] flex items-center justify-center gap-2 cursor-pointer border-none transition-all shadow-sm active:scale-[0.98]"
                     >
-                       Request New Link
-                       <ArrowRight size={20} className="ml-3" />
-                    </EntryButton>
+                       <span>Request New Link</span>
+                       <ArrowRight size={18} />
+                    </button>
                   </Link>
                 </div>
               </div>

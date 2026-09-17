@@ -35,10 +35,51 @@ exports.checkIn = async (req, res) => {
     const checkInTime = new Date();
     const { dateStr: today, timeInMinutes, hours, minutes } = getTimeDetails(checkInTime);
 
+    // Check if user has an approved leave today
+    const Leave = require('../models/Leave');
+    const todayStart = new Date(`${today}T00:00:00.000Z`);
+    const todayEnd = new Date(`${today}T23:59:59.999Z`);
+    const istStart = new Date(`${today}T00:00:00.000+05:30`);
+    const istEnd = new Date(`${today}T23:59:59.999+05:30`);
+    const minStart = new Date(Math.min(todayStart.getTime(), istStart.getTime()));
+    const maxEnd = new Date(Math.max(todayEnd.getTime(), istEnd.getTime()));
+
+    const activeLeave = await Leave.findOne({
+      user: req.user.id,
+      status: 'approved',
+      startDate: { $lte: maxEnd },
+      endDate: { $gte: minStart }
+    });
+
+    if (activeLeave) {
+      const leaveTypeName = activeLeave.leaveType ? (activeLeave.leaveType.charAt(0).toUpperCase() + activeLeave.leaveType.slice(1)) : 'Approved';
+      return res.status(403).json({
+        message: `You are on approved ${leaveTypeName} Leave today. Clock-in is disabled during approved leaves.`,
+        isOnLeave: true,
+        leaveType: activeLeave.leaveType
+      });
+    }
+
     // Check if already checked in today
     const existing = await Attendance.findOne({ user: req.user.id, date: today });
     if (existing) {
       return res.status(400).json({ message: 'Already checked in for today.' });
+    }
+
+    // Auto-checkout any open attendance records from prior days at 23:59:59 of their date
+    try {
+      const staleAttendances = await Attendance.find({ user: req.user.id, date: { $ne: today }, checkOutTime: null });
+      for (const att of staleAttendances) {
+        const eod = new Date(`${att.date}T23:59:59+05:30`);
+        const diffMs = eod - new Date(att.checkInTime);
+        att.checkOutTime = eod;
+        att.clockOut = '23:59';
+        att.totalHours = Math.max(0, parseFloat((diffMs / (1000 * 60 * 60)).toFixed(2)));
+        att.autoCheckout = true;
+        await att.save();
+      }
+    } catch (e) {
+      console.error('Error auto-closing stale attendance on checkin:', e);
     }
 
     let status = 'Present';
@@ -107,6 +148,18 @@ exports.checkOut = async (req, res) => {
     }
     if (attendance.checkOutTime) {
       return res.status(400).json({ message: 'Already checked out for today.' });
+    }
+
+    // If attendance is from a prior day, close it at 23:59:59 of that day
+    if (attendance.date !== today) {
+      const eod = new Date(`${attendance.date}T23:59:59+05:30`);
+      attendance.checkOutTime = eod;
+      attendance.clockOut = '23:59';
+      const diffMs = eod - new Date(attendance.checkInTime);
+      attendance.totalHours = Math.max(0, parseFloat((diffMs / (1000 * 60 * 60)).toFixed(2)));
+      attendance.autoCheckout = true;
+      await attendance.save();
+      return res.status(200).json(attendance);
     }
 
     const clockOutStr = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
@@ -313,32 +366,81 @@ const buildEmployeeAttendanceHistory = async (userId) => {
 
     const existingAtt = attendanceRecords.find(r => r.date === dStr);
 
-    if (existingAtt) {
+    const dStart = new Date(d);
+    dStart.setHours(0, 0, 0, 0);
+    const dEnd = new Date(d);
+    dEnd.setHours(23, 59, 59, 999);
+
+    const matchingLeave = approvedLeaves.find(l => {
+      const lStart = new Date(l.startDate);
+      const lEnd = new Date(l.endDate);
+      return (lStart <= dEnd && lEnd >= dStart);
+    });
+
+    if (matchingLeave) {
+      fullLogs.push({
+        _id: existingAtt ? existingAtt._id : `leave_${matchingLeave._id}_${dStr}`,
+        user: { _id: user._id, name: user.name, email: user.email, role: user.role },
+        date: dStr,
+        status: 'Leave',
+        leaveType: matchingLeave.leaveType || matchingLeave.type || 'Leave',
+        reason: matchingLeave.reason || 'Approved Leave',
+        clockIn: existingAtt?.clockIn || '--',
+        clockOut: existingAtt?.clockOut || '--',
+        totalHours: existingAtt?.totalHours || '--'
+      });
+    } else if (existingAtt) {
+      const isToday = dStr === todayStr;
+      const eodOfRec = new Date(`${dStr}T23:59:59+05:30`);
+
       let clockInStr = existingAtt.clockIn || '--';
       if (existingAtt.checkInTime) {
         const { hours, minutes } = getTimeDetails(new Date(existingAtt.checkInTime));
         clockInStr = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
       }
+
       let clockOutStr = existingAtt.clockOut || '--';
-      if (existingAtt.checkOutTime) {
-        const { hours, minutes } = getTimeDetails(new Date(existingAtt.checkOutTime));
-        clockOutStr = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+      let effectiveCheckOutTime = existingAtt.checkOutTime;
+
+      // Clean up past records: If checkout spilled into next day or missing
+      if (!isToday) {
+        if (effectiveCheckOutTime && new Date(effectiveCheckOutTime) > eodOfRec) {
+          effectiveCheckOutTime = eodOfRec;
+          clockOutStr = '23:59';
+        } else if (effectiveCheckOutTime) {
+          const { hours, minutes } = getTimeDetails(new Date(effectiveCheckOutTime));
+          clockOutStr = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+        } else if (existingAtt.checkInTime && existingAtt.status !== 'Absent' && existingAtt.status !== 'Leave') {
+          effectiveCheckOutTime = eodOfRec;
+          clockOutStr = '23:59';
+        }
+      } else {
+        if (effectiveCheckOutTime) {
+          const { hours, minutes } = getTimeDetails(new Date(effectiveCheckOutTime));
+          clockOutStr = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+        }
       }
 
       const tt = timeTrackRecords.find(t => t.date === dStr);
       let hoursVal = existingAtt.totalHours;
       let activeSecs = null;
-      let effectiveCheckOutTime = existingAtt.checkOutTime;
 
       if (tt) {
-        const isToday = dStr === todayStr;
         if (isToday && (tt.status === 'active' || tt.isRunning || !tt.endTime || !existingAtt.checkOutTime)) {
           effectiveCheckOutTime = null;
           clockOutStr = '--';
-        } else if (tt.endTime && (!effectiveCheckOutTime || new Date(tt.endTime) > new Date(effectiveCheckOutTime))) {
-          effectiveCheckOutTime = tt.endTime;
-          const { hours, minutes } = getTimeDetails(new Date(tt.endTime));
-          clockOutStr = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+        } else if (tt.endTime) {
+          const ttEnd = new Date(tt.endTime);
+          const validEnd = (!isToday && ttEnd > eodOfRec) ? eodOfRec : ttEnd;
+          if (!effectiveCheckOutTime || validEnd > new Date(effectiveCheckOutTime)) {
+            effectiveCheckOutTime = validEnd;
+            if (!isToday && validEnd >= eodOfRec) {
+              clockOutStr = '23:59';
+            } else {
+              const { hours, minutes } = getTimeDetails(validEnd);
+              clockOutStr = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+            }
+          }
         }
         let liveActive = Math.floor(tt.activeTime || 0);
         let liveIdle = Math.floor(tt.idleTime || 0);
@@ -388,41 +490,16 @@ const buildEmployeeAttendanceHistory = async (userId) => {
         sessions: tt?.sessions || [],
         startTime: tt?.startTime || existingAtt.checkInTime
       });
-    } else {
-      const dStart = new Date(d);
-      dStart.setHours(0, 0, 0, 0);
-      const dEnd = new Date(d);
-      dEnd.setHours(23, 59, 59, 999);
-
-      const matchingLeave = approvedLeaves.find(l => {
-        const lStart = new Date(l.startDate);
-        const lEnd = new Date(l.endDate);
-        return (lStart <= dEnd && lEnd >= dStart);
+    } else if (!isWeekend && dStr <= todayStr) {
+      fullLogs.push({
+        _id: `absent_${userId}_${dStr}`,
+        user: { _id: user._id, name: user.name, email: user.email, role: user.role },
+        date: dStr,
+        status: 'Absent',
+        clockIn: '--',
+        clockOut: '--',
+        totalHours: '--'
       });
-
-      if (matchingLeave) {
-        fullLogs.push({
-          _id: `leave_${matchingLeave._id}_${dStr}`,
-          user: { _id: user._id, name: user.name, email: user.email, role: user.role },
-          date: dStr,
-          status: 'Leave',
-          leaveType: matchingLeave.leaveType || matchingLeave.type || 'Leave',
-          reason: matchingLeave.reason || 'Approved Leave',
-          clockIn: '--',
-          clockOut: '--',
-          totalHours: '--'
-        });
-      } else if (!isWeekend && dStr <= todayStr) {
-        fullLogs.push({
-          _id: `absent_${userId}_${dStr}`,
-          user: { _id: user._id, name: user.name, email: user.email, role: user.role },
-          date: dStr,
-          status: 'Absent',
-          clockIn: '--',
-          clockOut: '--',
-          totalHours: '--'
-        });
-      }
     }
   }
 
@@ -682,14 +759,37 @@ exports.getAttendance = async (req, res) => {
             const formatLocalDate = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
             const curTodayStr = formatLocalDate(now);
             const isToday = rec.date === curTodayStr || rec.date === now.toISOString().split('T')[0];
+            const eodOfRec = new Date(`${rec.date}T23:59:59+05:30`);
 
-            if (isToday && (tt.status === 'active' || tt.isRunning || !tt.endTime || !rec.checkOutTime)) {
-              rec.checkOutTime = null;
-              rec.clockOut = null;
-            } else if (tt.endTime && (!rec.checkOutTime || new Date(tt.endTime) > new Date(rec.checkOutTime))) {
-              rec.checkOutTime = tt.endTime;
-              const { hours, minutes } = getTimeDetails(new Date(tt.endTime));
-              rec.clockOut = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+            // Sanitize past records: checkout must never exceed 23:59:59 of rec.date
+            if (!isToday) {
+              if (rec.checkOutTime && new Date(rec.checkOutTime) > eodOfRec) {
+                rec.checkOutTime = eodOfRec;
+                rec.clockOut = '23:59';
+              } else if (!rec.checkOutTime && rec.checkInTime && rec.status === 'Present') {
+                rec.checkOutTime = eodOfRec;
+                rec.clockOut = '23:59';
+              }
+            }
+
+            if (tt) {
+              if (isToday && (tt.status === 'active' || tt.isRunning || !tt.endTime || !rec.checkOutTime)) {
+                rec.checkOutTime = null;
+                rec.clockOut = null;
+              } else if (tt.endTime) {
+                const ttEnd = new Date(tt.endTime);
+                // Cap at 23:59:59 of rec.date so it never spills into the next day
+                const validEnd = (!isToday && ttEnd > eodOfRec) ? eodOfRec : ttEnd;
+                if (!rec.checkOutTime || validEnd > new Date(rec.checkOutTime)) {
+                  rec.checkOutTime = validEnd;
+                  if (!isToday && validEnd >= eodOfRec) {
+                    rec.clockOut = '23:59';
+                  } else {
+                    const { hours, minutes } = getTimeDetails(validEnd);
+                    rec.clockOut = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+                  }
+                }
+              }
             }
 
             let liveActive = Math.floor(tt.activeTime || 0);
@@ -820,16 +920,30 @@ exports.getWeeklySummary = async (req, res) => {
           endDate: eDate
         });
       }
+    } else if (period === 'today') {
+      const sDate = new Date(now);
+      sDate.setHours(0, 0, 0, 0);
+      const eDate = new Date(now);
+      eDate.setHours(23, 59, 59, 999);
+      const dStr = formatLocalDate(now);
+      const dayName = now.toLocaleString('en-US', { weekday: 'short' });
+      intervals.push({
+        name: dayName,
+        startStr: dStr,
+        endStr: dStr,
+        startDate: sDate,
+        endDate: eDate
+      });
     } else {
+      // Calendar week: Sunday to Saturday (e.g. 13th to 19th)
       const currentDay = now.getDay();
-      const mondayDiff = currentDay === 0 ? -6 : 1 - currentDay;
-      const monday = new Date(now);
-      monday.setDate(now.getDate() + mondayDiff);
+      const sunday = new Date(now);
+      sunday.setDate(now.getDate() - currentDay);
 
-      const weekdayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+      const weekdayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
       for (let i = 0; i < 7; i++) {
-        const d = new Date(monday);
-        d.setDate(monday.getDate() + i);
+        const d = new Date(sunday);
+        d.setDate(sunday.getDate() + i);
         const sDate = new Date(d);
         sDate.setHours(0, 0, 0, 0);
         const eDate = new Date(d);
@@ -972,6 +1086,31 @@ exports.clockIn = async (req, res) => {
     const { date, location } = req.body;
     const recordDate = date || todayStr;
 
+    // Check if user has an approved leave for recordDate
+    const Leave = require('../models/Leave');
+    const dayStart = new Date(`${recordDate}T00:00:00.000Z`);
+    const dayEnd = new Date(`${recordDate}T23:59:59.999Z`);
+    const istStart = new Date(`${recordDate}T00:00:00.000+05:30`);
+    const istEnd = new Date(`${recordDate}T23:59:59.999+05:30`);
+    const minStart = new Date(Math.min(dayStart.getTime(), istStart.getTime()));
+    const maxEnd = new Date(Math.max(dayEnd.getTime(), istEnd.getTime()));
+
+    const activeLeave = await Leave.findOne({
+      user: req.user.id,
+      status: 'approved',
+      startDate: { $lte: maxEnd },
+      endDate: { $gte: minStart }
+    });
+
+    if (activeLeave) {
+      const leaveTypeName = activeLeave.leaveType ? (activeLeave.leaveType.charAt(0).toUpperCase() + activeLeave.leaveType.slice(1)) : 'Approved';
+      return res.status(403).json({
+        message: `You are on approved ${leaveTypeName} Leave today. Clock-in is disabled during approved leaves.`,
+        isOnLeave: true,
+        leaveType: activeLeave.leaveType
+      });
+    }
+
     // Check if already clocked in today
     const existing = await Attendance.findOne({ user: req.user.id, date: recordDate });
     if (existing) {
@@ -1051,6 +1190,19 @@ exports.clockOut = async (req, res) => {
 
     if (!attendance) {
       return res.status(404).json({ message: 'No clock-in record found for today' });
+    }
+
+    if (attendance.date !== recordDate) {
+      const eod = new Date(`${attendance.date}T23:59:59+05:30`);
+      attendance.checkOutTime = eod;
+      attendance.clockOut = '23:59';
+      if (attendance.checkInTime) {
+        const diffMs = eod - new Date(attendance.checkInTime);
+        attendance.totalHours = Math.max(0, parseFloat((diffMs / (1000 * 60 * 60)).toFixed(2)));
+      }
+      attendance.autoCheckout = true;
+      await attendance.save();
+      return res.status(200).json(attendance);
     }
 
     const clockOutStr = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
@@ -1311,6 +1463,20 @@ exports.getMyYearlyStats = async (req, res) => {
 exports.getAllAttendance = async (req, res) => {
   try {
     const records = await Attendance.find().populate('user', 'name role email').sort({ date: -1 }).lean();
+    const now = new Date();
+    const curTodayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(now);
+    for (const rec of records) {
+      if (rec.date !== curTodayStr) {
+        const eodOfRec = new Date(`${rec.date}T23:59:59+05:30`);
+        if (rec.checkOutTime && new Date(rec.checkOutTime) > eodOfRec) {
+          rec.checkOutTime = eodOfRec;
+          rec.clockOut = '23:59';
+        } else if (!rec.checkOutTime && rec.checkInTime && rec.status === 'Present') {
+          rec.checkOutTime = eodOfRec;
+          rec.clockOut = '23:59';
+        }
+      }
+    }
     res.json(records);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -1327,6 +1493,7 @@ exports.getTeamStats = async (req, res) => {
 
     const now = new Date();
     let startDate, endDate;
+    let eligibleUserIds = [];
 
     if (period === 'today') {
       startDate = new Date(now);
@@ -1335,13 +1502,12 @@ exports.getTeamStats = async (req, res) => {
       endDate.setHours(23, 59, 59, 999);
     } else if (period === 'week') {
       const currentDay = now.getDay();
-      const mondayDiff = currentDay === 0 ? -6 : 1 - currentDay;
       startDate = new Date(now);
-      startDate.setDate(now.getDate() + mondayDiff);
+      startDate.setDate(now.getDate() - currentDay);
       startDate.setHours(0, 0, 0, 0);
 
       endDate = new Date(startDate);
-      endDate.setDate(startDate.getDate() + 4); // Mon to Fri
+      endDate.setDate(startDate.getDate() + 6); // Sun to Sat (Calendar week: 13 to 19)
       endDate.setHours(23, 59, 59, 999);
     } else if (period === 'month') {
       startDate = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
@@ -1520,11 +1686,47 @@ exports.getTeamStats = async (req, res) => {
 exports.getTodayAttendance = async (req, res) => {
   try {
     const now = new Date();
-    const formatLocalDate = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    const todayStr = formatLocalDate(now);
+    const { dateStr: todayStr } = getTimeDetails(now);
 
-    const attendance = await Attendance.findOne({ user: req.user.id, date: todayStr });
-    res.json({ attendance });
+    const Leave = require('../models/Leave');
+    const todayStart = new Date(`${todayStr}T00:00:00.000Z`);
+    const todayEnd = new Date(`${todayStr}T23:59:59.999Z`);
+    const istStart = new Date(`${todayStr}T00:00:00.000+05:30`);
+    const istEnd = new Date(`${todayStr}T23:59:59.999+05:30`);
+    const minStart = new Date(Math.min(todayStart.getTime(), istStart.getTime()));
+    const maxEnd = new Date(Math.max(todayEnd.getTime(), istEnd.getTime()));
+
+    const activeLeave = await Leave.findOne({
+      user: req.user.id,
+      status: 'approved',
+      startDate: { $lte: maxEnd },
+      endDate: { $gte: minStart }
+    });
+
+    let attendance = await Attendance.findOne({ user: req.user.id, date: todayStr });
+    if (activeLeave && (!attendance || attendance.status !== 'Leave')) {
+      if (attendance) {
+        attendance.status = 'Leave';
+        await attendance.save();
+      } else {
+        attendance = await Attendance.create({
+          user: req.user.id,
+          date: todayStr,
+          status: 'Leave',
+          checkInTime: now,
+          checkOutTime: now,
+          clockIn: '--',
+          clockOut: '--',
+          totalHours: 0
+        });
+      }
+    }
+
+    res.json({
+      attendance,
+      isOnLeave: !!activeLeave,
+      leaveType: activeLeave?.leaveType
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

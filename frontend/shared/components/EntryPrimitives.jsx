@@ -17,14 +17,19 @@ export const EntryButton = ({ children, variant = 'primary', className = '', ...
   );
 };
 
-export const EntryInput = ({ label, icon, type = 'text', error, ...props }) => {
+export const EntryInput = ({ label, icon, type = 'text', error, required, ...props }) => {
   const [showPassword, setShowPassword] = useState(false);
   const isPassword = type === 'password';
   const inputType = isPassword ? (showPassword ? 'text' : 'password') : type;
 
   return (
     <div className="flex flex-col gap-1.5 w-full text-left">
-      {label && <label className="zap-caption-upper text-[#201515] ml-1">{label}</label>}
+      {label && (
+        <label className="zap-caption-upper text-[#201515] ml-1 flex items-center">
+          <span>{label}</span>
+          {required && <span className="text-red-500 font-bold ml-1 text-sm" style={{ color: '#ef4444' }}>*</span>}
+        </label>
+      )}
       <div className="relative group">
         {icon && (
           <span className={`absolute left-4 top-1/2 -translate-y-1/2 transition-colors ${

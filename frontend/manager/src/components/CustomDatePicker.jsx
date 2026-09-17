@@ -13,11 +13,30 @@ const CustomDatePicker = ({ name, value, onChange, minDate, maxDate, isDateDisab
         return new Date(parts[0], parts[1] - 1, parts[2]);
       }
     }
+    if (maxDate) {
+      const parts = maxDate.split('-');
+      if (parts.length === 3) {
+        const maxD = new Date(parts[0], parts[1] - 1, parts[2]);
+        if (new Date() > maxD) return maxD;
+      }
+    }
     return new Date();
   };
 
   const [currentMonth, setCurrentMonth] = useState(getInitialDate());
   const wrapperRef = useRef(null);
+  const selectedYearRef = useRef(null);
+  const yearsContainerRef = useRef(null);
+
+  useEffect(() => {
+    if (viewMode === 'years') {
+      setTimeout(() => {
+        if (selectedYearRef.current && yearsContainerRef.current) {
+          selectedYearRef.current.scrollIntoView({ block: 'center', behavior: 'auto' });
+        }
+      }, 30);
+    }
+  }, [viewMode]);
 
   useEffect(() => {
     if (value) {
@@ -47,6 +66,9 @@ const CustomDatePicker = ({ name, value, onChange, minDate, maxDate, isDateDisab
     e.stopPropagation();
     if (viewMode === 'years') {
       setCurrentMonth(new Date(currentMonth.getFullYear() - 12, currentMonth.getMonth(), 1));
+      setTimeout(() => {
+        if (yearsContainerRef.current) yearsContainerRef.current.scrollTop -= 120;
+      }, 20);
     } else {
       setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1));
     }
@@ -57,6 +79,9 @@ const CustomDatePicker = ({ name, value, onChange, minDate, maxDate, isDateDisab
     e.stopPropagation();
     if (viewMode === 'years') {
       setCurrentMonth(new Date(currentMonth.getFullYear() + 12, currentMonth.getMonth(), 1));
+      setTimeout(() => {
+        if (yearsContainerRef.current) yearsContainerRef.current.scrollTop += 120;
+      }, 20);
     } else {
       setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1));
     }
@@ -95,9 +120,13 @@ const CustomDatePicker = ({ name, value, onChange, minDate, maxDate, isDateDisab
   const displayValue = value ? value.split('-').reverse().join('-') : '';
   const todayString = `${new Date().getFullYear()}-${pad(new Date().getMonth() + 1)}-${pad(new Date().getDate())}`;
 
-  // Generate list of 24 years centered around current year
+  // Generate list of years spanning back for birth dates and up to future
   const currentYear = new Date().getFullYear();
-  const yearList = Array.from({ length: 30 }, (_, i) => currentYear - 15 + i);
+  const minAllowedYear = minDate ? parseInt(minDate.split('-')[0], 10) : 1940;
+  const maxAllowedYear = maxDate ? Math.max(parseInt(maxDate.split('-')[0], 10), currentYear + 10) : currentYear + 10;
+  const startYear = Math.min(minAllowedYear, 1940);
+  const endYear = Math.max(maxAllowedYear, currentYear + 10);
+  const yearList = Array.from({ length: endYear - startYear + 1 }, (_, i) => startYear + i);
 
   return (
     <div className="relative w-full" ref={wrapperRef}>
@@ -199,7 +228,10 @@ const CustomDatePicker = ({ name, value, onChange, minDate, maxDate, isDateDisab
 
           {/* VIEW MODE: YEARS GRID */}
           {viewMode === 'years' && (
-            <div className="grid grid-cols-4 gap-1.5 py-2 max-h-48 overflow-y-auto pr-1 animate-fadeIn custom-scrollbar">
+            <div
+              ref={yearsContainerRef}
+              className="grid grid-cols-4 gap-1.5 py-2 max-h-48 overflow-y-auto pr-1 animate-fadeIn custom-scrollbar"
+            >
               {yearList.map((y) => {
                 const isSelected = year === y;
                 const isDisabled = (maxDate && `${y}-01-01` > maxDate) || (minDate && `${y}-12-31` < minDate);
@@ -207,6 +239,7 @@ const CustomDatePicker = ({ name, value, onChange, minDate, maxDate, isDateDisab
                   <button
                     key={y}
                     type="button"
+                    ref={isSelected ? selectedYearRef : null}
                     disabled={isDisabled}
                     onClick={() => {
                       setCurrentMonth(new Date(y, month, 1));

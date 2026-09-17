@@ -71,6 +71,84 @@ let mock = {
   activeTime: 0, idleTime: 0, inactivityCount: 0
 };
 
+// ── Auto-close unclosed sessions from previous days at 23:59:59 of that day ──
+const closeStaleUserSessions = async (userId, today) => {
+  try {
+    const todayStart = new Date(`${today}T00:00:00+05:30`);
+    const staleSessions = await TimeTrack.find({
+      employeeId: userId,
+      date: { $ne: today },
+      $or: [
+        { status: { $in: ['active', 'idle', 'paused'] } },
+        { endTime: { $gt: todayStart } }
+      ]
+    });
+
+    for (const s of staleSessions) {
+      const eodDate = new Date(`${s.date}T23:59:59+05:30`);
+      if (s.status === 'active' && s.segmentStart) {
+        const elapsed = Math.max(0, (eodDate - new Date(s.segmentStart)) / 1000);
+        s.activeTime += Math.floor(elapsed);
+      }
+      const lastIdx = (s.sessions || []).length - 1;
+      if (lastIdx >= 0 && (!s.sessions[lastIdx].end || new Date(s.sessions[lastIdx].end) > eodDate)) {
+        s.sessions[lastIdx].end = eodDate;
+      }
+      const lastPauseIdx = (s.pauseEvents || []).length - 1;
+      if (lastPauseIdx >= 0 && (!s.pauseEvents[lastPauseIdx].resumeTime || new Date(s.pauseEvents[lastPauseIdx].resumeTime) > eodDate)) {
+        s.pauseEvents[lastPauseIdx].resumeTime = eodDate;
+      }
+      s.segmentStart = null;
+      s.idleStart = null;
+      s.endTime = eodDate;
+      s.status = 'completed';
+      s.isRunning = false;
+      s.isAutoStop = true;
+      s.totalWorkedDuration = Math.round((s.activeTime || 0) / 60);
+      s.totalTime = Math.max(0, Math.floor((eodDate - new Date(s.startTime)) / 1000));
+      await s.save();
+
+      const prevAtt = await Attendance.findOne({ user: userId, date: s.date });
+      if (prevAtt) {
+        let diffMs = 0;
+        if (prevAtt.checkInTime) {
+          diffMs = Math.max(0, eodDate - new Date(prevAtt.checkInTime));
+        }
+        prevAtt.checkOutTime = eodDate;
+        prevAtt.clockOut = '23:59';
+        prevAtt.totalHours = Math.max(0, parseFloat((diffMs / (1000 * 60 * 60)).toFixed(2)));
+        prevAtt.autoCheckout = true;
+        await prevAtt.save();
+      }
+    }
+
+    const staleAtts = await Attendance.find({
+      user: userId,
+      date: { $ne: today },
+      $or: [
+        { checkOutTime: null },
+        { clockOut: '--' },
+        { clockOut: null },
+        { checkOutTime: { $gt: todayStart } }
+      ]
+    });
+    for (const att of staleAtts) {
+      const eod = new Date(`${att.date}T23:59:59+05:30`);
+      let diffMs = 0;
+      if (att.checkInTime) {
+        diffMs = Math.max(0, eod - new Date(att.checkInTime));
+      }
+      att.checkOutTime = eod;
+      att.clockOut = '23:59';
+      att.totalHours = Math.max(0, parseFloat((diffMs / (1000 * 60 * 60)).toFixed(2)));
+      att.autoCheckout = true;
+      await att.save();
+    }
+  } catch (err) {
+    console.error('[CLOSE STALE USER SESSIONS ERROR]', err);
+  }
+};
+
 // ============================================================
 // 🟢 START
 // ============================================================
@@ -86,11 +164,8 @@ exports.startTracking = async (req, res) => {
     const now = new Date();
     const userNode = await User.findById(id).select('reportingManager teamId');
 
-    // Close any stale session from a previous day
-    await TimeTrack.updateMany(
-      { employeeId: id, date: { $ne: today }, status: { $in: ['active', 'idle', 'paused'] } },
-      { $set: { status: 'completed', isRunning: false, endTime: now } }
-    );
+    // Close any stale session from a previous day at 23:59:59 of that day
+    await closeStaleUserSessions(id, today);
 
     let session = await TimeTrack.findOne({ employeeId: id, date: today });
     const existingAttendance = await Attendance.findOne({ user: id, date: today });
@@ -104,7 +179,7 @@ exports.startTracking = async (req, res) => {
       endDate: { $gte: leaveStartBound }
     });
 
-    if (activeLeave && role === 'employee') {
+    if (activeLeave) {
       const leaveTypeName = activeLeave.leaveType ? (activeLeave.leaveType.charAt(0).toUpperCase() + activeLeave.leaveType.slice(1)) : 'Approved';
       return res.status(403).json({
         message: `You are on approved ${leaveTypeName} Leave today. Time tracking is suspended during approved leaves.`,
@@ -178,7 +253,7 @@ exports.startTracking = async (req, res) => {
       });
     }
 
-    const io = req.app.get('io');
+    const io = req.app?.get ? req.app.get('io') : null;
     if (io) io.to(`user_${id}`).emit('timer_update', buildPayload(session));
 
     res.status(201).json({ message: 'Tracking started', session: buildPayload(session) });
@@ -221,7 +296,7 @@ exports.pauseTracking = async (req, res) => {
 
     await session.save();
 
-    const io = req.app.get('io');
+    const io = req.app?.get ? req.app.get('io') : null;
     if (io) io.to(`user_${id}`).emit('timer_paused', { reason: 'manual', ...buildPayload(session) });
 
     res.json({ message: 'Tracking paused', session: buildPayload(session) });
@@ -243,6 +318,34 @@ exports.resumeTracking = async (req, res) => {
 
     const { id } = req.user;
     const now = new Date();
+
+    // 🏖️ Check if user has an approved leave today
+    const { start: leaveStartBound, end: leaveEndBound } = getTodayLeaveBounds();
+    const activeLeave = await Leave.findOne({
+      user: id,
+      status: 'approved',
+      startDate: { $lte: leaveEndBound },
+      endDate: { $gte: leaveStartBound }
+    });
+
+    if (activeLeave) {
+      const sessionToClose = await TimeTrack.findOne({
+        employeeId: id, date: getToday(), status: { $in: ['paused', 'idle', 'active'] }
+      });
+      if (sessionToClose) {
+        sessionToClose.status = 'completed';
+        sessionToClose.isRunning = false;
+        sessionToClose.completedAt = now;
+        await sessionToClose.save();
+      }
+      const leaveTypeName = activeLeave.leaveType ? (activeLeave.leaveType.charAt(0).toUpperCase() + activeLeave.leaveType.slice(1)) : 'Approved';
+      return res.status(403).json({
+        message: `You are on approved ${leaveTypeName} Leave today. Time tracking is suspended during approved leaves.`,
+        isOnLeave: true,
+        leaveType: activeLeave.leaveType
+      });
+    }
+
     const session = await TimeTrack.findOne({
       employeeId: id, date: getToday(), status: { $in: ['paused', 'idle', 'active'] }
     });
@@ -269,7 +372,7 @@ exports.resumeTracking = async (req, res) => {
 
     await session.save();
 
-    const io = req.app.get('io');
+    const io = req.app?.get ? req.app.get('io') : null;
     if (io) io.to(`user_${id}`).emit('timer_resumed', buildPayload(session));
 
     res.json({ message: 'Tracking resumed', session: buildPayload(session) });
@@ -352,7 +455,7 @@ exports.stopTracking = async (req, res) => {
 
     await session.save();
 
-    const io = req.app.get('io');
+    const io = req.app?.get ? req.app.get('io') : null;
     if (io) {
       io.to(`user_${id}`).emit('timer_stopped', buildPayload(session));
       io.to(`user_${id}`).emit('timer_update', buildPayload(session));
@@ -381,13 +484,38 @@ exports.updateActivity = async (req, res) => {
     });
 
     if (!session) {
-      // Auto-close stale yesterday session
-      const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
-      await TimeTrack.updateMany(
-        { employeeId: id, date: yesterday, status: { $in: ['active', 'idle'] } },
-        { $set: { status: 'completed', isRunning: false, endTime: now } }
-      );
+      // Auto-close stale previous day sessions at 23:59:59 of that day
+      await closeStaleUserSessions(id, getToday());
       return res.status(404).json({ message: 'No active session' });
+    }
+
+    // 🏖️ Check if user has an approved leave today
+    const { start: leaveStartBound, end: leaveEndBound } = getTodayLeaveBounds();
+    const activeLeave = await Leave.findOne({
+      user: id,
+      status: 'approved',
+      startDate: { $lte: leaveEndBound },
+      endDate: { $gte: leaveStartBound }
+    });
+
+    if (activeLeave) {
+      if (session && session.status !== 'completed') {
+        if (session.status === 'active' && session.segmentStart) {
+          const elapsed = Math.floor((now - new Date(session.segmentStart)) / 1000);
+          session.activeTime += Math.max(0, elapsed);
+          session.segmentStart = null;
+        }
+        session.status = 'completed';
+        session.isRunning = false;
+        session.completedAt = now;
+        await session.save();
+      }
+      return res.status(403).json({
+        message: 'You are on approved Leave today.',
+        isOnLeave: true,
+        status: 'ON_LEAVE',
+        leaveType: activeLeave.leaveType
+      });
     }
 
     const normalizedType = String(type || '').toLowerCase();
@@ -426,7 +554,7 @@ exports.updateActivity = async (req, res) => {
 
         await session.save();
 
-        const io = req.app.get('io');
+        const io = req.app?.get ? req.app.get('io') : null;
         if (io) {
           io.to(`user_${id}`).emit('timer_paused', {
             reason: 'inactivity',
@@ -485,7 +613,20 @@ exports.getSessionStatus = async (req, res) => {
       endDate: { $gte: leaveStartBound }
     });
 
-    if (activeLeave && (!session || session.status !== 'active')) {
+    if (activeLeave) {
+      if (session && session.status !== 'completed') {
+        const now = new Date();
+        if (session.status === 'active' && session.segmentStart) {
+          const elapsed = Math.floor((now - new Date(session.segmentStart)) / 1000);
+          session.activeTime += Math.max(0, elapsed);
+          session.segmentStart = null;
+        }
+        session.status = 'completed';
+        session.isRunning = false;
+        session.completedAt = now;
+        await session.save();
+      }
+
       const leaveTypeName = activeLeave.leaveType ? (activeLeave.leaveType.charAt(0).toUpperCase() + activeLeave.leaveType.slice(1)) : 'Approved';
       return res.json({
         hasActiveSession: false,
@@ -602,7 +743,22 @@ exports.getMyTime = async (req, res) => {
       filter.date = startDate;
     }
 
-    res.json(await TimeTrack.find(filter).sort({ date: -1 }));
+    const myTracks = await TimeTrack.find(filter).sort({ date: -1 }).lean();
+    const curTodayStr = getToday();
+    for (const t of myTracks) {
+      if (t.date !== curTodayStr) {
+        const eodIST = new Date(`${t.date}T23:59:59+05:30`);
+        if (t.endTime && new Date(t.endTime) > eodIST) {
+          t.endTime = eodIST;
+        }
+        if (t.status === 'active' || t.status === 'paused' || t.status === 'idle') {
+          t.status = 'completed';
+          t.isRunning = false;
+          t.endTime = eodIST;
+        }
+      }
+    }
+    res.json(myTracks);
   } catch (err) { res.status(500).json({ message: 'My logs failed', error: err.message }); }
 };
 
@@ -678,6 +834,16 @@ exports.getAllTime = async (req, res) => {
         t.activeTime = liveActive;
         t.idleTime = liveIdle;
         t.totalTime = liveActive + liveIdle;
+      } else {
+        const eodIST = new Date(`${t.date}T23:59:59+05:30`);
+        if (t.endTime && new Date(t.endTime) > eodIST) {
+          t.endTime = eodIST;
+        }
+        if (t.status === 'active' || t.status === 'paused' || t.status === 'idle') {
+          t.status = 'completed';
+          t.isRunning = false;
+          t.endTime = eodIST;
+        }
       }
     }
 
@@ -730,6 +896,7 @@ exports.getAllTimeLogs = async (req, res) => {
     }
 
     const attRecords = await Attendance.find(attFilter).populate('user', 'name fullName email role').lean();
+    const curTodayStr = getToday();
     for (const att of attRecords) {
       if (!att.user) continue;
       const empId = att.user._id ? att.user._id.toString() : att.user.toString();
@@ -743,6 +910,16 @@ exports.getAllTimeLogs = async (req, res) => {
         };
 
         const activeSecs = (att.totalHours || 0) * 3600;
+        const eodIST = new Date(`${att.date}T23:59:59+05:30`);
+        let effectiveEnd = att.checkOutTime;
+        if (att.date !== curTodayStr) {
+          if (effectiveEnd && new Date(effectiveEnd) > eodIST) {
+            effectiveEnd = eodIST;
+          } else if (!effectiveEnd && att.checkInTime) {
+            effectiveEnd = eodIST;
+          }
+        }
+
         uniqueMap.set(key, {
           _id: att._id.toString(),
           employeeId: att.user,
@@ -751,7 +928,7 @@ exports.getAllTimeLogs = async (req, res) => {
           idleTime: 0,
           totalTime: activeSecs,
           startTime: att.checkInTime ? formatTimeStr(att.checkInTime) : '--',
-          endTime: att.checkOutTime ? formatTimeStr(att.checkOutTime) : '--',
+          endTime: effectiveEnd ? formatTimeStr(effectiveEnd) : '--',
           status: att.status === 'Present' || att.status === 'Half Day' || att.status === 'Late' ? 'completed' : 'not_started',
           pauses: 0,
           breakTime: 0,
@@ -761,6 +938,14 @@ exports.getAllTimeLogs = async (req, res) => {
     }
 
     let uniqueLogs = Array.from(uniqueMap.values());
+    for (const log of uniqueLogs) {
+      if (log.date !== curTodayStr) {
+        const eodIST = new Date(`${log.date}T23:59:59+05:30`);
+        if (log.endTime && new Date(log.endTime) > eodIST) {
+          log.endTime = eodIST;
+        }
+      }
+    }
 
     if (req.user && req.user.role === 'manager') {
       uniqueLogs = uniqueLogs.filter(log => {
@@ -1070,7 +1255,7 @@ exports.submitOfflineRequest = async (req, res) => {
     });
 
     // 🔔 Notify Manager and HR via Socket.io and Notification Model
-    const io = req.app.get('io');
+    const io = req.app?.get ? req.app.get('io') : null;
     const notifMessage = `${req.user.name || 'An employee'} submitted a meeting request for ${minutesNum} mins on ${targetDate}.`;
 
     if (managerId) {
@@ -1213,7 +1398,11 @@ exports.updateOfflineRequestStatus = async (req, res) => {
       return res.status(404).json({ message: 'Offline request not found.' });
     }
 
-    // 🔒 Authorization check for Managers
+    // 🔒 Authorization check for Managers & Self-Review prevention
+    if (String(request.employeeId) === String(req.user.id) && !['admin', 'hr'].includes(userRole)) {
+      return res.status(403).json({ message: 'You cannot approve or reject your own meeting request. An HR or Admin must review it.' });
+    }
+
     if (userRole === 'manager') {
       const isManager = String(request.managerId) === String(req.user.id);
       if (!isManager) {
@@ -1269,7 +1458,7 @@ exports.updateOfflineRequestStatus = async (req, res) => {
       }
 
       // 🔔 Real-time notification to employee
-      const io = req.app.get('io');
+      const io = req.app?.get ? req.app.get('io') : null;
       const empNotif = await Notification.create({
         userId: request.employeeId,
         senderId: req.user.id,
@@ -1297,7 +1486,7 @@ exports.updateOfflineRequestStatus = async (req, res) => {
       await request.save();
 
       // 🔔 Real-time notification to employee
-      const io = req.app.get('io');
+      const io = req.app?.get ? req.app.get('io') : null;
       const empNotif = await Notification.create({
         userId: request.employeeId,
         senderId: req.user.id,

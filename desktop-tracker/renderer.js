@@ -434,7 +434,10 @@ async function startSession() {
       return;
     }
     if (!res.ok) {
-      const err = await res.json();
+      const err = await res.json().catch(() => ({}));
+      if (err.isOnLeave) {
+        applyServerState({ status: 'ON_LEAVE', isOnLeave: true, ...err });
+      }
       return alert(err.message || 'Unable to start session.');
     }
     const data = await res.json();

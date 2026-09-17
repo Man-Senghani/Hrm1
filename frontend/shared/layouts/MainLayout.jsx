@@ -1296,7 +1296,13 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
           </main>
 
           {!location.pathname.endsWith('/chat') && (
-            <footer className="py-6 px-12 border-t border-[#c5c0b1] dark:border-[#1a2d29] bg-[#fffefb] dark:bg-[#08100e] flex justify-between items-center text-[11px] text-[#939084] dark:text-[#a3b3af] font-bold uppercase tracking-widest z-50" style={{ borderColor: isDarkMode ? '#1a2d29' : '#e2eae7' }}>
+            <footer
+              className="py-5 px-6 md:px-12 border-t backdrop-blur-xl flex justify-between items-center text-[11px] text-[#939084] dark:text-[#a3b3af] font-bold uppercase tracking-widest z-50 transition-colors duration-300"
+              style={{
+                backgroundColor: isDarkMode ? 'rgba(8,16,14,0.82)' : 'rgba(255,255,255,0.82)',
+                borderColor: isDarkMode ? '#1a2d29' : '#e2eae7'
+              }}
+            >
               <div className="flex gap-10 items-center">
                 <div className="flex items-center gap-2">
                   <div className="w-1.5 h-1.5 bg-[#00a76b] rounded-full animate-pulse"></div>
