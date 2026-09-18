@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { toast } from 'react-hot-toast';
-import { ClipboardList, Users, CalendarDays, PieChart, TrendingUp, Plus, ChevronDown } from 'lucide-react';
+import { ClipboardList, Users, CalendarDays, PieChart, TrendingUp, Plus, ChevronDown, RefreshCw } from 'lucide-react';
 
 import PendingApprovalQueue from '../../components/manager/PendingApprovalQueue';
 import EmployeeAvailabilityChart from '../../components/manager/EmployeeAvailabilityChart';
@@ -52,7 +52,14 @@ const LeaveManagement = () => {
   };
 
   if (loading) {
-    return <div className="flex h-screen items-center justify-center">Loading dashboard...</div>;
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="flex flex-col items-center gap-3">
+          <RefreshCw size={32} className="animate-spin text-emerald-500" />
+          <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">Loading leave data...</p>
+        </div>
+      </div>
+    );
   }
 
   const activeStats = {
@@ -117,23 +124,26 @@ const LeaveManagement = () => {
               onMouseLeave={() => setHoveredCardIndex(null)}
               style={{
                 borderColor: hoveredCardIndex === 0 ? '#a855f7' : undefined,
-                borderWidth: '2px',
-                borderStyle: 'solid',
-                boxShadow: hoveredCardIndex === 0 ? '0 0 16px rgba(168, 85, 247, 0.35)' : undefined
+                borderWidth: '1px',
+                borderStyle: 'solid'
               }}
-              className="bg-white dark:bg-[#1e293b] py-3.5 px-5 rounded-2xl border-gray-100 dark:border-gray-800 shadow-sm flex flex-col justify-between min-h-[140px] transition-all cursor-pointer group"
+              className="bg-white dark:bg-[#111c18] py-2 px-3 rounded-xl border border-gray-100 dark:border-gray-800 shadow-2xs flex items-center justify-between gap-2 transition-all cursor-pointer group hover:shadow-xs"
             >
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-purple-50 dark:bg-purple-900/20 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform duration-200">
-                  <ClipboardList className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="w-8 h-8 rounded-lg bg-purple-50 dark:bg-purple-900/30 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform duration-200">
+                  <ClipboardList className="w-4 h-4 text-purple-600 dark:text-purple-400" />
                 </div>
-                <span className="text-xs font-semibold text-gray-900 dark:text-white">Pending Approvals</span>
+                <div className="min-w-0">
+                  <h4 className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider truncate">Pending</h4>
+                  <span className="text-[10px] font-semibold text-purple-600 dark:text-purple-400 group-hover:underline block leading-tight">
+                    View all &rarr;
+                  </span>
+                </div>
               </div>
-              <div className="flex items-end gap-2 mt-1 mb-2">
-                <span className="text-3xl font-bold text-gray-900 dark:text-white tabular-nums">{activeStats?.pending || 0}</span>
-                <span className="text-sm font-medium text-gray-500 mb-0.5">Requests</span>
+              <div className="text-right shrink-0">
+                <span className="text-xl font-black text-gray-900 dark:text-white tabular-nums leading-none">{activeStats?.pending || 0}</span>
+                <span className="text-[9px] font-semibold text-gray-400 ml-1">Req</span>
               </div>
-              <button onClick={(e) => { e.stopPropagation(); window.dispatchEvent(new CustomEvent('trigger-filter-leave-table', { detail: 'pending' })); scrollToSection('pending-queue'); }} className="text-indigo-600 text-sm font-bold hover:underline self-start cursor-pointer border-none bg-transparent">View all &rarr;</button>
             </div>
 
             {/* Employees On Leave Today */}
@@ -143,23 +153,26 @@ const LeaveManagement = () => {
               onMouseLeave={() => setHoveredCardIndex(null)}
               style={{
                 borderColor: hoveredCardIndex === 1 ? '#10b981' : undefined,
-                borderWidth: '2px',
-                borderStyle: 'solid',
-                boxShadow: hoveredCardIndex === 1 ? '0 0 16px rgba(16, 185, 129, 0.35)' : undefined
+                borderWidth: '1px',
+                borderStyle: 'solid'
               }}
-              className="bg-white dark:bg-[#1e293b] py-3.5 px-5 rounded-2xl border-gray-100 dark:border-gray-800 shadow-sm flex flex-col justify-between min-h-[140px] transition-all cursor-pointer group"
+              className="bg-white dark:bg-[#111c18] py-2 px-3 rounded-xl border border-gray-100 dark:border-gray-800 shadow-2xs flex items-center justify-between gap-2 transition-all cursor-pointer group hover:shadow-xs"
             >
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform duration-200">
-                  <Users className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-900/30 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform duration-200">
+                  <Users className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
                 </div>
-                <span className="text-xs font-semibold text-gray-900 dark:text-white">Employees On Leave Today</span>
+                <div className="min-w-0">
+                  <h4 className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider truncate">On Leave Today</h4>
+                  <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 group-hover:underline block leading-tight">
+                    View &rarr;
+                  </span>
+                </div>
               </div>
-              <div className="flex items-end gap-2 mt-1 mb-2">
-                <span className="text-3xl font-bold text-gray-900 dark:text-white tabular-nums">{activeStats?.onLeaveToday || 0}</span>
-                <span className="text-sm font-medium text-gray-500 mb-0.5">Employees</span>
+              <div className="text-right shrink-0">
+                <span className="text-xl font-black text-gray-900 dark:text-white tabular-nums leading-none">{activeStats?.onLeaveToday || 0}</span>
+                <span className="text-[9px] font-semibold text-gray-400 ml-1">Emp</span>
               </div>
-              <button onClick={(e) => { e.stopPropagation(); window.dispatchEvent(new CustomEvent('trigger-filter-leave-table', { detail: 'on_leave_today' })); scrollToSection('pending-queue'); }} className="text-indigo-600 text-sm font-bold hover:underline self-start cursor-pointer border-none bg-transparent">View details &rarr;</button>
             </div>
 
             {/* Upcoming Leaves */}
@@ -169,26 +182,26 @@ const LeaveManagement = () => {
               onMouseLeave={() => setHoveredCardIndex(null)}
               style={{
                 borderColor: hoveredCardIndex === 2 ? '#f59e0b' : undefined,
-                borderWidth: '2px',
-                borderStyle: 'solid',
-                boxShadow: hoveredCardIndex === 2 ? '0 0 16px rgba(245, 158, 11, 0.35)' : undefined
+                borderWidth: '1px',
+                borderStyle: 'solid'
               }}
-              className="bg-white dark:bg-[#1e293b] py-3.5 px-5 rounded-2xl border-gray-100 dark:border-gray-800 shadow-sm flex flex-col justify-between min-h-[140px] transition-all cursor-pointer group"
+              className="bg-white dark:bg-[#111c18] py-2 px-3 rounded-xl border border-gray-100 dark:border-gray-800 shadow-2xs flex items-center justify-between gap-2 transition-all cursor-pointer group hover:shadow-xs"
             >
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-orange-50 dark:bg-orange-900/20 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform duration-200">
-                  <CalendarDays className="w-5 h-5 text-orange-600 dark:text-orange-400" />
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="w-8 h-8 rounded-lg bg-orange-50 dark:bg-orange-900/30 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform duration-200">
+                  <CalendarDays className="w-4 h-4 text-orange-600 dark:text-orange-400" />
                 </div>
-                <div className="flex flex-col">
-                  <span className="text-xs font-semibold text-gray-900 dark:text-white leading-tight">Upcoming Leaves</span>
-                  <span className="text-xs text-gray-500">(Next 7 Days)</span>
+                <div className="min-w-0">
+                  <h4 className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider truncate">Upcoming (7D)</h4>
+                  <span className="text-[10px] font-semibold text-orange-600 dark:text-orange-400 group-hover:underline block leading-tight">
+                    View &rarr;
+                  </span>
                 </div>
               </div>
-              <div className="flex items-end gap-2 mt-1 mb-2">
-                <span className="text-3xl font-bold text-gray-900 dark:text-white tabular-nums">{activeStats?.upcoming || 0}</span>
-                <span className="text-sm font-medium text-gray-500 mb-0.5">Employees</span>
+              <div className="text-right shrink-0">
+                <span className="text-xl font-black text-gray-900 dark:text-white tabular-nums leading-none">{activeStats?.upcoming || 0}</span>
+                <span className="text-[9px] font-semibold text-gray-400 ml-1">Emp</span>
               </div>
-              <button onClick={(e) => { e.stopPropagation(); window.dispatchEvent(new CustomEvent('trigger-filter-leave-table', { detail: 'upcoming' })); scrollToSection('pending-queue'); }} className="text-indigo-600 text-sm font-bold hover:underline self-start cursor-pointer border-none bg-transparent">View details &rarr;</button>
             </div>
 
             {/* Team Availability */}
@@ -197,27 +210,28 @@ const LeaveManagement = () => {
               onMouseLeave={() => setHoveredCardIndex(null)}
               style={{
                 borderColor: hoveredCardIndex === 3 ? '#3b82f6' : undefined,
-                borderWidth: '2px',
-                borderStyle: 'solid',
-                boxShadow: hoveredCardIndex === 3 ? '0 0 16px rgba(59, 130, 246, 0.35)' : undefined
+                borderWidth: '1px',
+                borderStyle: 'solid'
               }}
-              className="bg-white dark:bg-[#1e293b] py-3.5 px-5 rounded-2xl border-gray-100 dark:border-gray-800 shadow-sm flex flex-col justify-between min-h-[140px] transition-all cursor-pointer group"
+              className="bg-white dark:bg-[#111c18] py-2 px-3 rounded-xl border border-gray-100 dark:border-gray-800 shadow-2xs flex items-center justify-between gap-2 transition-all cursor-pointer group hover:shadow-xs"
             >
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform duration-200">
-                  <PieChart className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform duration-200">
+                  <PieChart className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                 </div>
-                <span className="text-xs font-semibold text-gray-900 dark:text-white">Team Availability</span>
+                <div className="min-w-0">
+                  <h4 className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider truncate">Availability</h4>
+                  <div className="w-16 bg-gray-100 dark:bg-gray-800 rounded-full h-1 mt-1 overflow-hidden">
+                    <div className="bg-emerald-500 h-1 rounded-full" style={{ width: `${activeStats?.availabilityPercent || 0}%` }}></div>
+                  </div>
+                </div>
               </div>
-              <div className="mt-1 mb-2">
-                <div className="flex items-end gap-1 mb-1">
-                  <span className="text-3xl font-bold text-gray-900 dark:text-white tabular-nums">{activeStats?.availabilityPercent || 0}</span>
-                  <span className="text-xl font-bold text-gray-900 dark:text-white mb-0.5">%</span>
+              <div className="text-right shrink-0">
+                <div className="flex items-baseline justify-end leading-none">
+                  <span className="text-xl font-black text-gray-900 dark:text-white tabular-nums">{activeStats?.availabilityPercent || 0}</span>
+                  <span className="text-[10px] font-bold text-gray-500 ml-0.5">%</span>
                 </div>
-                <div className="w-full bg-gray-100 dark:bg-gray-800 rounded-full h-1.5 mb-1">
-                  <div className="bg-emerald-500 h-1.5 rounded-full" style={{ width: `${activeStats?.availabilityPercent || 0}%` }}></div>
-                </div>
-                <span className="text-xs text-gray-500 font-medium">{activeStats?.availableCount || 0} Available</span>
+                <span className="text-[9px] font-semibold text-gray-400 block mt-0.5 leading-none">{activeStats?.availableCount || 0} Avail</span>
               </div>
             </div>
 
@@ -228,31 +242,26 @@ const LeaveManagement = () => {
               onMouseLeave={() => setHoveredCardIndex(null)}
               style={{
                 borderColor: hoveredCardIndex === 4 ? '#6366f1' : undefined,
-                borderWidth: '2px',
-                borderStyle: 'solid',
-                boxShadow: hoveredCardIndex === 4 ? '0 0 16px rgba(99, 102, 241, 0.35)' : undefined
+                borderWidth: '1px',
+                borderStyle: 'solid'
               }}
-              className="bg-white dark:bg-[#1e293b] py-3.5 px-5 rounded-2xl border-gray-100 dark:border-gray-800 shadow-sm flex flex-col justify-between min-h-[140px] transition-all cursor-pointer group"
+              className="bg-white dark:bg-[#111c18] py-2 px-3 rounded-xl border border-gray-100 dark:border-gray-800 shadow-2xs flex items-center justify-between gap-2 transition-all cursor-pointer group hover:shadow-xs"
             >
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-900/20 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform duration-200">
-                  <TrendingUp className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform duration-200">
+                  <TrendingUp className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
                 </div>
-                <span className="text-xs font-semibold text-gray-900 dark:text-white leading-tight">This Month<br/>Leave Requests</span>
-              </div>
-              <div className="mt-1 mb-2">
-                <div className="flex items-end gap-2">
-                  <span className="text-3xl font-bold text-gray-900 dark:text-white tabular-nums">{activeStats?.thisMonthRequests || 0}</span>
-                  <span className="text-sm font-medium text-gray-500 mb-0.5">Requests</span>
-                </div>
-                <div className="flex items-center mt-1">
-                  <TrendingUp className={`w-3 h-3 ${activeStats?.growth >= 0 ? 'text-emerald-500' : 'text-red-500'} mr-1`} />
-                  <span className={`text-xs font-bold ${activeStats?.growth >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
-                    {Math.abs(activeStats?.growth || 0)}% {activeStats?.growth >= 0 ? 'more' : 'less'} than last month
+                <div className="min-w-0">
+                  <h4 className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider truncate">This Month</h4>
+                  <span className={`text-[9px] font-bold truncate block leading-tight ${activeStats?.growth >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                    {Math.abs(activeStats?.growth || 0)}% vs last mo
                   </span>
                 </div>
               </div>
-              <button onClick={(e) => { e.stopPropagation(); window.dispatchEvent(new CustomEvent('trigger-filter-leave-table', { detail: 'this_month' })); scrollToSection('pending-queue'); }} className="text-indigo-600 text-sm font-bold hover:underline self-start cursor-pointer border-none bg-transparent">View details &rarr;</button>
+              <div className="text-right shrink-0">
+                <span className="text-xl font-black text-gray-900 dark:text-white tabular-nums leading-none">{activeStats?.thisMonthRequests || 0}</span>
+                <span className="text-[9px] font-semibold text-gray-400 ml-1">Req</span>
+              </div>
             </div>
 
           </div>
@@ -268,10 +277,10 @@ const LeaveManagement = () => {
       </div>
 
       {/* Calendar, Balances, and Availability Grid */}
-      <div id="leave-calendar-section" className="grid grid-cols-1 xl:grid-cols-3 gap-6 mb-6">
-        <div className="h-[500px] overflow-hidden"><TeamLeaveCalendar /></div>
-        <div className="h-[500px] overflow-hidden"><TeamLeaveBalance /></div>
-        <div className="h-[500px] overflow-hidden"><EmployeeAvailabilityChart trigger={refreshTrigger} /></div>
+      <div id="leave-calendar-section" className="grid grid-cols-1 xl:grid-cols-3 gap-4 sm:gap-5 mb-6">
+        <div className="h-[390px]"><TeamLeaveCalendar /></div>
+        <div className="h-[390px]"><TeamLeaveBalance /></div>
+        <div className="h-[390px]"><EmployeeAvailabilityChart trigger={refreshTrigger} /></div>
       </div>
 
       {/* Analytics Charts */}

@@ -49,11 +49,12 @@ const CustomSelect = ({ value, onChange, options }) => {
   );
 };
 
-const CreatePolicyModal = ({ isOpen, onClose, onSuccess }) => {
+const CreatePolicyModal = ({ isOpen, onClose, onSuccess, policyToEdit = null }) => {
   const [formData, setFormData] = useState({
     name: '',
     type: 'casual',
     annualAllowance: 0,
+    carryForwardLimit: 0,
     applicableTo: 'all', // 'employee', 'manager', 'all'
     syncMode: 'update_total', // 'update_total', 'add_difference'
     description: ''
@@ -62,10 +63,37 @@ const CreatePolicyModal = ({ isOpen, onClose, onSuccess }) => {
   const [currentAllowance, setCurrentAllowance] = useState(0);
   const [loading, setLoading] = useState(false);
 
+  const getAuthToken = () => sessionStorage.getItem('token') || localStorage.getItem('token') || '';
+
+  useEffect(() => {
+    if (policyToEdit) {
+      setFormData({
+        name: policyToEdit.name || '',
+        type: policyToEdit.type || 'casual',
+        annualAllowance: policyToEdit.annualAllowance || 0,
+        carryForwardLimit: policyToEdit.carryForwardLimit || 0,
+        applicableTo: Array.isArray(policyToEdit.applicableTo) ? (policyToEdit.applicableTo[0] || 'all') : (policyToEdit.applicableTo || 'all'),
+        syncMode: policyToEdit.syncMode || 'update_total',
+        description: policyToEdit.description || ''
+      });
+    } else {
+      setFormData({
+        name: '',
+        type: 'casual',
+        annualAllowance: 0,
+        carryForwardLimit: 0,
+        applicableTo: 'all',
+        syncMode: 'update_total',
+        description: ''
+      });
+    }
+  }, [policyToEdit, isOpen]);
+
   useEffect(() => {
     if (isOpen) {
+      const token = getAuthToken();
       axios.get('/api/leave-policies', {
-        headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` }
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
       }).then(res => {
         setExistingPolicies(res.data || []);
       }).catch(err => console.error(err));
@@ -83,24 +111,32 @@ const CreatePolicyModal = ({ isOpen, onClose, onSuccess }) => {
     e.preventDefault();
     try {
       setLoading(true);
-      await axios.post('/api/leave-policies', formData, {
-        headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` }
-      });
-      toast.success('Policy created successfully');
+      const token = getAuthToken();
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+
+      if (policyToEdit?._id) {
+        await axios.put(`/api/leave-policies/${policyToEdit._id}`, formData, { headers });
+        toast.success('Policy updated successfully');
+      } else {
+        await axios.post('/api/leave-policies', formData, { headers });
+        toast.success('Policy created successfully');
+      }
       if (onSuccess) onSuccess();
       onClose();
     } catch (err) {
-      toast.error('Failed to create policy');
+      toast.error(err.response?.data?.message || (policyToEdit ? 'Failed to update policy' : 'Failed to create policy'));
     } finally {
       setLoading(false);
     }
   };
 
   return createPortal(
-    <div className="fixed inset-0 z-[9999] flex justify-end bg-black/40 backdrop-blur-sm" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <form onSubmit={handleSubmit} className="bg-white dark:bg-[#1e293b] h-full w-full max-w-sm pt-3 px-6 pb-6 relative shadow-2xl flex flex-col justify-between border-l-2 border-gray-300 dark:border-gray-800">
+    <div className="fixed inset-0 z-[9999] flex justify-end bg-black/40 backdrop-blur-sm animate-in fade-in duration-200" onClick={onClose}>
+      <form onSubmit={handleSubmit} onClick={(e) => e.stopPropagation()} className="bg-white dark:bg-[#1e293b] h-full w-full max-w-sm pt-3 px-6 pb-6 relative shadow-2xl flex flex-col justify-between border-l-2 border-gray-300 dark:border-gray-800 animate-in slide-in-from-right duration-250">
         <div className="flex items-center justify-between pb-3 border-b border-gray-150 dark:border-gray-800 shrink-0">
-          <h2 className="text-sm font-black text-gray-900 dark:text-white uppercase tracking-wider">Create Leave Policy</h2>
+          <h2 className="text-sm font-black text-gray-900 dark:text-white uppercase tracking-wider">
+            {policyToEdit ? 'Edit Leave Policy' : 'Create Leave Policy'}
+          </h2>
           <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 cursor-pointer p-1 rounded-full hover:bg-gray-100 dark:hover:bg-gray-850 transition-colors">
             <X size={18} />
           </button>
@@ -113,6 +149,7 @@ const CreatePolicyModal = ({ isOpen, onClose, onSuccess }) => {
               <label className="block text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1">Policy Name</label>
               <input 
                 required type="text" 
+                placeholder="e.g. Casual Leave Policy"
                 className="w-full border border-gray-200 dark:border-gray-700 rounded-xl py-2 px-3 bg-gray-50 dark:bg-[#0f172a] text-gray-900 dark:text-white text-xs font-semibold focus:outline-none focus:border-indigo-500"
                 value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} 
               />
@@ -124,10 +161,7 @@ const CreatePolicyModal = ({ isOpen, onClose, onSuccess }) => {
                 onChange={val => setFormData({...formData, type: val})}
                 options={[
                   { value: 'casual', label: 'Casual Leave' },
-                  { value: 'sick', label: 'Sick Leave' },
-                  { value: 'earned', label: 'Earned Leave' },
-                  { value: 'maternity', label: 'Maternity Leave' },
-                  { value: 'paternity', label: 'Paternity Leave' }
+                  { value: 'sick', label: 'Sick Leave' }
                 ]}
               />
             </div>
@@ -137,7 +171,7 @@ const CreatePolicyModal = ({ isOpen, onClose, onSuccess }) => {
                 value={formData.applicableTo} 
                 onChange={val => setFormData({...formData, applicableTo: val})}
                 options={[
-                  { value: 'all', label: 'Both Employees & Managers' },
+                  { value: 'all', label: 'All Staff' },
                   { value: 'employee', label: 'All Employees' },
                   { value: 'manager', label: 'All Managers' }
                 ]}
@@ -169,9 +203,20 @@ const CreatePolicyModal = ({ isOpen, onClose, onSuccess }) => {
               </p>
             </div>
             <div>
+              <label className="block text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1">Carry Forward Limit (Days)</label>
+              <input 
+                type="number" min="0" 
+                placeholder="0 (No carry forward)"
+                className="w-full border border-gray-200 dark:border-gray-700 rounded-xl py-2 px-3 bg-gray-50 dark:bg-[#0f172a] text-gray-900 dark:text-white text-xs font-semibold focus:outline-none focus:border-indigo-500"
+                value={formData.carryForwardLimit} onChange={e => setFormData({...formData, carryForwardLimit: e.target.value})} 
+              />
+              <p className="text-[9px] text-gray-400 mt-1 font-semibold">Maximum unused leave days allowed to roll into next year.</p>
+            </div>
+            <div>
               <label className="block text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1">Description (Optional)</label>
               <textarea 
                 rows="3"
+                placeholder="Details, guidelines, and rules for this leave policy..."
                 className="w-full border border-gray-200 dark:border-gray-700 rounded-xl py-2 px-3 bg-gray-50 dark:bg-[#0f172a] text-gray-900 dark:text-white text-xs font-semibold focus:outline-none focus:border-indigo-500"
                 value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} 
               />
@@ -179,9 +224,9 @@ const CreatePolicyModal = ({ isOpen, onClose, onSuccess }) => {
           </div>
           
           <div className="pt-4 border-t border-gray-200 dark:border-gray-800 flex justify-end gap-3 mt-4">
-            <button type="button" onClick={onClose} className="px-4 py-2 rounded-xl font-bold text-gray-500 hover:text-gray-700 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 text-xs transition-colors">Cancel</button>
-            <button type="submit" disabled={loading} className="px-4 py-2 rounded-xl font-bold text-white bg-indigo-600 hover:bg-indigo-700 text-xs transition-colors">
-              {loading ? 'Creating...' : 'Create Policy'}
+            <button type="button" onClick={onClose} className="px-4 py-2 rounded-xl font-bold text-gray-500 hover:text-gray-700 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 text-xs transition-colors cursor-pointer">Cancel</button>
+            <button type="submit" disabled={loading} className="px-4 py-2 rounded-xl font-bold text-white bg-indigo-600 hover:bg-indigo-700 text-xs transition-colors cursor-pointer disabled:opacity-50">
+              {loading ? (policyToEdit ? 'Updating...' : 'Creating...') : (policyToEdit ? 'Update Policy' : 'Create Policy')}
             </button>
           </div>
         </div>

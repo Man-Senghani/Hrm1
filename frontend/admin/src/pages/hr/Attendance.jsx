@@ -480,7 +480,7 @@ const Attendance = () => {
               onMouseLeave={() => setHoveredCardIndex(null)}
               style={{
                 borderColor: isHovered ? card.color : undefined,
-                borderWidth: '2px',
+                borderWidth: '1px',
                 borderStyle: 'solid'
               }}
               className="zap-card group transition-all duration-200 cursor-pointer rounded-2xl"

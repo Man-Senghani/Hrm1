@@ -12,12 +12,15 @@ const TeamLeaveCalendar = () => {
   const fetchCalendar = async (month, year) => {
     try {
       setLoading(true);
+      const token = sessionStorage.getItem('token');
       const res = await axios.get(`/api/leaves/manager/calendar?month=${month + 1}&year=${year}`, {
-        headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` }
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
       });
       setData(res.data);
     } catch (err) {
-      toast.error('Failed to load calendar data');
+      if (err.response?.status !== 401 && err.response?.status !== 403) {
+        toast.error('Failed to load calendar data');
+      }
     } finally {
       setLoading(false);
     }
@@ -110,16 +113,18 @@ const TeamLeaveCalendar = () => {
   const monthName = currentDate.toLocaleString('default', { month: 'long' });
 
   return (
-    <div className="bg-white dark:bg-[#1e293b] rounded-2xl p-6 shadow-sm border border-gray-100 dark:border-gray-800 flex flex-col h-full transition-colors duration-300 hover:!border-indigo-500 dark:hover:!border-indigo-400">
+    <div className="bg-white dark:bg-[#1e293b] rounded-2xl p-4 sm:p-5 shadow-sm border border-gray-100 dark:border-gray-800 flex flex-col h-full transition-colors duration-300 hover:!border-indigo-500 dark:hover:!border-indigo-400">
 
-      <div className="flex justify-between items-center mb-3">
-        <h2 className="text-lg font-bold text-gray-900 dark:text-white">Team Leave Calendar</h2>
-        <div className="flex items-center gap-1">
-          <button onClick={prevMonth} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-900 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors cursor-pointer">
+      <div className="flex justify-between items-center mb-3 gap-2">
+        <h2 className="text-sm sm:text-base font-bold text-gray-900 dark:text-white whitespace-nowrap">Team Leave Calendar</h2>
+        <div className="flex items-center gap-1 bg-gray-50 dark:bg-gray-800/60 p-1 rounded-xl border border-gray-150 dark:border-gray-800 shrink-0">
+          <button onClick={prevMonth} className="p-1 rounded-lg text-gray-500 hover:text-gray-900 dark:hover:text-white hover:bg-white dark:hover:bg-gray-700 transition-colors cursor-pointer border-none bg-transparent" title="Previous Month">
             <ChevronLeft className="w-4 h-4" />
           </button>
-          <span className="text-sm font-bold text-gray-900 dark:text-white w-28 text-center">{monthName} {currentDate.getFullYear()}</span>
-          <button onClick={nextMonth} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-900 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors cursor-pointer">
+          <span className="text-xs font-bold text-gray-900 dark:text-white whitespace-nowrap px-1">
+            {currentDate.toLocaleString('default', { month: 'short' })} {currentDate.getFullYear()}
+          </span>
+          <button onClick={nextMonth} className="p-1 rounded-lg text-gray-500 hover:text-gray-900 dark:hover:text-white hover:bg-white dark:hover:bg-gray-700 transition-colors cursor-pointer border-none bg-transparent" title="Next Month">
             <ChevronRight className="w-4 h-4" />
           </button>
         </div>
@@ -134,11 +139,11 @@ const TeamLeaveCalendar = () => {
       {loading ? (
         <div className="flex-1 flex items-center justify-center py-10 text-gray-500">Loading...</div>
       ) : (
-        <div className="grid grid-cols-7 gap-y-1 mb-2 flex-1">
+        <div className="grid grid-cols-7 flex-1 content-between py-1 mb-2">
           {days.map((d, i) => (
-            <div key={i} className="flex flex-col items-center justify-center h-8">
-              <span className={`w-7 h-7 flex items-center justify-center rounded-full text-sm font-semibold
-                ${d.isCurrentMonth ? (d.isToday ? 'bg-indigo-600 text-white shadow-md' : 'text-gray-900 dark:text-white hover:bg-gray-100 cursor-pointer') : 'text-gray-300 dark:text-gray-600'}
+            <div key={i} className="flex flex-col items-center justify-center">
+              <span className={`w-7 h-7 flex items-center justify-center rounded-full text-xs font-semibold transition-colors
+                ${d.isCurrentMonth ? (d.isToday ? 'bg-indigo-600 text-white shadow-md' : 'text-gray-900 dark:text-white hover:bg-gray-100 dark:hover:bg-gray-800 dark:hover:text-white cursor-pointer') : 'text-gray-300 dark:text-gray-600'}
               `}>
                 {d.day}
               </span>
@@ -155,12 +160,12 @@ const TeamLeaveCalendar = () => {
       )}
 
       {/* Legend */}
-      <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-semibold text-gray-500 mt-auto pt-2 border-t border-gray-100 dark:border-gray-800">
-        <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-emerald-500"></span> Approved Leave</div>
-        <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-orange-500"></span> Pending Leave</div>
-        <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-purple-500"></span> Work From Home</div>
-        <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-red-500"></span> Holiday</div>
-        <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-gray-300"></span> Weekly Off</div>
+      <div className="grid grid-cols-5 gap-1 text-[10px] font-semibold text-gray-500 mt-auto pt-2 border-t border-gray-100 dark:border-gray-800 text-center">
+        <div className="flex items-center justify-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span> Approved</div>
+        <div className="flex items-center justify-center gap-1"><span className="w-2 h-2 rounded-full bg-orange-500 shrink-0"></span> Pending</div>
+        <div className="flex items-center justify-center gap-1"><span className="w-2 h-2 rounded-full bg-purple-500 shrink-0"></span> WFH</div>
+        <div className="flex items-center justify-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500 shrink-0"></span> Holiday</div>
+        <div className="flex items-center justify-center gap-1"><span className="w-2 h-2 rounded-full bg-gray-300 shrink-0"></span> Off</div>
       </div>
     </div>
   );

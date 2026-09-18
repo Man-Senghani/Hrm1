@@ -7,25 +7,39 @@ import { useNavigate } from 'react-router-dom';
 const QuickActions = () => {
   const navigate = useNavigate();
 
+  const getAuthToken = () => sessionStorage.getItem('token') || localStorage.getItem('token') || '';
+
   const handleExport = async (format) => {
+    const loadingToast = toast.loading(`Generating ${format.toUpperCase()} report...`);
     try {
-      const loadingToast = toast.loading(`Generating ${format.toUpperCase()} report...`);
+      const token = getAuthToken();
       const response = await axios.get(`/api/leaves/manager/export?format=${format}`, {
-        headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` },
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
         responseType: 'blob', // crucial for file downloads
       });
 
-      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const extension = format === 'pdf' ? 'pdf' : (format === 'xlsx' || format === 'excel' ? 'xlsx' : 'csv');
+      const mimeType = format === 'pdf'
+        ? 'application/pdf'
+        : (format === 'xlsx' || format === 'excel'
+            ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            : 'text/csv');
+
+      const blob = new Blob([response.data], { type: mimeType });
+      const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', `team_leaves.${format}`);
+      link.setAttribute('download', `team_leaves_report.${extension}`);
       document.body.appendChild(link);
       link.click();
       link.parentNode.removeChild(link);
+      window.URL.revokeObjectURL(url);
 
       toast.dismiss(loadingToast);
-      toast.success('Report downloaded successfully!');
+      toast.success(`${format.toUpperCase()} report downloaded successfully!`);
     } catch (error) {
+      toast.dismiss(loadingToast);
+      console.error('Export error:', error);
       toast.error('Failed to download report');
     }
   };
@@ -41,13 +55,48 @@ const QuickActions = () => {
       glowColor: 'rgba(16, 185, 129, 0.45)', 
       bgIcon: 'bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-100 dark:border-emerald-900/40', 
       onClick: () => {
-        const pathRole = window.location.pathname.split('/')[1] || 'manager';
-        window.location.href = `/${pathRole}/leave`;
+        window.dispatchEvent(new CustomEvent('trigger-filter-leave-table', { detail: 'pending' }));
+        const el = document.getElementById('pending-queue');
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+        toast.success('Navigated to pending leave approvals');
       } 
     },
-    { label: 'Bulk Approval', icon: Users, color: 'text-purple-600 dark:text-purple-400', borderColor: '#8b5cf6', glowColor: 'rgba(139, 92, 246, 0.45)', bgIcon: 'bg-purple-50 dark:bg-purple-950/50 border border-purple-100 dark:border-purple-900/40', onClick: () => window.dispatchEvent(new CustomEvent('trigger-bulk-approval')) },
-    { label: 'Download Report', icon: Download, color: 'text-emerald-600 dark:text-emerald-400', borderColor: '#059669', glowColor: 'rgba(5, 150, 105, 0.45)', bgIcon: 'bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-100 dark:border-emerald-900/40', onClick: () => handleExport('pdf') },
-    { label: 'Export to Excel', icon: FileSpreadsheet, color: 'text-emerald-600 dark:text-emerald-400', borderColor: '#059669', glowColor: 'rgba(5, 150, 105, 0.45)', bgIcon: 'bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-100 dark:border-emerald-900/40', onClick: () => handleExport('xlsx') }
+    { 
+      label: 'Bulk Approval', 
+      icon: Users, 
+      color: 'text-purple-600 dark:text-purple-400', 
+      borderColor: '#8b5cf6', 
+      glowColor: 'rgba(139, 92, 246, 0.45)', 
+      bgIcon: 'bg-purple-50 dark:bg-purple-950/50 border border-purple-100 dark:border-purple-900/40', 
+      onClick: () => {
+        window.dispatchEvent(new CustomEvent('trigger-filter-leave-table', { detail: 'pending' }));
+        const el = document.getElementById('pending-queue');
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+        window.dispatchEvent(new CustomEvent('trigger-bulk-approval'));
+      } 
+    },
+    { 
+      label: 'Download Report', 
+      icon: Download, 
+      color: 'text-emerald-600 dark:text-emerald-400', 
+      borderColor: '#059669', 
+      glowColor: 'rgba(5, 150, 105, 0.45)', 
+      bgIcon: 'bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-100 dark:border-emerald-900/40', 
+      onClick: () => handleExport('pdf') 
+    },
+    { 
+      label: 'Export to Excel', 
+      icon: FileSpreadsheet, 
+      color: 'text-emerald-600 dark:text-emerald-400', 
+      borderColor: '#059669', 
+      glowColor: 'rgba(5, 150, 105, 0.45)', 
+      bgIcon: 'bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-100 dark:border-emerald-900/40', 
+      onClick: () => handleExport('xlsx') 
+    }
   ];
 
   return (

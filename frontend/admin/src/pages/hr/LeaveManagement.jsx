@@ -51,10 +51,6 @@ const Leaves = () => {
   const [selectedLeaveDetails, setSelectedLeaveDetails] = useState(null);
 
   useEffect(() => {
-    if (role === 'admin') {
-      setViewMode('hr');
-      return;
-    }
     if (location.state?.viewMode) {
       setViewMode(location.state.viewMode);
     } else if (location.state?.tab === 'team') {
@@ -63,7 +59,7 @@ const Leaves = () => {
     if (location.state?.filter) {
       setRequestFilter(location.state.filter);
     }
-  }, [location.state, role]);
+  }, [location.state]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -348,38 +344,36 @@ const Leaves = () => {
         </div>
       </div>
 
-      {/* VIEW MODE TOGGLE & ACTIONS (ONLY SHOWN FOR HR, NOT ADMIN) */}
-      {role !== 'admin' && (
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 w-full mb-4 mt-2">
-          <div className="bg-white dark:bg-[#1e293b] p-1 rounded-lg border border-gray-200 dark:border-gray-800 shadow-sm inline-flex">
-            <button
-              onClick={() => setViewMode('employee')}
-              className={`px-6 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${viewMode === 'employee' ? 'bg-[#00a76b] text-white shadow-sm' : 'text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-white'}`}
-            >
-              My Leaves
-            </button>
-            <button
-              onClick={() => setViewMode('hr')}
-              className={`px-6 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${viewMode === 'hr' ? 'bg-[#00a76b] text-white shadow-sm' : 'text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-white'}`}
-            >
-              Team Leaves (HR)
-            </button>
-          </div>
-
-          {/* Action Buttons */}
-          <div className="flex flex-wrap items-center gap-3">
-            <button
-              onClick={() => {
-                setViewMode('employee');
-                setTimeout(() => window.dispatchEvent(new CustomEvent('open-leave-modal', { detail: 'apply-leave' })), 100);
-              }}
-              className="bg-[#00a76b] hover:bg-[#008f5b] text-white px-5 py-2.5 rounded-lg text-xs font-bold flex items-center gap-2 shadow-md transition-colors whitespace-nowrap cursor-pointer"
-            >
-              <Plus size={16} /> Apply for Leave
-            </button>
-          </div>
+      {/* VIEW MODE TOGGLE & ACTIONS */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 w-full mb-4 mt-2">
+        <div className="bg-white dark:bg-[#1e293b] p-1 rounded-lg border border-gray-200 dark:border-gray-800 shadow-sm inline-flex">
+          <button
+            onClick={() => setViewMode('employee')}
+            className={`px-6 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${viewMode === 'employee' ? 'bg-[#00a76b] text-white shadow-sm' : 'text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-white'}`}
+          >
+            My Leaves
+          </button>
+          <button
+            onClick={() => setViewMode('hr')}
+            className={`px-6 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${viewMode === 'hr' ? 'bg-[#00a76b] text-white shadow-sm' : 'text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-white'}`}
+          >
+            {role === 'admin' ? 'Team Leaves (Admin)' : 'Team Leaves (HR)'}
+          </button>
         </div>
-      )}
+
+        {/* Action Buttons */}
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            onClick={() => {
+              setViewMode('employee');
+              setTimeout(() => window.dispatchEvent(new CustomEvent('open-leave-modal', { detail: 'apply-leave' })), 100);
+            }}
+            className="bg-[#00a76b] hover:bg-[#008f5b] text-white px-5 py-2.5 rounded-lg text-xs font-bold flex items-center gap-2 shadow-md transition-colors whitespace-nowrap cursor-pointer"
+          >
+            <Plus size={16} /> Apply for Leave
+          </button>
+        </div>
+      </div>
 
       {viewMode === 'employee' ? (
         <EmployeeLeaveManagement isChild={true} />
@@ -404,7 +398,7 @@ const Leaves = () => {
                   onMouseLeave={() => setHoveredTeamCardIndex(null)}
                   style={{
                     borderColor: isHovered ? stat.borderColor : undefined,
-                    borderWidth: '2px',
+                    borderWidth: '1px',
                     borderStyle: 'solid'
                   }}
                   className="bg-white dark:bg-[#111c18] py-2 px-3 rounded-xl shadow-xs flex items-center justify-between gap-2.5 cursor-pointer transition-colors duration-200 group select-none border-gray-100 dark:border-gray-800"
@@ -444,7 +438,7 @@ const Leaves = () => {
                     value={filterStartDate}
                     onChange={(e) => setFilterStartDate(e.target.value)}
                     placeholder="Start Date"
-                    className="w-26 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg h-9 flex items-center text-[11px] font-semibold text-gray-700 dark:text-gray-300"
+                    className="w-32 sm:w-34 px-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg h-9 flex items-center text-[11px] font-semibold text-gray-700 dark:text-gray-300 whitespace-nowrap"
                   />
                   <span className="text-gray-400 text-xs font-bold">to</span>
                   <CustomDatePicker
@@ -453,7 +447,7 @@ const Leaves = () => {
                     onChange={(e) => setFilterEndDate(e.target.value)}
                     placeholder="End Date"
                     align="right"
-                    className="w-26 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg h-9 flex items-center text-[11px] font-semibold text-gray-700 dark:text-gray-300"
+                    className="w-32 sm:w-34 px-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg h-9 flex items-center text-[11px] font-semibold text-gray-700 dark:text-gray-300 whitespace-nowrap"
                   />
                   {(filterStartDate || filterEndDate) && (
                     <button

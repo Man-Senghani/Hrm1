@@ -578,9 +578,7 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
     const p = (item.path || '').toLowerCase();
     return (
       !n.includes('notification') &&
-      !n.includes('announcement') &&
-      !n.includes('leave') &&
-      !p.includes('/leave')
+      !n.includes('announcement')
     );
   });
 

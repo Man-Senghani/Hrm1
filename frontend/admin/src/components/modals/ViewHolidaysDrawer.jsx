@@ -73,6 +73,7 @@ const ViewHolidaysDrawer = ({ isOpen, onClose, holidays: initialHolidays }) => {
 
   useEffect(() => {
     if (!isOpen) return;
+    setSelectedYear(new Date().getFullYear());
 
     const fetchHolidays = async () => {
       try {
@@ -100,10 +101,16 @@ const ViewHolidaysDrawer = ({ isOpen, onClose, holidays: initialHolidays }) => {
   if (!isOpen) return null;
 
   const currentYearNum = new Date().getFullYear();
-  const yearsList = Array.from({ length: 4 }, (_, i) => {
-    const yr = currentYearNum + i;
-    return { value: yr, label: String(yr) };
-  });
+  // Show years up to current year starting from 2026.
+  // In 2026: only 2026 is displayed (future years 2027 & 2028 are removed).
+  // When year 2027 starts, 2027 will automatically appear in the filter.
+  const yearsList = [];
+  for (let yr = currentYearNum; yr >= 2026; yr--) {
+    yearsList.push({ value: yr, label: String(yr) });
+  }
+  if (yearsList.length === 0) {
+    yearsList.push({ value: currentYearNum, label: String(currentYearNum) });
+  }
 
   const monthsList = [
     { value: 'all', label: 'All Months' },

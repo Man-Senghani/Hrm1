@@ -476,8 +476,14 @@ const checkUserLeaveBalance = async (userId, leaveTypeInput, daysRequested, excl
 
   const policyQuota = quotas[catKey] || 0;
 
-  // Calculate actual approved + pending used days for this category
-  const query = { user: userId, status: { $in: ['approved', 'pending'] } };
+  // Calculate actual approved + pending used days for this category in the current year
+  const currentYearStart = new Date(year, 0, 1);
+  const currentYearEnd = new Date(year, 11, 31, 23, 59, 59, 999);
+  const query = {
+    user: userId,
+    status: { $in: ['approved', 'pending'] },
+    startDate: { $gte: currentYearStart, $lte: currentYearEnd }
+  };
   if (excludeLeaveId) query._id = { $ne: excludeLeaveId };
   const existingLeaves = await Leave.find(query);
   const usedDays = existingLeaves.filter(l => {
@@ -492,9 +498,37 @@ const checkUserLeaveBalance = async (userId, leaveTypeInput, daysRequested, excl
     return lt.includes('casual') || lt === 'cl';
   }).reduce((sum, l) => sum + (l.totalDays || 1), 0);
 
-  // Determine effective allowance quota (max of policy quota and explicit balance override if non-zero)
+  // Determine effective allowance quota (for casual leave, use 1.5/month accrual + 50% carry forward from last year)
   let effectiveQuota = policyQuota;
-  if (hasBalanceDoc && directBalanceVal > 0) {
+  if (catKey === 'casual') {
+    let casualCarryForward = 0;
+    try {
+      const prevYear = year - 1;
+      const prevYearStart = new Date(prevYear, 0, 1);
+      const prevYearEnd = new Date(prevYear, 11, 31, 23, 59, 59, 999);
+      const prevLeaves = await Leave.find({
+        user: userId,
+        status: 'approved',
+        startDate: { $gte: prevYearStart, $lte: prevYearEnd }
+      });
+      const prevUsedCasual = prevLeaves.filter(l => {
+        const lt = (l.leaveType || '').toLowerCase();
+        return lt.includes('casual') || lt === 'cl';
+      }).reduce((sum, l) => sum + (l.totalDays || 1), 0);
+      const annualAllowance = policyQuota > 0 ? policyQuota : 18;
+      const prevUnused = Math.max(0, annualAllowance - prevUsedCasual);
+      casualCarryForward = Number((prevUnused * 0.5).toFixed(1));
+    } catch (_) {}
+
+    // For 2026, accrual starts from September (month 9); from 2027 onwards, it starts from January (month 1)
+    const startMonth = year === 2026 ? 9 : 1;
+    const accrualMonths = month < startMonth ? 0 : (month - startMonth + 1);
+    const accruedCasual = Number((accrualMonths * 1.5).toFixed(1));
+    effectiveQuota = Number((accruedCasual + casualCarryForward).toFixed(1));
+    if (hasBalanceDoc && directBalanceVal > 0) {
+      effectiveQuota = Math.max(directBalanceVal, effectiveQuota);
+    }
+  } else if (hasBalanceDoc && directBalanceVal > 0) {
     effectiveQuota = Math.max(directBalanceVal, policyQuota);
   }
 
@@ -1168,6 +1202,8 @@ exports.getMyLeaveQuotas = async (req, res) => {
   try {
     const LeaveBalance = require('../models/LeaveBalance');
     const LeavePolicy = require('../models/LeavePolicy');
+    const Leave = require('../models/Leave');
+    const Employee = require('../models/Employee');
 
     let quotas = {
       sick: 0,
@@ -1176,15 +1212,23 @@ exports.getMyLeaveQuotas = async (req, res) => {
       emergency: 0,
       compOff: 0,
       optionalHoliday: 0,
-      otherLeaves: 0
+      otherLeaves: 0,
+      casualAccrued: 0,
+      casualCarryForward: 0,
+      casualAnnualCeiling: 18
     };
+
+    let annualCasualPolicy = 18;
 
     try {
       const activePolicies = await LeavePolicy.find({ status: { $regex: /^active$/i } });
       activePolicies.forEach(p => {
         const type = (p.type || p.name || '').toLowerCase();
         if (type.includes('sick') && p.annualAllowance > 0) quotas.sick = p.annualAllowance;
-        else if (type.includes('casual') && p.annualAllowance > 0) quotas.casual = p.annualAllowance;
+        else if (type.includes('casual') && p.annualAllowance > 0) {
+          annualCasualPolicy = p.annualAllowance;
+          quotas.casualAnnualCeiling = p.annualAllowance;
+        }
         else if ((type.includes('earned') || type.includes('annual')) && p.annualAllowance > 0) quotas.earned = p.annualAllowance;
         else if (type.includes('emergency') && p.annualAllowance > 0) quotas.emergency = p.annualAllowance;
         else if (type.includes('comp') && p.annualAllowance > 0) quotas.compOff = p.annualAllowance;
@@ -1192,18 +1236,44 @@ exports.getMyLeaveQuotas = async (req, res) => {
       });
     } catch (err) { }
 
+    const now = new Date();
+    const month = now.getMonth() + 1;
+    const year = now.getFullYear();
+
+    // Incremental accrual: in 2026 starts from September (month 9); from 2027 onwards starts from January (month 1)
+    const startMonth = year === 2026 ? 9 : 1;
+    const accrualMonths = month < startMonth ? 0 : (month - startMonth + 1);
+    const accruedCasual = Number((accrualMonths * 1.5).toFixed(1));
+    let casualCarryForward = 0;
+
     try {
       const userId = req.user?._id || req.user?.id;
       if (userId) {
-        const now = new Date();
-        const month = now.getMonth() + 1;
-        const year = now.getFullYear();
-
-        const Employee = require('../models/Employee');
         let userObjId = userId;
         const empDoc = await Employee.findById(userId);
         if (empDoc && empDoc.userId) {
           userObjId = empDoc.userId;
+        }
+
+        // Calculate carry forward: 50% of unused casual leaves from previous year
+        const prevYear = year - 1;
+        const prevYearStart = new Date(prevYear, 0, 1);
+        const prevYearEnd = new Date(prevYear, 11, 31, 23, 59, 59, 999);
+
+        const joinDate = empDoc?.joinDate ? new Date(empDoc.joinDate) : null;
+        if (!joinDate || joinDate <= prevYearEnd) {
+          const prevApprovedCasualLeaves = await Leave.find({
+            user: { $in: [userId, userObjId] },
+            status: 'approved',
+            startDate: { $gte: prevYearStart, $lte: prevYearEnd }
+          });
+          const prevUsedCasual = prevApprovedCasualLeaves.filter(l => {
+            const lt = (l.leaveType || '').toLowerCase();
+            return lt.includes('casual') || lt === 'cl';
+          }).reduce((sum, l) => sum + (l.totalDays || 1), 0);
+
+          const prevUnused = Math.max(0, annualCasualPolicy - prevUsedCasual);
+          casualCarryForward = Number((prevUnused * 0.5).toFixed(1));
         }
 
         let userBalance = await LeaveBalance.findOne({ employeeId: userObjId, month, year });
@@ -1212,7 +1282,6 @@ exports.getMyLeaveQuotas = async (req, res) => {
         }
 
         if (userBalance) {
-          if (userBalance.casualLeave !== undefined && userBalance.casualLeave > 0) quotas.casual = userBalance.casualLeave;
           if (userBalance.sickLeave !== undefined && userBalance.sickLeave > 0) quotas.sick = userBalance.sickLeave;
           if (userBalance.earnedLeave !== undefined && userBalance.earnedLeave > 0) quotas.earned = userBalance.earnedLeave;
           if (userBalance.emergencyLeave !== undefined && userBalance.emergencyLeave > 0) quotas.emergency = userBalance.emergencyLeave;
@@ -1221,6 +1290,10 @@ exports.getMyLeaveQuotas = async (req, res) => {
         }
       }
     } catch (err) { }
+
+    quotas.casualAccrued = accruedCasual;
+    quotas.casualCarryForward = casualCarryForward;
+    quotas.casual = Number((accruedCasual + casualCarryForward).toFixed(1));
 
     Object.keys(quotas).forEach(k => {
       quotas[k] = Number(Number(quotas[k] || 0).toFixed(1));
@@ -1768,7 +1841,7 @@ exports.exportTeamLeaves = async (req, res) => {
       .populate('user', 'name email department')
       .sort({ startDate: -1 });
 
-    if (format === 'xlsx') {
+    if (format === 'xlsx' || format === 'excel') {
       const exceljs = require('exceljs');
       const workbook = new exceljs.Workbook();
       const worksheet = workbook.addWorksheet('Leaves');
@@ -1799,7 +1872,7 @@ exports.exportTeamLeaves = async (req, res) => {
       res.setHeader('Content-Disposition', 'attachment; filename=team_leaves.xlsx');
       await workbook.xlsx.write(res);
       return res.end();
-    } else {
+    } else if (format === 'pdf') {
       const PDFDocument = require('pdfkit');
       const doc = new PDFDocument();
 
@@ -1814,11 +1887,27 @@ exports.exportTeamLeaves = async (req, res) => {
         const empName = l.user ? l.user.name : 'Unknown';
         doc.fontSize(12).text(`${empName} - ${l.leaveType} (${l.status})`);
         doc.fontSize(10).text(`Dates: ${formatDateSafe(l.startDate)} to ${formatDateSafe(l.endDate)}`);
-        doc.text(`Reason: ${l.reason}`);
+        doc.text(`Reason: ${l.reason || 'None'}`);
         doc.moveDown();
       });
 
       doc.end();
+    } else {
+      let csv = 'Employee Name,Email,Leave Type,Start Date,End Date,Total Days,Status,Reason\n';
+      leaves.forEach(l => {
+        const name = `"${l.user?.name || ''}"`;
+        const email = `"${l.user?.email || ''}"`;
+        const type = `"${l.leaveType || ''}"`;
+        const start = `"${l.startDate ? new Date(l.startDate).toISOString().split('T')[0] : ''}"`;
+        const end = `"${l.endDate ? new Date(l.endDate).toISOString().split('T')[0] : ''}"`;
+        const days = l.totalDays || 1;
+        const status = `"${l.status || ''}"`;
+        const reason = `"${(l.reason || '').replace(/"/g, '""')}"`;
+        csv += `${name},${email},${type},${start},${end},${days},${status},${reason}\n`;
+      });
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', 'attachment; filename="team_leaves.csv"');
+      return res.send(csv);
     }
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -2279,15 +2368,38 @@ exports.getTeamLeaveBalances = async (req, res) => {
 
     const balances = await Promise.all(employees.map(async (emp) => {
       let b = await LeaveBalance.findOne({ employeeId: emp._id, month, year }).lean();
+
+      let calculatedCasual = 0;
+      if (year === 2026) {
+        calculatedCasual = month >= 9 ? Number(((month - 8) * 1.5).toFixed(1)) : 0;
+      } else if (year > 2026) {
+        calculatedCasual = Number((month * 1.5).toFixed(1));
+      } else {
+        calculatedCasual = 0;
+      }
+
+      const clAlloc = calculatedCasual || b?.casualLeave || 1.5;
+      const slAlloc = 12;
+
       return {
         _id: emp._id,
         user: emp,
+        employeeId: emp,
+        cl: b?.usedLeave?.casual ?? 0,
+        sl: b?.usedLeave?.sick ?? 0,
+        totalCL: clAlloc,
+        totalSL: slAlloc,
+        totalLeave: clAlloc + slAlloc,
         earnedLeave: b?.earnedLeave ?? 0,
         sickLeave: b?.sickLeave ?? 0,
-        casualLeave: b?.casualLeave ?? 0,
+        casualLeave: clAlloc,
         compOff: b?.compOff ?? 0,
         otherLeaves: b?.otherLeaves ?? 0,
-        usedLeave: b?.usedLeave ?? 0
+        usedLeave: {
+          total: (b?.usedLeave?.casual || 0) + (b?.usedLeave?.sick || 0) + (typeof b?.usedLeave === 'number' ? b.usedLeave : 0),
+          casual: b?.usedLeave?.casual || 0,
+          sick: b?.usedLeave?.sick || 0
+        }
       };
     }));
 
@@ -2403,41 +2515,6 @@ exports.bulkApproveLeaves = async (req, res) => {
     }
 
     res.json({ success: true, message: `${updated.modifiedCount} leave(s) approved successfully.` });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-};
-
-// @desc    Export team leaves data
-// @route   GET /api/leaves/manager/export
-// @access  Private/Manager/HR/Admin
-exports.exportTeamLeaves = async (req, res) => {
-  try {
-    const subIds = await getSubordinateUserIds(req.user);
-    const leaves = await Leave.find({ user: { $in: subIds } })
-      .populate('user', 'name email employeeId department')
-      .lean();
-
-    const format = req.query.format || 'csv';
-    if (format === 'csv') {
-      let csv = 'Employee Name,Email,Leave Type,Start Date,End Date,Total Days,Status,Reason\n';
-      leaves.forEach(l => {
-        const name = `"${l.user?.name || ''}"`;
-        const email = `"${l.user?.email || ''}"`;
-        const type = `"${l.leaveType || ''}"`;
-        const start = `"${l.startDate ? new Date(l.startDate).toISOString().split('T')[0] : ''}"`;
-        const end = `"${l.endDate ? new Date(l.endDate).toISOString().split('T')[0] : ''}"`;
-        const days = l.totalDays || 1;
-        const status = `"${l.status || ''}"`;
-        const reason = `"${(l.reason || '').replace(/"/g, '""')}"`;
-        csv += `${name},${email},${type},${start},${end},${days},${status},${reason}\n`;
-      });
-      res.setHeader('Content-Type', 'text/csv');
-      res.setHeader('Content-Disposition', 'attachment; filename="team_leaves_report.csv"');
-      return res.send(csv);
-    }
-
-    res.json(leaves);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

@@ -5,7 +5,7 @@ import { toast } from 'react-hot-toast';
 import {
   Calendar, Clock, Plane, CheckCircle2, Plus, Search,
   SlidersHorizontal, Download, X, AlertCircle, Info,
-  ArrowRight, User, FileText, ChevronLeft, ChevronRight, MoreHorizontal, CalendarDays, ChevronDown, Edit, Sparkles, Bell
+  ArrowRight, User, FileText, ChevronLeft, ChevronRight, MoreHorizontal, CalendarDays, ChevronDown, Edit, Sparkles, Bell, RefreshCw
 } from 'lucide-react';
 import { io } from 'socket.io-client';
 import ViewPolicyDrawer from '../components/modals/ViewPolicyDrawer';
@@ -489,28 +489,45 @@ const LeaveManagement = ({ isChild = false }) => {
 
   const approvedLeaves = leaves.filter(l => l.status?.toLowerCase() === 'approved');
 
-  const usedEarned = approvedLeaves.filter(l => getCatKey(l.leaveType) === 'earned').reduce((acc, curr) => acc + getLeaveDays(curr), 0);
-  const usedSick = approvedLeaves.filter(l => getCatKey(l.leaveType) === 'sick').reduce((acc, curr) => acc + getLeaveDays(curr), 0);
-  const usedCasual = approvedLeaves.filter(l => getCatKey(l.leaveType) === 'casual').reduce((acc, curr) => acc + getLeaveDays(curr), 0);
-  const usedEmergency = approvedLeaves.filter(l => getCatKey(l.leaveType) === 'emergency').reduce((acc, curr) => acc + getLeaveDays(curr), 0);
-  const usedCompOff = approvedLeaves.filter(l => getCatKey(l.leaveType) === 'compoff').reduce((acc, curr) => acc + getLeaveDays(curr), 0);
-  const usedOptional = approvedLeaves.filter(l => getCatKey(l.leaveType) === 'optional').reduce((acc, curr) => acc + getLeaveDays(curr), 0);
+  const formatDays = (num) => Number(Number(num || 0).toFixed(1));
 
-  const casualBalance = Math.round(Math.max(0, (QUOTAS.casual || 0) - usedCasual));
-  const sickBalance = Math.round(Math.max(0, (QUOTAS.sick || 0) - usedSick));
-  const annualBalance = Math.round(Math.max(0, (QUOTAS.earned || 0) - usedEarned));
-  const emergencyBalance = Math.round(Math.max(0, (QUOTAS.emergency || 0) - usedEmergency));
-  const compOffBalance = Math.round(Math.max(0, (QUOTAS.compOff || 0) - usedCompOff));
-  const optionalBalance = Math.round(Math.max(0, (QUOTAS.optionalHoliday || 0) - usedOptional));
+  const isUpToRefDate = (l) => {
+    if (!refDate || !l.startDate) return true;
+    const lDate = new Date(l.startDate);
+    return lDate.getFullYear() === refDate.getFullYear() && lDate.getMonth() <= refDate.getMonth();
+  };
+
+  const usedEarned = approvedLeaves.filter(l => getCatKey(l.leaveType) === 'earned' && isUpToRefDate(l)).reduce((acc, curr) => acc + getLeaveDays(curr), 0);
+  const usedSick = approvedLeaves.filter(l => getCatKey(l.leaveType) === 'sick' && isUpToRefDate(l)).reduce((acc, curr) => acc + getLeaveDays(curr), 0);
+  const usedCasual = approvedLeaves.filter(l => getCatKey(l.leaveType) === 'casual' && isUpToRefDate(l)).reduce((acc, curr) => acc + getLeaveDays(curr), 0);
+  const usedEmergency = approvedLeaves.filter(l => getCatKey(l.leaveType) === 'emergency' && isUpToRefDate(l)).reduce((acc, curr) => acc + getLeaveDays(curr), 0);
+  const usedCompOff = approvedLeaves.filter(l => getCatKey(l.leaveType) === 'compoff' && isUpToRefDate(l)).reduce((acc, curr) => acc + getLeaveDays(curr), 0);
+  const usedOptional = approvedLeaves.filter(l => getCatKey(l.leaveType) === 'optional' && isUpToRefDate(l)).reduce((acc, curr) => acc + getLeaveDays(curr), 0);
 
   const clAllowance = policies.find(p => getCatKey(p.type || p.name) === 'casual')?.annualAllowance ?? (QUOTAS.casual || 0);
   const slAllowance = policies.find(p => getCatKey(p.type || p.name) === 'sick')?.annualAllowance ?? (QUOTAS.sick || 0);
   const elAllowance = policies.find(p => getCatKey(p.type || p.name) === 'earned')?.annualAllowance ?? (QUOTAS.earned || 0);
   const cfEarned = policies.find(p => getCatKey(p.type || p.name) === 'earned')?.carryForwardLimit ?? 0;
 
-  const totalAllocated = Math.round((QUOTAS.earned || 0) + (QUOTAS.sick || 0) + (QUOTAS.casual || 0) + (QUOTAS.emergency || 0) + (QUOTAS.compOff || 0) + (QUOTAS.optionalHoliday || 0));
-  const totalUsed = Math.round(usedEarned + usedSick + usedCasual + usedEmergency + usedCompOff + usedOptional);
-  const totalBalance = Math.round(Math.max(0, totalAllocated - totalUsed));
+  const currentMonthNum = (refDate ? refDate.getMonth() : new Date().getMonth()) + 1;
+  const currentYearNum = (refDate ? refDate.getFullYear() : new Date().getFullYear());
+  const startMonth = currentYearNum === 2026 ? 9 : 1;
+  const accrualMonths = currentMonthNum < startMonth ? 0 : (currentMonthNum - startMonth + 1);
+  const casualCarryForward = Number(QUOTAS.casualCarryForward || 0);
+  // Monthly casual leave accrual: 1.5 days/month starting from Sept in 2026, Jan in 2027+
+  const calculatedCasualAccrual = Number(((accrualMonths * 1.5) + casualCarryForward).toFixed(1));
+  const casualTotal = formatDays(calculatedCasualAccrual);
+  const sickTotal = formatDays(QUOTAS.sick || slAllowance || 0);
+  const casualBalance = formatDays(Math.max(0, casualTotal - usedCasual));
+  const sickBalance = formatDays(Math.max(0, sickTotal - usedSick));
+  const annualBalance = formatDays(Math.max(0, (QUOTAS.earned || elAllowance || 0) - usedEarned));
+  const emergencyBalance = formatDays(Math.max(0, (QUOTAS.emergency || 0) - usedEmergency));
+  const compOffBalance = formatDays(Math.max(0, (QUOTAS.compOff || 0) - usedCompOff));
+  const optionalBalance = formatDays(Math.max(0, (QUOTAS.optionalHoliday || 0) - usedOptional));
+
+  const totalAllocated = formatDays((QUOTAS.earned || 0) + (QUOTAS.sick || 0) + casualTotal + (QUOTAS.emergency || 0) + (QUOTAS.compOff || 0) + (QUOTAS.optionalHoliday || 0));
+  const totalUsed = formatDays(usedEarned + usedSick + usedCasual + usedEmergency + usedCompOff + usedOptional);
+  const totalBalance = formatDays(Math.max(0, totalAllocated - totalUsed));
   const activeLeaveTypesCount = 5;
   const pendingCount = leaves.filter(l => l.status?.toLowerCase() === 'pending' || l.status?.toLowerCase() === 'cancellation_pending').length;
 
@@ -554,8 +571,8 @@ const LeaveManagement = ({ isChild = false }) => {
     calendarDays.push({ date: i, isCurrentMonth: true });
   }
 
-  // Fill next month leading days
-  const remainingCells = 42 - calendarDays.length;
+  // Fill next month leading days to complete the week only (never add an extra 6th row of next month)
+  const remainingCells = calendarDays.length % 7 === 0 ? 0 : 7 - (calendarDays.length % 7);
   for (let i = 1; i <= remainingCells; i++) {
     calendarDays.push({ date: i, isCurrentMonth: false });
   }
@@ -641,6 +658,17 @@ const LeaveManagement = ({ isChild = false }) => {
     }
   };
 
+  if (loading && !isChild) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="flex flex-col items-center gap-3">
+          <RefreshCw size={32} className="animate-spin text-emerald-500" />
+          <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">Loading leave data...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={isChild ? "transition-colors duration-300 w-full" : "min-h-screen bg-[#F8F9FA] dark:bg-[#08100e] text-[#3b3e3c] dark:text-[#cbd5e1] font-['Inter',sans-serif] px-0 pt-0 pb-6 lg:px-1 lg:pt-0 lg:pb-6 transition-colors duration-300"}>
 
@@ -679,7 +707,7 @@ const LeaveManagement = ({ isChild = false }) => {
               onMouseLeave={() => setHoveredKpiIndex(null)}
               style={{
                 borderColor: isHovered ? card.borderColor : (isDark ? '#1f2d26' : '#f1f5f9'),
-                borderWidth: '2px',
+                borderWidth: '1px',
                 borderStyle: 'solid'
               }}
               className="bg-white dark:bg-[#111c18] py-2 px-3 rounded-xl shadow-xs flex items-center justify-between gap-2.5 cursor-pointer transition-colors duration-200 group select-none"
@@ -719,7 +747,7 @@ const LeaveManagement = ({ isChild = false }) => {
       </div>
 
       {/* 3. Main Two-Column Section (70/30 Split) */}
-      <div className="grid grid-cols-1 lg:grid-cols-10 gap-6 mb-4 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-10 gap-6 mb-4 items-stretch">
 
         {/* LEFT COLUMN (70%) */}
         <div className="lg:col-span-7 flex flex-col gap-6">
@@ -727,10 +755,10 @@ const LeaveManagement = ({ isChild = false }) => {
           {/* Leave Balance Summary */}
           <div className="bg-white dark:bg-[#111c18] rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 p-5 flex flex-col justify-start gap-2 transition-colors duration-300 hover:!border-emerald-500 dark:hover:!border-emerald-400">
             <div className="flex justify-between items-center">
-              <div>
-                <h2 className="text-base font-bold text-gray-900 dark:text-white">Leave Balance Summary</h2>
-                <p className="text-[10px] text-gray-500 mt-1">As on {refDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
-              </div>
+              <h2 className="text-base font-bold text-gray-900 dark:text-white">Leave Balance Summary</h2>
+              <span className="text-xs font-semibold text-gray-500 dark:text-gray-400">
+                As on {refDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+              </span>
             </div>
 
             <div className="overflow-x-auto">
@@ -745,8 +773,8 @@ const LeaveManagement = ({ isChild = false }) => {
                 </thead>
                 <tbody>
                   {[
-                    { name: 'Total Leave Balance', balance: Math.round(totalBalance), used: Math.round(totalUsed), total: Math.round(totalAllocated), icon: Calendar, color: 'text-purple-600 dark:text-purple-400', bg: 'bg-purple-50 dark:bg-purple-950/60 border border-purple-100 dark:border-purple-900/40' },
-                    // { name: 'Earned Leave (EL)', balance: Math.round(annualBalance), used: Math.round(usedEarned), total: Math.round(QUOTAS.earned || 0), icon: FileText, color: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50 dark:bg-amber-950/60 border border-amber-100 dark:border-amber-900/40' }
+                    { name: 'Casual Leave (CL)', balance: casualBalance, used: formatDays(usedCasual), total: casualTotal, icon: Calendar, color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-100 dark:border-emerald-900/40' },
+                    { name: 'Sick Leave (SL)', balance: sickBalance, used: formatDays(usedSick), total: sickTotal, icon: FileText, color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-950/60 border border-blue-100 dark:border-blue-900/40' }
                   ].map((row, idx) => (
                     <tr key={idx} className="border-b border-gray-50 dark:border-gray-800 last:border-0 hover:bg-gray-50 dark:hover:bg-[#162722]/50 transition-all duration-150 cursor-pointer">
                       <td className="px-4 py-2 flex items-center gap-3">
@@ -755,9 +783,9 @@ const LeaveManagement = ({ isChild = false }) => {
                         </div>
                         <span className="font-semibold text-gray-900 dark:text-gray-200">{row.name}</span>
                       </td>
-                      <td className="px-4 py-2 text-center font-bold text-gray-900 dark:text-gray-200">{Math.round(row.balance)}</td>
-                      <td className="px-4 py-2 text-center font-medium text-gray-500">{Math.round(row.used)}</td>
-                      <td className="px-4 py-2 text-center font-bold text-gray-900 dark:text-gray-200">{Math.round(row.total)}</td>
+                      <td className="px-4 py-2 text-center font-bold text-gray-900 dark:text-gray-200">{row.balance}</td>
+                      <td className="px-4 py-2 text-center font-medium text-gray-500">{row.used}</td>
+                      <td className="px-4 py-2 text-center font-bold text-gray-900 dark:text-gray-200">{row.total}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -779,42 +807,44 @@ const LeaveManagement = ({ isChild = false }) => {
                   const now = new Date();
                   now.setHours(0, 0, 0, 0);
                   const upcoming = leaves.filter(l => new Date(l.startDate) >= now && (l.status === 'approved' || l.status === 'pending'));
-                  if (upcoming.length > 0) {
-                    return upcoming.slice(0, 3).map((l, idx) => {
-                      const sDate = new Date(l.startDate);
-                      const eDate = new Date(l.endDate);
-                      const isMultiDay = sDate.toDateString() !== eDate.toDateString();
-                      return (
-                        <div key={idx} onClick={() => setIsUpcomingLeavesDrawerOpen(true)} className="flex gap-2.5 p-2.5 border border-gray-100 dark:border-gray-800 rounded-xl hover:!border-blue-500 dark:hover:!border-blue-400 transition-all cursor-pointer hover:bg-slate-50/50 dark:hover:bg-[#162722]/40 shrink-0 shadow-2xs">
-                          <div className="bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 rounded-xl p-1.5 flex flex-col items-center justify-center min-w-[56px] shrink-0 border border-blue-100 dark:border-blue-800/40">
-                            <span className="text-[9px] font-black uppercase tracking-wider leading-none">{sDate.toLocaleString('default', { month: 'short' })}</span>
-                            <span className="text-base font-extrabold leading-none my-1">{sDate.getDate()}</span>
-                            <span className="text-[8px] font-bold uppercase leading-none opacity-80">{sDate.toLocaleString('default', { weekday: 'short' })}</span>
-                          </div>
-                          <div className="flex-1 flex justify-between min-w-0 items-center">
-                            <div className="min-w-0 space-y-0.5">
-                              <h4 className="font-extrabold text-gray-900 dark:text-gray-100 capitalize text-xs truncate">
-                                {l.isCompOff ? 'Comp-Off Request' : l.isOnDuty ? 'On-Duty Request' : `${l.leaveType} Leave`}
-                              </h4>
-                              <p className="text-[10px] text-gray-500 truncate"><span className="font-semibold text-gray-600 dark:text-gray-400">Reason:</span> {l.reason || 'N/A'}</p>
-                              <p className="text-[9px] text-indigo-600 dark:text-indigo-400 font-bold truncate">
-                                📅 {sDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}
-                                {isMultiDay && ` - ${eDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}`}
-                              </p>
-                            </div>
-                            <div className="flex flex-col items-end justify-between shrink-0 ml-2 h-full">
-                              <span className="text-[10px] font-extrabold text-gray-700 dark:text-gray-300">{l.totalDays} Day(s)</span>
-                              <span className={`text-[8px] font-extrabold px-2 py-0.5 rounded-full ${getStatusColor(l.status)} capitalize`}>{l.status}</span>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    });
-                  } else {
+                  const displayUpcoming = upcoming;
+                  if (displayUpcoming.length === 0) {
                     return (
-                      <div className="text-center py-6 text-gray-500 font-medium text-xs">No upcoming leaves found.</div>
+                      <div className="py-6 text-center text-xs font-semibold text-gray-400 dark:text-gray-500">
+                        No upcoming leaves scheduled.
+                      </div>
                     );
                   }
+                  return displayUpcoming.slice(0, 3).map((l, idx) => {
+                    const sDate = new Date(l.startDate);
+                    const eDate = new Date(l.endDate);
+                    const isMultiDay = sDate.toDateString() !== eDate.toDateString();
+                    return (
+                      <div key={idx} onClick={() => setIsUpcomingLeavesDrawerOpen(true)} className="flex gap-2.5 p-2.5 border border-gray-100 dark:border-gray-800 rounded-xl hover:!border-blue-500 dark:hover:!border-blue-400 transition-all cursor-pointer hover:bg-slate-50/50 dark:hover:bg-[#162722]/40 shrink-0 shadow-2xs">
+                        <div className="bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 rounded-xl p-1.5 flex flex-col items-center justify-center min-w-[56px] shrink-0 border border-blue-100 dark:border-blue-800/40">
+                          <span className="text-[9px] font-black uppercase tracking-wider leading-none">{sDate.toLocaleString('default', { month: 'short' })}</span>
+                          <span className="text-base font-extrabold leading-none my-1">{sDate.getDate()}</span>
+                          <span className="text-[8px] font-bold uppercase leading-none opacity-80">{sDate.toLocaleString('default', { weekday: 'short' })}</span>
+                        </div>
+                        <div className="flex-1 flex justify-between min-w-0 items-center">
+                          <div className="min-w-0 space-y-0.5">
+                            <h4 className="font-extrabold text-gray-900 dark:text-gray-100 capitalize text-xs truncate">
+                              {l.isCompOff ? 'Comp-Off Request' : l.isOnDuty ? 'On-Duty Request' : `${l.leaveType} Leave`}
+                            </h4>
+                            <p className="text-[10px] text-gray-500 truncate"><span className="font-semibold text-gray-600 dark:text-gray-400">Reason:</span> {l.reason || 'N/A'}</p>
+                            <p className="text-[9px] text-indigo-600 dark:text-indigo-400 font-bold truncate">
+                              📅 {sDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}
+                              {isMultiDay && ` - ${eDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}`}
+                            </p>
+                          </div>
+                          <div className="flex flex-col items-end justify-between shrink-0 ml-2 h-full">
+                            <span className="text-[10px] font-extrabold text-gray-700 dark:text-gray-300">{l.totalDays} Day(s)</span>
+                            <span className={`text-[8px] font-extrabold px-2 py-0.5 rounded-full ${getStatusColor(l.status)} capitalize`}>{l.status}</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  });
                 })()}
               </div>
             </div>
@@ -823,10 +853,7 @@ const LeaveManagement = ({ isChild = false }) => {
             <div className="bg-white dark:bg-[#111c18] rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 p-4 transition-colors duration-300 hover:!border-purple-500 dark:hover:!border-purple-400 flex flex-col justify-between">
               <div>
                 <div className="flex justify-between items-center mb-3">
-                  <div>
-                    <h2 className="text-base font-bold text-gray-900 dark:text-white">Leave Policy & Guidelines</h2>
-                    <p className="text-[11px] text-gray-500 dark:text-gray-400">Key highlights of annual leave allowances, carry forward limits, and policy rules.</p>
-                  </div>
+                  <h2 className="text-base font-bold text-gray-900 dark:text-white">Leave Policy & Guidelines</h2>
                   <button
                     onClick={() => setIsPolicyDrawerOpen(true)}
                     className="text-xs font-bold text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 transition-colors shrink-0 cursor-pointer border-none bg-transparent"
@@ -838,7 +865,7 @@ const LeaveManagement = ({ isChild = false }) => {
                 {/* Direct Policy Cards Grid */}
                 <div className="grid grid-cols-1 gap-2.5 my-1">
                   {(policies && policies.length > 0 ? policies : [
-                    { _id: 'p1', name: 'Casual Leave (CL)', type: 'casual', annualAllowance: clAllowance || 12, carryForwardLimit: 0, description: '12 Days paid casual leave per calendar year for personal urgent affairs & short absences.' },
+                    { _id: 'p1', name: 'Casual Leave (CL)', type: 'casual', annualAllowance: clAllowance || 18, carryForwardLimit: 9, description: '1.5 days accrued per month (up to 18 days/yr). 50% of unused leaves carry forward to next year.' },
                     { _id: 'p2', name: 'Sick Leave (SL)', type: 'sick', annualAllowance: slAllowance || 10, carryForwardLimit: 0, description: '10 Days paid sick leave per calendar year. Medical certificate required for >2 consecutive days.' },
                     { _id: 'p3', name: 'Earned Leave (EL)', type: 'earned', annualAllowance: elAllowance || 20, carryForwardLimit: cfEarned || 5, description: '20 Days earned annual leave. Maximum 5 days carry forward allowed per calendar year.' },
                     { _id: 'p4', name: 'Compensatory Off (CO)', type: 'compoff', annualAllowance: 3, carryForwardLimit: 0, description: 'Earned by working on non-working days or holidays with prior manager approval.' }
@@ -866,8 +893,8 @@ const LeaveManagement = ({ isChild = false }) => {
           </div>
 
           {/* My Leave Requests */}
-          <div className="bg-white dark:bg-[#111c18] rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800/80 p-6 transition-all duration-300 hover:border-[#00a76b]/40">
-            <div className="flex justify-between items-center mb-5">
+          <div className="bg-white dark:bg-[#111c18] rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800/80 p-5 transition-all duration-300 hover:border-[#00a76b]/40">
+            <div className="flex justify-between items-center mb-2.5">
               <h2 className="text-base font-bold text-gray-900 dark:text-white flex items-center gap-2">
                 <Sparkles size={16} className="text-[#00a76b]" />
                 My Leave Requests
@@ -882,7 +909,7 @@ const LeaveManagement = ({ isChild = false }) => {
               </div>
             </div>
 
-            <div className="flex gap-2 border-b border-gray-100 dark:border-gray-800 mb-4 pb-2 overflow-x-auto">
+            <div className="flex gap-2 border-b border-gray-100 dark:border-gray-800 mb-2.5 pb-2 overflow-x-auto">
               {['All', 'Pending', 'Approved', 'Cancelled', 'Rejected'].map(tab => (
                 <button
                   key={tab}
@@ -1052,25 +1079,38 @@ const LeaveManagement = ({ isChild = false }) => {
         </div>
 
         {/* RIGHT COLUMN (30%) */}
-        <div className="lg:col-span-3 flex flex-col gap-6">
+        <div className="lg:col-span-3 flex flex-col gap-6 h-full">
 
           {/* Leave Calendar */}
-          <div className="bg-white dark:bg-[#111c18] rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 p-5 flex flex-col justify-between transition-colors duration-300 hover:!border-indigo-500 dark:hover:!border-indigo-400">
-            <div className="flex justify-between items-center mb-3">
-              <h2 className="text-base font-bold text-gray-900 dark:text-white">Leave Calendar</h2>
-            </div>
-
-            <div className="flex justify-between items-center mb-2">
-              <button onClick={() => setRefDate(new Date(currentYear, currentMonth - 1, 1))} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded">
-                <ChevronLeft size={18} />
-              </button>
-              <h3 className="text-xs font-bold text-gray-800 dark:text-gray-200">
-                {refDate.toLocaleString('default', { month: 'long' })} {currentYear}
-              </h3>
-              <div className="flex gap-2">
-                <button onClick={() => setRefDate(new Date())} className="text-[9px] font-bold bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded hover:bg-gray-200">Today</button>
-                <button onClick={() => setRefDate(new Date(currentYear, currentMonth + 1, 1))} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded">
-                  <ChevronRight size={18} />
+          <div className="bg-white dark:bg-[#111c18] rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 p-4 sm:p-4.5 flex flex-col justify-between transition-colors duration-300 hover:!border-indigo-500 dark:hover:!border-indigo-400">
+            <div className="flex justify-between items-center mb-3 gap-1.5">
+              <h2 className="text-sm font-bold text-gray-900 dark:text-white whitespace-nowrap">Leave Calendar</h2>
+              <div className="flex items-center gap-0.5 bg-gray-50 dark:bg-[#162722] p-1 rounded-xl border border-gray-150 dark:border-gray-800 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setRefDate(new Date(currentYear, currentMonth - 1, 1))}
+                  className="p-1 hover:bg-white dark:hover:bg-gray-800 rounded-md text-gray-600 dark:text-gray-300 transition-colors cursor-pointer border-none bg-transparent"
+                  title="Previous Month"
+                >
+                  <ChevronLeft size={14} />
+                </button>
+                <span className="text-[11px] font-bold text-gray-800 dark:text-gray-200 px-1 whitespace-nowrap">
+                  {refDate.toLocaleString('default', { month: 'short' })} {currentYear}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setRefDate(new Date(currentYear, currentMonth + 1, 1))}
+                  className="p-1 hover:bg-white dark:hover:bg-gray-800 rounded-md text-gray-600 dark:text-gray-300 transition-colors cursor-pointer border-none bg-transparent"
+                  title="Next Month"
+                >
+                  <ChevronRight size={14} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRefDate(new Date())}
+                  className="text-[9px] font-bold bg-white dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 px-1.5 py-0.5 rounded border border-gray-200 dark:border-gray-700 shadow-2xs transition-colors cursor-pointer"
+                >
+                  Today
                 </button>
               </div>
             </div>
@@ -1082,11 +1122,21 @@ const LeaveManagement = ({ isChild = false }) => {
 
             <div className="grid grid-cols-7 gap-1">
               {calendarDays.map((day, idx) => {
+                if (!day.isCurrentMonth) {
+                  return (
+                    <div
+                      key={idx}
+                      className="aspect-square py-1 pointer-events-none select-none opacity-0"
+                      aria-hidden="true"
+                    />
+                  );
+                }
+
                 const status = getDayStatus(day);
                 const isToday = day.isCurrentMonth && day.date === new Date().getDate() && currentMonth === new Date().getMonth() && currentYear === new Date().getFullYear();
 
                 let bgClass = "bg-transparent hover:bg-gray-50 dark:hover:bg-gray-800";
-                let textClass = day.isCurrentMonth ? "text-gray-700 dark:text-gray-300" : "text-gray-300 dark:text-gray-600";
+                let textClass = "text-gray-700 dark:text-gray-300";
                 let dot = null;
 
                 if (status === 'approved') {
@@ -1129,12 +1179,12 @@ const LeaveManagement = ({ isChild = false }) => {
           </div>
 
           {/* Upcoming Holidays */}
-          <div className="bg-white dark:bg-[#111c18] rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 p-4 transition-colors duration-300 hover:!border-pink-500 dark:hover:!border-pink-400">
+          <div className="bg-white dark:bg-[#111c18] rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 p-4 transition-colors duration-300 hover:!border-pink-500 dark:hover:!border-pink-400 flex flex-col flex-1 justify-between">
             <div className="flex justify-between items-center mb-3.5">
               <h2 className="text-base font-bold text-gray-900 dark:text-white">Upcoming Holidays</h2>
               <button onClick={() => setIsHolidaysDrawerOpen(true)} className="text-xs font-bold text-blue-600 hover:text-blue-700 transition-colors">View Calendar</button>
             </div>
-            <div className="space-y-2">
+            <div className="space-y-2.5 flex-1 flex flex-col justify-between">
               {(() => {
                 const DEFAULT_HOLIDAYS = [
                   { name: 'Gandhi Jayanti', date: '2026-10-02', isActive: true },
@@ -1257,7 +1307,7 @@ const LeaveManagement = ({ isChild = false }) => {
                         </div>
                         <div className="flex items-baseline gap-1">
                           <span className="text-base font-black text-emerald-600 dark:text-emerald-400">
-                            {Math.round((lastSubmittedLeaveType.includes('sick') || lastSubmittedLeaveType === 'sl') ? sickBalance :
+                            {formatDays((lastSubmittedLeaveType.includes('sick') || lastSubmittedLeaveType === 'sl') ? sickBalance :
                              (lastSubmittedLeaveType.includes('earned') || lastSubmittedLeaveType.includes('annual') || lastSubmittedLeaveType === 'el') ? annualBalance :
                              (lastSubmittedLeaveType.includes('emergency') || lastSubmittedLeaveType === 'eml') ? emergencyBalance :
                              (lastSubmittedLeaveType.includes('maternity') || lastSubmittedLeaveType === 'ml') ? maternityBalance :
@@ -1315,15 +1365,13 @@ const LeaveManagement = ({ isChild = false }) => {
                         <CustomDatePicker
                           name="startDate"
                           value={formData.startDate}
-                          minDate={`${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(new Date().getDate()).padStart(2, '0')}`}
+                          minDate={`${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-01`}
+                          maxDate={`${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate()).padStart(2, '0')}`}
                           onChange={e => {
                             const newStart = e.target.value;
-                            const tStr = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(new Date().getDate()).padStart(2, '0')}`;
                             setFormData(prev => {
                               const updated = { ...prev, startDate: newStart };
-                              if (newStart && newStart < tStr) {
-                                setFormErrors(errs => ({ ...errs, startDate: 'Start date cannot be in the past' }));
-                              } else if (newStart && updated.endDate && new Date(newStart) > new Date(updated.endDate)) {
+                              if (newStart && updated.endDate && new Date(newStart) > new Date(updated.endDate)) {
                                 setFormErrors(errs => ({
                                   ...errs,
                                   startDate: 'Start date cannot be later than end date',
@@ -1347,7 +1395,8 @@ const LeaveManagement = ({ isChild = false }) => {
                         <CustomDatePicker
                           name="endDate"
                           value={formData.endDate}
-                          minDate={formData.startDate || `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(new Date().getDate()).padStart(2, '0')}`}
+                          minDate={formData.startDate || `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-01`}
+                          maxDate={`${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate()).padStart(2, '0')}`}
                           onChange={e => {
                             const newEnd = e.target.value;
                             setFormData(prev => {
@@ -1477,7 +1526,7 @@ const LeaveManagement = ({ isChild = false }) => {
                         </div>
                         <div className="flex items-baseline gap-1">
                           <span className="text-base font-black text-emerald-600 dark:text-emerald-400">
-                            {Math.round((lastSubmittedLeaveType.includes('sick') || lastSubmittedLeaveType === 'sl') ? sickBalance :
+                            {formatDays((lastSubmittedLeaveType.includes('sick') || lastSubmittedLeaveType === 'sl') ? sickBalance :
                              (lastSubmittedLeaveType.includes('earned') || lastSubmittedLeaveType.includes('annual') || lastSubmittedLeaveType === 'el') ? annualBalance :
                              (lastSubmittedLeaveType.includes('emergency') || lastSubmittedLeaveType === 'eml') ? emergencyBalance :
                              (lastSubmittedLeaveType.includes('maternity') || lastSubmittedLeaveType === 'ml') ? maternityBalance :
@@ -1519,7 +1568,8 @@ const LeaveManagement = ({ isChild = false }) => {
                         <CustomDatePicker
                           name="startDate"
                           value={editFormData.startDate}
-                          minDate={`${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(new Date().getDate()).padStart(2, '0')}`}
+                          minDate={`${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-01`}
+                          maxDate={`${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate()).padStart(2, '0')}`}
                           onChange={e => setEditFormData({ ...editFormData, startDate: e.target.value })}
                           placeholder="dd-mm-yyyy"
                           className="w-full bg-gray-50 dark:bg-[#0f172a] border border-gray-250 dark:border-gray-700 rounded-xl h-10 flex items-center text-xs text-gray-900 dark:text-white"
@@ -1530,7 +1580,8 @@ const LeaveManagement = ({ isChild = false }) => {
                         <CustomDatePicker
                           name="endDate"
                           value={editFormData.endDate}
-                          minDate={editFormData.startDate || `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(new Date().getDate()).padStart(2, '0')}`}
+                          minDate={editFormData.startDate || `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-01`}
+                          maxDate={`${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate()).padStart(2, '0')}`}
                           onChange={e => setEditFormData({ ...editFormData, endDate: e.target.value })}
                           placeholder="dd-mm-yyyy"
                           align="right"

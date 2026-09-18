@@ -138,10 +138,10 @@ const CustomDatePicker = ({ name, value, onChange, minDate, maxDate, isDateDisab
         }}
         tabIndex={0}
       >
-        <span className={displayValue ? "font-bold text-slate-900 dark:text-white" : "text-slate-400 dark:text-slate-500"}>
+        <span className={`whitespace-nowrap ${displayValue ? "font-bold text-slate-900 dark:text-white" : "text-slate-400 dark:text-slate-500"}`}>
           {displayValue || placeholder}
         </span>
-        <Calendar size={14} className="text-emerald-600 dark:text-emerald-400 shrink-0 ml-2" />
+        <Calendar size={14} className="text-emerald-600 dark:text-emerald-400 shrink-0 ml-1.5" />
       </div>
 
       {isOpen && (

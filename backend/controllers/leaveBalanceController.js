@@ -57,14 +57,18 @@ exports.getLeaveBalance = async (req, res) => {
                     return sum + Math.max(1, Math.ceil(diff));
                 }, 0);
 
+                // Year transition carry forward rule: 50% carries forward into next year
+                const effectiveCarryForward = (m === 1 && i > 0) ? Number((lastRemaining * 0.5).toFixed(1)) : lastRemaining;
+
                 balance = await LeaveBalance.create({
                     employeeId: id,
                     month: m,
                     year: y,
                     earnedLeave: 1.5,
+                    casualLeave: Number((1.5 + effectiveCarryForward).toFixed(1)),
                     usedLeave: usedInMonth,
-                    carryForward: lastRemaining,
-                    remainingLeave: 1.5 + lastRemaining - usedInMonth
+                    carryForward: effectiveCarryForward,
+                    remainingLeave: Number((1.5 + effectiveCarryForward - usedInMonth).toFixed(1))
                 });
             }
 

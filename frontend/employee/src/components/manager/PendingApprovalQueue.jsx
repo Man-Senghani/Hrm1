@@ -6,7 +6,7 @@ import { Search, Filter, CheckCircle2, XCircle, ChevronLeft, ChevronRight, Chevr
 import CustomDatePicker from '../CustomDatePicker';
 import ActionConfirmModal from '../ActionConfirmModal';
 
-const PendingApprovalQueue = ({ onAction }) => {
+const PendingApprovalQueue = ({ onAction, onCountsUpdate }) => {
   const [leaves, setLeaves] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showBulkConfirmModal, setShowBulkConfirmModal] = useState(false);
@@ -15,11 +15,14 @@ const PendingApprovalQueue = ({ onAction }) => {
   const [totalPages, setTotalPages] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
   const [searchTerm, setSearchTerm] = useState('');
+  const getAuthToken = () => sessionStorage.getItem('token') || localStorage.getItem('token') || '';
+  const currentUserId = sessionStorage.getItem('userId') || localStorage.getItem('userId') || '';
 
   const [requestFilter, setRequestFilter] = useState('pending');
   const [filterDropdownOpen, setFilterDropdownOpen] = useState(false);
   const [filterStartDate, setFilterStartDate] = useState('');
   const [filterEndDate, setFilterEndDate] = useState('');
+  const [pendingBulkTrigger, setPendingBulkTrigger] = useState(false);
   const [counts, setCounts] = useState({
     all: 0,
     pending: 0,
@@ -66,19 +69,25 @@ const PendingApprovalQueue = ({ onAction }) => {
       if (filterStartDate) params.append('startDate', filterStartDate);
       if (filterEndDate) params.append('endDate', filterEndDate);
 
+      const token = getAuthToken();
       const res = await axios.get(`/api/leaves/manager/pending?${params.toString()}`, {
-        headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` }
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
       });
       setLeaves(res.data.data || []);
       if (res.data.counts) {
         setCounts(res.data.counts);
+        if (onCountsUpdate) {
+          onCountsUpdate(res.data.counts);
+        }
       }
       if (res.data.pagination) {
         setTotalPages(res.data.pagination.pages);
         setTotalItems(res.data.pagination.total);
       }
     } catch (err) {
-      toast.error('Failed to fetch leave requests');
+      if (err.response?.status !== 401 && err.response?.status !== 403) {
+        toast.error('Failed to fetch leave requests');
+      }
     } finally {
       setLoading(false);
     }
@@ -90,22 +99,47 @@ const PendingApprovalQueue = ({ onAction }) => {
 
   useEffect(() => {
     const handleBulkApproval = () => {
-      if (!leaves || leaves.length === 0) {
-        toast.error('No pending leave requests to approve.');
-        return;
+      if (requestFilter !== 'pending') {
+        setRequestFilter('pending');
+        setCurrentPage(1);
+        setPendingBulkTrigger(true);
+      } else {
+        const eligible = (leaves || []).filter(l => String(l.user?._id || l.user || '') !== String(currentUserId));
+        if (eligible.length === 0) {
+          toast.error('No pending subordinate leave requests to approve.');
+          return;
+        }
+        setShowBulkConfirmModal(true);
       }
-      setShowBulkConfirmModal(true);
     };
 
     window.addEventListener('trigger-bulk-approval', handleBulkApproval);
     return () => window.removeEventListener('trigger-bulk-approval', handleBulkApproval);
-  }, [leaves]);
+  }, [leaves, requestFilter, currentUserId]);
+
+  useEffect(() => {
+    if (pendingBulkTrigger && !loading && requestFilter === 'pending') {
+      setPendingBulkTrigger(false);
+      const eligible = (leaves || []).filter(l => String(l.user?._id || l.user || '') !== String(currentUserId));
+      if (eligible.length > 0) {
+        setShowBulkConfirmModal(true);
+      } else {
+        toast.error('No pending subordinate leave requests to approve.');
+      }
+    }
+  }, [pendingBulkTrigger, loading, requestFilter, leaves, currentUserId]);
 
   const confirmBulkApproveSubmit = async () => {
     try {
       setIsBulkApproving(true);
-      const res = await axios.put('/api/leaves/manager/bulk-approve', { ids: leaves.map(l => l._id) }, {
-        headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` }
+      const eligibleLeaves = leaves.filter(l => String(l.user?._id || l.user || '') !== String(currentUserId));
+      if (!eligibleLeaves.length) {
+        toast.error('No subordinate leave requests available for bulk approval.');
+        return;
+      }
+      const token = getAuthToken();
+      const res = await axios.put('/api/leaves/manager/bulk-approve', { ids: eligibleLeaves.map(l => l._id) }, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
       });
       toast.success(res.data.message || 'Bulk approval successful');
       fetchPending();
@@ -120,8 +154,9 @@ const PendingApprovalQueue = ({ onAction }) => {
 
   const handleApprove = async (id) => {
     try {
+      const token = getAuthToken();
       await axios.put(`/api/leaves/manager-approve/${id}`, {}, {
-        headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` }
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
       });
       toast.success('Leave approved');
       fetchPending();
@@ -144,8 +179,9 @@ const PendingApprovalQueue = ({ onAction }) => {
   const confirmReject = async (reason) => {
     try {
       setRejectModal(prev => ({ ...prev, loading: true }));
+      const token = getAuthToken();
       await axios.put(`/api/leaves/reject/${rejectModal.leaveId}`, { reason }, {
-        headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` }
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
       });
       toast.success('Leave request rejected');
       setRejectModal({ isOpen: false, leaveId: null, loading: false });
@@ -160,7 +196,7 @@ const PendingApprovalQueue = ({ onAction }) => {
   const formatDate = (dateString) => {
     if (!dateString) return '-';
     return new Date(dateString).toLocaleDateString('en-GB', {
-      day: '2-digit', month: 'short', year: 'numeric'
+      day: '2-digit', month: '2-digit', year: 'numeric'
     });
   };
 
@@ -193,7 +229,7 @@ const PendingApprovalQueue = ({ onAction }) => {
               value={filterStartDate}
               onChange={(e) => setFilterStartDate(e.target.value)}
               placeholder="Start Date"
-              className="w-26 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg h-9 flex items-center text-[11px] font-semibold text-gray-700 dark:text-gray-300"
+              className="w-32 sm:w-34 px-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg h-9 flex items-center text-[11px] font-semibold text-gray-700 dark:text-gray-300 whitespace-nowrap"
             />
             <span className="text-gray-400 text-xs font-bold">to</span>
             <CustomDatePicker
@@ -202,7 +238,7 @@ const PendingApprovalQueue = ({ onAction }) => {
               onChange={(e) => setFilterEndDate(e.target.value)}
               placeholder="End Date"
               align="right"
-              className="w-26 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg h-9 flex items-center text-[11px] font-semibold text-gray-700 dark:text-gray-300"
+              className="w-32 sm:w-34 px-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg h-9 flex items-center text-[11px] font-semibold text-gray-700 dark:text-gray-300 whitespace-nowrap"
             />
             {(filterStartDate || filterEndDate) && (
               <button
@@ -315,22 +351,28 @@ const PendingApprovalQueue = ({ onAction }) => {
                   </td>
                   {(requestFilter === 'pending' || requestFilter === 'cancellation_pending') && (
                     <td className="py-2.5 text-right">
-                      <div className="flex justify-end gap-1.5">
-                        <button
-                          onClick={() => handleApprove(leave._id)}
-                          className="p-1.5 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 rounded-lg transition-colors cursor-pointer border-none bg-transparent"
-                          title="Approve"
-                        >
-                          <CheckCircle2 size={16} />
-                        </button>
-                        <button
-                          onClick={() => handleReject(leave._id)}
-                          className="p-1.5 hover:bg-red-50 dark:hover:bg-red-950/30 text-red-600 dark:text-red-400 rounded-lg transition-colors cursor-pointer border-none bg-transparent"
-                          title="Reject"
-                        >
-                          <XCircle size={16} />
-                        </button>
-                      </div>
+                      {currentUserId && String(leave.user?._id || leave.user || '') === String(currentUserId) ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-800/60">
+                          Awaiting HR/Admin
+                        </span>
+                      ) : (
+                        <div className="flex justify-end gap-1.5">
+                          <button
+                            onClick={() => handleApprove(leave._id)}
+                            className="p-1.5 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 rounded-lg transition-colors cursor-pointer border-none bg-transparent"
+                            title="Approve"
+                          >
+                            <CheckCircle2 size={16} />
+                          </button>
+                          <button
+                            onClick={() => handleReject(leave._id)}
+                            className="p-1.5 hover:bg-red-50 dark:hover:bg-red-950/30 text-red-600 dark:text-red-400 rounded-lg transition-colors cursor-pointer border-none bg-transparent"
+                            title="Reject"
+                          >
+                            <XCircle size={16} />
+                          </button>
+                        </div>
+                      )}
                     </td>
                   )}
                 </tr>

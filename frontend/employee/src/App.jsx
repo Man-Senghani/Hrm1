@@ -15,7 +15,8 @@ import {
   Target,
   Globe,
   Briefcase,
-  User
+  User,
+  ClipboardList
 } from 'lucide-react';
 import { syncSessionFromActiveAccount, clearActiveAccountAndSession, setupCrossTabSessionSync } from '@shared/utils/sessionSync';
 
@@ -92,6 +93,7 @@ function App() {
 
   const navItems = [
     { label: 'Attendance', icon: CalendarDays, path: '/attendance' },
+    { label: 'Leave Management', icon: ClipboardList, path: '/leave' },
     { label: 'Daily Report', icon: FileText, path: '/daily-report' },
     { label: 'My Profile', icon: User, path: '/profile' },
   ];

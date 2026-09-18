@@ -75,67 +75,66 @@ const TeamLeaveBalance = () => {
   };
 
   return (
-    <div className="bg-white dark:bg-[#1e293b] rounded-2xl p-6 shadow-sm border border-gray-100 dark:border-gray-800 flex flex-col h-full transition-colors duration-300 hover:!border-emerald-500 dark:hover:!border-emerald-400">
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-lg font-bold text-gray-900 dark:text-white">Team Leave Balance</h2>
+    <div className="bg-white dark:bg-[#1e293b] rounded-2xl p-4 sm:p-5 shadow-sm border border-gray-100 dark:border-gray-800 flex flex-col h-full transition-colors duration-300 hover:!border-emerald-500 dark:hover:!border-emerald-400">
+      <div className="flex justify-between items-center mb-3">
+        <h2 className="text-sm sm:text-base font-bold text-gray-900 dark:text-white whitespace-nowrap">Team Leave Balance</h2>
         <button onClick={handleOpenDrawer} className="text-indigo-600 text-xs font-bold hover:underline cursor-pointer border-none bg-transparent">View all &rarr;</button>
       </div>
 
-      <div className="overflow-x-auto flex-1">
+      <div className="overflow-hidden flex-1">
         <table className="w-full text-left border-collapse">
           <colgroup>
-            <col style={{ width: '38%' }} />
-            <col style={{ width: '12%' }} />
-            <col style={{ width: '12%' }} />
-            <col style={{ width: '12%' }} />
-            <col style={{ width: '12%' }} />
-            <col style={{ width: '14%' }} />
+            <col style={{ width: '44%' }} />
+            <col style={{ width: '18%' }} />
+            <col style={{ width: '18%' }} />
+            <col style={{ width: '20%' }} />
           </colgroup>
           <thead>
             <tr className="border-b border-gray-100 dark:border-gray-800 text-gray-500 text-[10px] uppercase text-center">
-              <th className="pb-3 font-bold text-left">Employee</th>
-              <th className="pb-3 font-bold" title="Casual Leave">CL</th>
-              <th className="pb-3 font-bold" title="Sick Leave">SL</th>
-              <th className="pb-3 font-bold" title="Earned Leave">EL</th>
-              <th className="pb-3 font-bold" title="Comp Off">CO</th>
-              <th className="pb-3 font-bold" title="Total Balance">Total</th>
+              <th className="pb-2 font-bold text-left">Employee</th>
+              <th className="pb-2 font-bold" title="Casual Leave">CL</th>
+              <th className="pb-2 font-bold" title="Sick Leave">SL</th>
+              <th className="pb-2 font-bold" title="Total Balance">Total</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50 dark:divide-gray-800/50">
             {loading ? (
-              <tr><td colSpan="6" className="py-8 text-center text-gray-500 text-xs">Loading...</td></tr>
+              <tr><td colSpan="4" className="py-6 text-center text-gray-500 text-xs">Loading...</td></tr>
             ) : displayBalances.length === 0 ? (
-              <tr><td colSpan="6" className="py-8 text-center text-gray-500 text-xs">No balances found.</td></tr>
+              <tr><td colSpan="4" className="py-6 text-center text-gray-500 text-xs">No balances found.</td></tr>
             ) : (
               displayBalances.map(bal => {
-                const empName = bal.employeeId?.name || 'Unknown';
+                const empName = bal.user?.name || bal.employeeId?.name || bal.name || 'Team Member';
                 let avatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(empName)}&background=random`;
-                if (bal.employeeId?.profileImage) {
-                  avatar = bal.employeeId.profileImage.startsWith('http') ? bal.employeeId.profileImage : `${import.meta.env.VITE_API_URL || ''}${bal.employeeId.profileImage}`;
+                const img = bal.user?.profileImage || bal.employeeId?.profileImage;
+                if (img) {
+                  avatar = img.startsWith('http') ? img : `${import.meta.env.VITE_API_URL || ''}${img}`;
                 }
 
-                const totalUsed = bal.usedLeave?.total || 0;
-                const totalAlloc = bal.totalLeave || 1;
-                const overallPct = Math.min((totalUsed / totalAlloc) * 100, 100);
+                const clUsed = bal.cl ?? bal.usedLeave?.casual ?? 0;
+                const slUsed = bal.sl ?? bal.usedLeave?.sick ?? 0;
+                const totalUsed = clUsed + slUsed;
+                const clAlloc = bal.totalCL ?? bal.casualLeave ?? 1.5;
+                const slAlloc = bal.totalSL ?? bal.sickLeave ?? 12;
+                const totalAlloc = clAlloc + slAlloc;
+                const overallPct = Math.min((totalUsed / (totalAlloc || 1)) * 100, 100);
 
                 return (
                   <tr key={bal._id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors border-b border-gray-50 dark:border-gray-800 last:border-0">
-                    <td className="py-3.5 text-left pr-2">
+                    <td className="py-1.5 text-left pr-2">
                       <div className="flex items-center gap-2">
-                        <img src={avatar} alt="" className="w-8 h-8 rounded-full object-cover shrink-0 shadow-sm" />
+                        <img src={avatar} alt="" className="w-6 h-6 rounded-full object-cover shrink-0 shadow-sm" />
                         <div className="flex flex-col min-w-0">
-                          <span className="font-bold text-xs text-gray-900 dark:text-white truncate" title={empName}>{empName}</span>
-                          <div className="h-1 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden mt-1">
+                          <span className="font-bold text-xs text-gray-900 dark:text-white truncate leading-tight" title={empName}>{empName}</span>
+                          <div className="h-1 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden mt-0.5">
                             <div className="h-full rounded-full bg-indigo-500" style={{ width: `${overallPct}%` }}></div>
                           </div>
                         </div>
                       </div>
                     </td>
-                    <td className="py-3.5 text-center text-xs font-medium text-gray-600 dark:text-gray-400">{bal.cl || 0}/{bal.totalCL || 12}</td>
-                    <td className="py-3.5 text-center text-xs font-medium text-gray-600 dark:text-gray-400">{bal.sl || 0}/{bal.totalSL || 12}</td>
-                    <td className="py-3.5 text-center text-xs font-medium text-gray-600 dark:text-gray-400">{bal.el || 0}/{bal.totalEL || 12}</td>
-                    <td className="py-3.5 text-center text-xs font-medium text-gray-600 dark:text-gray-400">{bal.co || 0}/{bal.totalCO || 5}</td>
-                    <td className="py-3.5 text-center">{renderProgressBar(totalUsed, totalAlloc)}</td>
+                    <td className="py-1.5 text-center text-xs font-medium text-gray-600 dark:text-gray-400">{clUsed}/{clAlloc}</td>
+                    <td className="py-1.5 text-center text-xs font-medium text-gray-600 dark:text-gray-400">{slUsed}/{slAlloc}</td>
+                    <td className="py-1.5 text-center">{renderProgressBar(totalUsed, totalAlloc)}</td>
                   </tr>
                 );
               })
@@ -144,7 +143,7 @@ const TeamLeaveBalance = () => {
         </table>
       </div>
 
-      <div className="mt-4 pt-4 border-t border-gray-150 dark:border-gray-800 flex items-center justify-between flex-wrap gap-2">
+      <div className="mt-auto pt-2 border-t border-gray-150 dark:border-gray-800 flex items-center justify-between flex-wrap gap-2">
         <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
           {startEntry}-{endEntry} of {displayTotalItems}
         </span>
@@ -218,15 +217,20 @@ const TeamLeaveBalance = () => {
                 <div className="py-12 text-center text-gray-500 text-xs">Loading leave balances...</div>
               ) : (
                 allBalances
-                  .filter(b => (b.employeeId?.name || '').toLowerCase().includes(drawerSearch.toLowerCase()))
+                  .filter(b => ((b.user?.name || b.employeeId?.name || b.name || '')).toLowerCase().includes(drawerSearch.toLowerCase()))
                   .map(b => {
-                    const empName = b.employeeId?.name || 'Unknown';
+                    const empName = b.user?.name || b.employeeId?.name || b.name || 'Team Member';
                     let avatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(empName)}&background=random`;
-                    if (b.employeeId?.profileImage) {
-                      avatar = b.employeeId.profileImage.startsWith('http') ? b.employeeId.profileImage : `${import.meta.env.VITE_API_URL || ''}${b.employeeId.profileImage}`;
+                    const img = b.user?.profileImage || b.employeeId?.profileImage;
+                    if (img) {
+                      avatar = img.startsWith('http') ? img : `${import.meta.env.VITE_API_URL || ''}${img}`;
                     }
-                    const totalUsed = b.usedLeave?.total || 0;
-                    const totalAlloc = b.totalLeave || 1;
+                    const clUsed = b.cl ?? b.usedLeave?.casual ?? 0;
+                    const slUsed = b.sl ?? b.usedLeave?.sick ?? 0;
+                    const totalUsed = clUsed + slUsed;
+                    const clAlloc = b.totalCL ?? b.casualLeave ?? 1.5;
+                    const slAlloc = b.totalSL ?? b.sickLeave ?? 12;
+                    const totalAlloc = clAlloc + slAlloc;
 
                     return (
                       <div key={b._id} className="p-4 rounded-2xl border border-gray-100 dark:border-[#28251e] bg-white dark:bg-[#161311] shadow-xs flex flex-col gap-3">
@@ -235,29 +239,21 @@ const TeamLeaveBalance = () => {
                             <img src={avatar} alt="" className="w-10 h-10 rounded-full object-cover shrink-0 shadow-sm" />
                             <div>
                               <h4 className="text-sm font-bold text-gray-900 dark:text-white">{empName}</h4>
-                              <p className="text-xs text-gray-500">{b.employeeId?.designation || b.employeeId?.role || 'Employee'}</p>
+                              <p className="text-xs text-gray-500">{b.user?.department || b.employeeId?.department || b.employeeId?.designation || b.user?.role || 'Employee'}</p>
                             </div>
                           </div>
                           <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 px-3 py-1 rounded-full">
                             {totalUsed} / {totalAlloc} Used
                           </span>
                         </div>
-                        <div className="grid grid-cols-4 gap-2 pt-2 border-t border-gray-100 dark:border-[#28251e] text-center text-xs">
+                        <div className="grid grid-cols-2 gap-2 pt-2 border-t border-gray-100 dark:border-[#28251e] text-center text-xs">
                           <div className="bg-gray-50 dark:bg-[#1f1b17] p-2 rounded-xl">
-                            <span className="text-[10px] text-gray-400 font-bold block uppercase">CL</span>
-                            <span className="font-bold text-gray-900 dark:text-white">{b.cl || 0}/{b.totalCL || 12}</span>
+                            <span className="text-[10px] text-gray-400 font-bold block uppercase">Casual (CL)</span>
+                            <span className="font-bold text-gray-900 dark:text-white">{clUsed}/{clAlloc}</span>
                           </div>
                           <div className="bg-gray-50 dark:bg-[#1f1b17] p-2 rounded-xl">
-                            <span className="text-[10px] text-gray-400 font-bold block uppercase">SL</span>
-                            <span className="font-bold text-gray-900 dark:text-white">{b.sl || 0}/{b.totalSL || 12}</span>
-                          </div>
-                          <div className="bg-gray-50 dark:bg-[#1f1b17] p-2 rounded-xl">
-                            <span className="text-[10px] text-gray-400 font-bold block uppercase">EL</span>
-                            <span className="font-bold text-gray-900 dark:text-white">{b.el || 0}/{b.totalEL || 12}</span>
-                          </div>
-                          <div className="bg-gray-50 dark:bg-[#1f1b17] p-2 rounded-xl">
-                            <span className="text-[10px] text-gray-400 font-bold block uppercase">CO</span>
-                            <span className="font-bold text-gray-900 dark:text-white">{b.co || 0}/{b.totalCO || 5}</span>
+                            <span className="text-[10px] text-gray-400 font-bold block uppercase">Sick (SL)</span>
+                            <span className="font-bold text-gray-900 dark:text-white">{slUsed}/{slAlloc}</span>
                           </div>
                         </div>
                       </div>

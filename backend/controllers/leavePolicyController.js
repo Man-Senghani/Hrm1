@@ -114,6 +114,7 @@ exports.createPolicy = async (req, res) => {
       if (applicableTo) existingPolicy.applicableTo = applicableTo;
       if (syncMode) existingPolicy.syncMode = syncMode;
       if (description) existingPolicy.description = description;
+      if (req.body.carryForwardLimit !== undefined) existingPolicy.carryForwardLimit = Number(req.body.carryForwardLimit) || 0;
       policy = await existingPolicy.save();
 
       // Delete any duplicate policy documents for this category

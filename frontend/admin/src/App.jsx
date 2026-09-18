@@ -27,7 +27,7 @@ import Login from '@shared/pages/Login';
 import ForgotPassword from '@shared/pages/ForgotPassword';
 import ResetPassword from '@shared/pages/ResetPassword';
 import MainLayout from '@shared/layouts/MainLayout';
-import { Users, Calendar, Bell, Camera, User, FileText } from 'lucide-react';
+import { Users, Calendar, Bell, Camera, User, FileText, ClipboardList } from 'lucide-react';
 import { syncSessionFromActiveAccount, setupCrossTabSessionSync } from '@shared/utils/sessionSync';
 
 // Route-level pages are lazy-loaded so a role only downloads the code for
@@ -205,6 +205,7 @@ const App = () => {
     { label: 'Notifications', icon: Bell, path: '/notifications' },
     { label: 'Employees', icon: Users, path: '/employees' },
     { label: 'Attendance', icon: Calendar, path: '/attendance' },
+    { label: 'Leave Management', icon: ClipboardList, path: '/leave' },
     { label: 'Daily Report', icon: FileText, path: '/daily-report' },
     { label: 'Screenshots', icon: Camera, path: '/screenshots' },
     { label: 'My Profile', icon: User, path: '/profile' },
