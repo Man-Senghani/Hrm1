@@ -206,7 +206,6 @@ const App = () => {
     { label: 'Notifications', icon: Bell, path: '/notifications' },
     { label: 'Employees', icon: Users, path: '/employees' },
     { label: 'Attendance', icon: Calendar, path: '/attendance' },
-    { label: 'Leave Management', icon: ClipboardList, path: '/leave' },
     { label: 'Daily Report', icon: FileText, path: '/daily-report' },
     { label: 'Screenshots', icon: Camera, path: '/screenshots' },
     { label: 'My Profile', icon: User, path: '/profile' },

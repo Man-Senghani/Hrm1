@@ -103,7 +103,6 @@ function App() {
   const navItems = [
     { label: 'Employees', icon: Users, path: '/employees' },
     { label: 'Attendance', icon: Calendar, path: '/attendance' },
-    { label: 'Leave Management', icon: ClipboardList, path: '/leave' },
     { label: 'Daily Report', icon: FileText, path: '/daily-report' },
     { label: 'Notifications', icon: Bell, path: '/notifications' },
     { label: 'Screenshots', icon: Camera, path: '/screenshots' },
