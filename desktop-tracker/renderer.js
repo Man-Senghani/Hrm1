@@ -71,10 +71,10 @@ const IDLE_REMINDER_MS = 3 * 60 * 1000; // 3 minutes
 let socket = null;
 
 // ── Config ────────────────────────────────────────────────
-const PRODUCTION_BACKEND_URL = 'http://hrm.aupanishad.tech';
-const PRODUCTION_FRONTEND_URL = 'http://hrm.aupanishad.tech';
-const STAGING_BACKEND_URL = 'http://hrm-staging.aupanishad.tech';
-const STAGING_FRONTEND_URL = 'http://hrm-staging.aupanishad.tech';
+const PRODUCTION_BACKEND_URL = 'https://hrm.aupanishad.tech';
+const PRODUCTION_FRONTEND_URL = 'https://hrm.aupanishad.tech';
+const STAGING_BACKEND_URL = 'https://hrm-staging.aupanishad.tech';
+const STAGING_FRONTEND_URL = 'https://hrm-staging.aupanishad.tech';
 
 let BACKEND_HOST = PRODUCTION_BACKEND_URL;
 let FRONTEND_HOST = PRODUCTION_FRONTEND_URL;
