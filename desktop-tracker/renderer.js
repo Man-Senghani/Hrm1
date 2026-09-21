@@ -73,6 +73,8 @@ let socket = null;
 // ── Config ────────────────────────────────────────────────
 const PRODUCTION_BACKEND_URL = 'http://hrm.aupanishad.tech';
 const PRODUCTION_FRONTEND_URL = 'http://hrm.aupanishad.tech';
+const STAGING_BACKEND_URL = 'http://hrm-staging.aupanishad.tech';
+const STAGING_FRONTEND_URL = 'http://hrm-staging.aupanishad.tech';
 
 let BACKEND_HOST = PRODUCTION_BACKEND_URL;
 let FRONTEND_HOST = PRODUCTION_FRONTEND_URL;
@@ -178,11 +180,17 @@ async function loadSession() {
   }
 
   const savedServer = await window.electronAPI.getStoreValue('serverHost');
-  if (savedServer && (savedServer.includes('localhost') || savedServer.includes('127.0.0.1'))) {
-    BACKEND_HOST = savedServer;
-    FRONTEND_HOST = savedServer;
+  if (savedServer && typeof savedServer === 'string' && savedServer.trim() !== '') {
+    BACKEND_HOST = savedServer.replace(/\/+$/, '');
+    if (BACKEND_HOST.includes('staging')) {
+      FRONTEND_HOST = STAGING_FRONTEND_URL;
+    } else if (BACKEND_HOST.includes('localhost') || BACKEND_HOST.includes('127.0.0.1')) {
+      FRONTEND_HOST = BACKEND_HOST;
+    } else {
+      FRONTEND_HOST = PRODUCTION_FRONTEND_URL;
+    }
   } else {
-    // Standalone direct application ALWAYS connects to Live Production!
+    // Standalone direct application defaults to Live Production
     BACKEND_HOST = PRODUCTION_BACKEND_URL;
     FRONTEND_HOST = PRODUCTION_FRONTEND_URL;
     if (window.electronAPI?.setStoreValue) {
@@ -839,8 +847,8 @@ function redirectToWebMeetingRequest() {
     }
   } catch (_) {}
 
-  const targetFrontend = (BACKEND_HOST && (BACKEND_HOST.includes('wljp') || BACKEND_HOST.includes('staging')))
-    ? 'https://hrm-staging.aupanishad.tech'
+  const targetFrontend = (BACKEND_HOST && BACKEND_HOST.includes('staging'))
+    ? STAGING_FRONTEND_URL
     : (FRONTEND_HOST || PRODUCTION_FRONTEND_URL);
 
   const requestUrl = `${targetFrontend}/${role}/attendance?action=new-offline-request`;
@@ -1009,8 +1017,8 @@ function hideAuthSection() {
 }
 
 function redirectToWebLogin() {
-  const targetFrontend = (BACKEND_HOST && (BACKEND_HOST.includes('wljp') || BACKEND_HOST.includes('staging')))
-    ? 'https://hrm-staging.aupanishad.tech'
+  const targetFrontend = (BACKEND_HOST && BACKEND_HOST.includes('staging'))
+    ? STAGING_FRONTEND_URL
     : (FRONTEND_HOST || PRODUCTION_FRONTEND_URL);
   const loginUrl = `${targetFrontend}/login?desktop=true`;
   console.log('🔗 Redirecting to Web Login:', loginUrl);
@@ -1025,18 +1033,19 @@ if (window.electronAPI?.onDeepLinkServer) {
   window.electronAPI.onDeepLinkServer(async (serverUrl) => {
     if (serverUrl && typeof serverUrl === 'string') {
       let cleanUrl = serverUrl.replace(/\/+$/, '');
-      if (cleanUrl.includes('aupanishad.tech') || cleanUrl.includes(':3000')) {
+      if (cleanUrl.includes('staging')) {
+        cleanUrl = STAGING_BACKEND_URL;
+        FRONTEND_HOST = STAGING_FRONTEND_URL;
+      } else if (cleanUrl.includes('aupanishad.tech') || cleanUrl.includes(':3000')) {
         cleanUrl = PRODUCTION_BACKEND_URL;
-      }
-      console.log('Server URL received via deep link:', cleanUrl);
-      BACKEND_HOST = cleanUrl;
-      if (cleanUrl.includes('wljp') || cleanUrl.includes('staging')) {
-        FRONTEND_HOST = 'https://hrm-staging.aupanishad.tech';
+        FRONTEND_HOST = PRODUCTION_FRONTEND_URL;
       } else if (cleanUrl.includes('localhost') || cleanUrl.includes('127.0.0.1')) {
         FRONTEND_HOST = cleanUrl;
       } else {
-        FRONTEND_HOST = PRODUCTION_FRONTEND_URL;
+        FRONTEND_HOST = cleanUrl;
       }
+      console.log('Server URL received via deep link:', cleanUrl);
+      BACKEND_HOST = cleanUrl;
       API_BASE = `${BACKEND_HOST}/api/time`;
       await window.electronAPI.setStoreValue('serverHost', cleanUrl);
       initSocket();
@@ -1053,8 +1062,9 @@ if (window.electronAPI?.onDeepLinkToken) {
     authToken = token;
     await window.electronAPI.setStoreValue('authToken', authToken);
 
-    if (BACKEND_HOST.includes('aupanishad.tech') || BACKEND_HOST.includes(':3000')) {
+    if (!BACKEND_HOST || (!BACKEND_HOST.includes('staging') && (BACKEND_HOST.includes('aupanishad.tech') || BACKEND_HOST.includes(':3000')))) {
       BACKEND_HOST = PRODUCTION_BACKEND_URL;
+      FRONTEND_HOST = PRODUCTION_FRONTEND_URL;
       API_BASE = `${BACKEND_HOST}/api/time`;
       await window.electronAPI.setStoreValue('serverHost', BACKEND_HOST);
     }
