@@ -515,6 +515,7 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
         return [
           { name: 'Employees', path: `${prefix}/employees`, icon: Users },
           { name: 'Attendance', path: `${prefix}/attendance`, icon: Calendar },
+          { name: 'Leave Management', path: `${prefix}/leave`, icon: ClipboardList },
           { name: 'Daily Report', path: `${prefix}/daily-report`, icon: FileText },
           { name: 'Notifications', path: `${prefix}/notifications`, icon: Bell },
           { name: 'Screenshots', path: `${prefix}/screenshots`, icon: Camera },
@@ -523,6 +524,7 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
       case 'employee':
         return [
           { name: 'Attendance', path: `${prefix}/attendance`, icon: Calendar },
+          { name: 'Leave Management', path: `${prefix}/leave`, icon: ClipboardList },
           { name: 'Daily Report', path: `${prefix}/daily-report`, icon: FileText },
           { name: 'My Profile', path: `${prefix}/profile`, icon: User },
         ];
@@ -530,6 +532,7 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
         return [
           { name: 'Notifications', path: `${prefix}/notifications`, icon: Bell },
           { name: 'Attendance', path: `${prefix}/attendance`, icon: Calendar },
+          { name: 'Leave Management', path: `${prefix}/leave`, icon: ClipboardList },
           { name: 'Daily Report', path: `${prefix}/daily-report`, icon: FileText },
           { name: 'Screenshots', path: `${prefix}/screenshots`, icon: Camera },
           { name: 'My Profile', path: `${prefix}/profile`, icon: User },
@@ -540,6 +543,7 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
           { name: 'Notifications', path: `${prefix}/notifications`, icon: Bell },
           { name: 'Employees', path: `${prefix}/employees`, icon: Users },
           { name: 'Attendance', path: `${prefix}/attendance`, icon: Calendar },
+          { name: 'Leave Management', path: `${prefix}/leave`, icon: ClipboardList },
           { name: 'Daily Report', path: `${prefix}/daily-report`, icon: FileText },
           { name: 'Screenshots', path: `${prefix}/screenshots`, icon: Camera },
           { name: 'My Profile', path: `${prefix}/profile`, icon: User },
