@@ -29,7 +29,17 @@ const saveBase64Image = async (base64Str, subFolder, prefix) => {
     
     // Attempt Cloudinary upload first with a strict 8s timeout to avoid hanging requests
     try {
-      if (process.env.CLOUDINARY_URL) {
+      const isCloudinaryConfigured = process.env.CLOUDINARY_URL || 
+        (process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET);
+
+      if (isCloudinaryConfigured) {
+        if (!process.env.CLOUDINARY_URL) {
+          cloudinary.config({
+            cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+            api_key: process.env.CLOUDINARY_API_KEY,
+            api_secret: process.env.CLOUDINARY_API_SECRET
+          });
+        }
         const cloudinaryPromise = cloudinary.uploader.upload(base64Str, {
           folder: `hrm/${subFolder}`,
           resource_type: 'auto'

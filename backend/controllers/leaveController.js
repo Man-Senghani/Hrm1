@@ -498,27 +498,10 @@ const checkUserLeaveBalance = async (userId, leaveTypeInput, daysRequested, excl
     return lt.includes('casual') || lt === 'cl';
   }).reduce((sum, l) => sum + (l.totalDays || 1), 0);
 
-  // Determine effective allowance quota (for casual leave, use 1.5/month accrual + 50% carry forward from last year)
+  // Determine effective allowance quota (for casual leave, use 1.5/month accrual)
   let effectiveQuota = policyQuota;
   if (catKey === 'casual') {
-    let casualCarryForward = 0;
-    try {
-      const prevYear = year - 1;
-      const prevYearStart = new Date(prevYear, 0, 1);
-      const prevYearEnd = new Date(prevYear, 11, 31, 23, 59, 59, 999);
-      const prevLeaves = await Leave.find({
-        user: userId,
-        status: 'approved',
-        startDate: { $gte: prevYearStart, $lte: prevYearEnd }
-      });
-      const prevUsedCasual = prevLeaves.filter(l => {
-        const lt = (l.leaveType || '').toLowerCase();
-        return lt.includes('casual') || lt === 'cl';
-      }).reduce((sum, l) => sum + (l.totalDays || 1), 0);
-      const annualAllowance = policyQuota > 0 ? policyQuota : 18;
-      const prevUnused = Math.max(0, annualAllowance - prevUsedCasual);
-      casualCarryForward = Number((prevUnused * 0.5).toFixed(1));
-    } catch (_) {}
+    const casualCarryForward = 0;
 
     // For 2026, accrual starts from September (month 9); from 2027 onwards, it starts from January (month 1)
     const startMonth = year === 2026 ? 9 : 1;
@@ -1255,26 +1238,8 @@ exports.getMyLeaveQuotas = async (req, res) => {
           userObjId = empDoc.userId;
         }
 
-        // Calculate carry forward: 50% of unused casual leaves from previous year
-        const prevYear = year - 1;
-        const prevYearStart = new Date(prevYear, 0, 1);
-        const prevYearEnd = new Date(prevYear, 11, 31, 23, 59, 59, 999);
-
-        const joinDate = empDoc?.joinDate ? new Date(empDoc.joinDate) : null;
-        if (!joinDate || joinDate <= prevYearEnd) {
-          const prevApprovedCasualLeaves = await Leave.find({
-            user: { $in: [userId, userObjId] },
-            status: 'approved',
-            startDate: { $gte: prevYearStart, $lte: prevYearEnd }
-          });
-          const prevUsedCasual = prevApprovedCasualLeaves.filter(l => {
-            const lt = (l.leaveType || '').toLowerCase();
-            return lt.includes('casual') || lt === 'cl';
-          }).reduce((sum, l) => sum + (l.totalDays || 1), 0);
-
-          const prevUnused = Math.max(0, annualCasualPolicy - prevUsedCasual);
-          casualCarryForward = Number((prevUnused * 0.5).toFixed(1));
-        }
+        // Carry forward removed for now
+        casualCarryForward = 0;
 
         let userBalance = await LeaveBalance.findOne({ employeeId: userObjId, month, year });
         if (!userBalance) {

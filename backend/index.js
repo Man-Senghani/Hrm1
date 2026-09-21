@@ -17,6 +17,18 @@ const compression = require('compression');
 const dotenv = require('dotenv');
 dotenv.config();
 
+// Global Cloudinary Configuration (supports CLOUDINARY_URL or individual credentials)
+const cloudinary = require('cloudinary').v2;
+if (process.env.CLOUDINARY_URL) {
+  // Cloudinary SDK automatically parses CLOUDINARY_URL
+} else if (process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET) {
+  cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET
+  });
+}
+
 const app = express();
 
 // 💓 Lightweight Health Endpoint for Keep-Alive pings
