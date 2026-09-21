@@ -93,12 +93,14 @@ const Login = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
+    const cleanEmail = (email || '').trim().toLowerCase();
+
     // 🛡️ Prevent logging into another account if an account is already active in this browser
     const storedAccountRaw = localStorage.getItem('activeAccount');
     if (storedAccountRaw) {
       try {
         const active = JSON.parse(storedAccountRaw);
-        if (active && active.email && active.email.toLowerCase() !== email.toLowerCase()) {
+        if (active && active.email && active.email.toLowerCase() !== cleanEmail) {
           setError(`Another account (${active.name || active.email}) is currently active in this browser. Only one account can be logged in per browser. Please log out from that account first.`);
           setExistingActiveAccount(active);
           return;
@@ -107,11 +109,11 @@ const Login = () => {
     }
 
     const newErrors = {};
-    if (!email) {
+    if (!cleanEmail) {
       newErrors.email = 'Please enter your email address.';
-    } else if (/\s/.test(email)) {
+    } else if (/\s/.test(cleanEmail)) {
       newErrors.email = 'Email address cannot contain spaces.';
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
       newErrors.email = 'Please enter a valid email address.';
     }
 
@@ -130,7 +132,7 @@ const Login = () => {
 
     try {
       const response = await axios.post('/api/auth/login', {
-        email,
+        email: cleanEmail,
         password
       });
 

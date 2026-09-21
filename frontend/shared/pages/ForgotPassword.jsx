@@ -18,17 +18,19 @@ const ForgotPassword = () => {
     setError('');
     setSuccess('');
 
-    if (!email) {
+    const cleanEmail = (email || '').trim().toLowerCase();
+
+    if (!cleanEmail) {
       setError('Please enter your email address.');
       setLoading(false);
       return;
     }
-    if (/\s/.test(email)) {
+    if (/\s/.test(cleanEmail)) {
       setError('Email address cannot contain spaces.');
       setLoading(false);
       return;
     }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
       setError('Please enter a valid email address.');
       setLoading(false);
       return;
@@ -37,12 +39,12 @@ const ForgotPassword = () => {
     try {
       let response;
       try {
-        response = await api.post('/auth/forgot-password', { email });
+        response = await api.post('/auth/forgot-password', { email: cleanEmail });
       } catch (apiErr) {
         if (apiErr.response) {
           throw apiErr;
         }
-        response = await axios.post('/api/auth/forgot-password', { email });
+        response = await axios.post('/api/auth/forgot-password', { email: cleanEmail });
       }
       setSuccess(response.data?.message || 'A password reset link has been sent.');
       setTimeout(() => {

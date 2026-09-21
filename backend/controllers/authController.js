@@ -12,7 +12,9 @@ exports.login = async (req, res) => {
       return res.status(400).json({ message: 'Please enter your email address.' });
     }
 
-    if (/\s/.test(email)) {
+    const cleanEmail = email.trim().toLowerCase();
+
+    if (/\s/.test(cleanEmail)) {
       return res.status(400).json({ message: 'Invalid email address. Spaces are not allowed.' });
     }
 
@@ -20,7 +22,11 @@ exports.login = async (req, res) => {
       return res.status(503).json({ message: 'Database connection is initializing. Please try again in a few seconds.' });
     }
 
-    const user = await User.findOne({ email });
+    let user = await User.findOne({ email: cleanEmail });
+    if (!user) {
+      const escaped = cleanEmail.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      user = await User.findOne({ email: new RegExp(`^${escaped}$`, 'i') });
+    }
 
     // Ensure status is active
     if (user && user.status === 'inactive') {
@@ -122,7 +128,9 @@ exports.createUser = async (req, res) => {
       return res.status(503).json({ message: 'Database offline' });
     }
 
-    const existingUser = await User.findOne({ email });
+    const cleanEmail = (email || '').trim().toLowerCase();
+    const existingUser = await User.findOne({ email: cleanEmail }) || 
+      await User.findOne({ email: new RegExp(`^${cleanEmail.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') });
     if (existingUser) {
       return res.status(400).json({ message: 'User already exists' });
     }
@@ -131,7 +139,7 @@ exports.createUser = async (req, res) => {
 
     const newUser = new User({
       name,
-      email,
+      email: cleanEmail,
       password,
       role: userRole,
       status: status || 'active'
@@ -358,11 +366,14 @@ exports.forgotPassword = async (req, res) => {
       return res.status(400).json({ message: 'Email address is required' });
     }
 
-    if (/\s/.test(email)) {
+    const cleanEmail = (email || '').trim().toLowerCase();
+
+    if (/\s/.test(cleanEmail)) {
       return res.status(400).json({ message: 'Invalid email address. Spaces are not allowed.' });
     }
 
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ email: cleanEmail }) || 
+      await User.findOne({ email: new RegExp(`^${cleanEmail.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') });
     if (!user) {
       return res.status(404).json({ message: 'Email not registered' });
     }
