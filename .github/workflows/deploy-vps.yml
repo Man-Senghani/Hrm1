@@ -1,0 +1,25 @@
+name: Auto-Deploy to BigRock VPS
+
+on:
+  push:
+    branches:
+      - Master
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 🚀 Connect to VPS and Update Docker Containers
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          password: ${{ secrets.VPS_PASSWORD }}
+          port: 22
+          script: |
+            cd /var/www/hrm
+            git checkout Master
+            git pull origin Master
+            docker compose up --build -d
+            echo "✅ FluidHR auto-deploy completed successfully!"
