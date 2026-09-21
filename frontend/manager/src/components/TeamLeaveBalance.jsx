@@ -21,10 +21,15 @@ const TeamLeaveBalance = () => {
       const res = await axios.get(`/api/leaves/manager/balances?page=${currentPage}&limit=5`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {}
       });
-      setBalances(res.data.data || []);
+      const raw = res.data.data || [];
+      const nonAdmin = raw.filter(b => {
+        const role = (b.user?.role || b.employeeId?.role || '').toLowerCase();
+        return role !== 'admin' && role !== 'hr';
+      });
+      setBalances(nonAdmin);
       if (res.data.pagination) {
         setTotalPages(res.data.pagination.pages);
-        setTotalItems(res.data.pagination.total);
+        setTotalItems(nonAdmin.length || res.data.pagination.total);
       }
     } catch (err) {
       if (err.response?.status !== 401 && err.response?.status !== 403) {
@@ -42,7 +47,12 @@ const TeamLeaveBalance = () => {
       const res = await axios.get(`/api/leaves/manager/balances?limit=100`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {}
       });
-      setAllBalances(res.data.data || []);
+      const raw = res.data.data || [];
+      const nonAdmin = raw.filter(b => {
+        const role = (b.user?.role || b.employeeId?.role || '').toLowerCase();
+        return role !== 'admin' && role !== 'hr';
+      });
+      setAllBalances(nonAdmin);
     } catch (err) {
       if (err.response?.status !== 401 && err.response?.status !== 403) {
         toast.error('Failed to load full leave balances');

@@ -1074,16 +1074,7 @@ const Notifications = () => {
               </div>
             </div>
 
-            {/* Footer */}
-            <div className="p-4 border-t border-[#eceae3] dark:border-[#1a2d29] bg-slate-50/50 dark:bg-[#162722]/30 flex items-center gap-3">
-              <button
-                type="button"
-                onClick={() => setSelectedNotif(null)}
-                className="w-full py-2.5 bg-[#00a76b] hover:bg-[#00915c] text-white rounded-[10px] font-bold text-xs transition-all cursor-pointer border-none shadow-sm"
-              >
-                Close
-              </button>
-            </div>
+
           </div>
         </div>,
         document.body

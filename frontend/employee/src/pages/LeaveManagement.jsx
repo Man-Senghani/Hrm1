@@ -870,10 +870,11 @@ const LeaveManagement = ({ isChild = false }) => {
                 <div className="grid grid-cols-1 gap-2.5 my-1">
                   {(policies && policies.length > 0 ? policies : [
                     { _id: 'p1', name: 'Casual Leave (CL)', type: 'casual', annualAllowance: clAllowance || 18, carryForwardLimit: 9, description: '1.5 days accrued per month (up to 18 days/yr). 50% of unused leaves carry forward to next year.' },
-                    { _id: 'p2', name: 'Sick Leave (SL)', type: 'sick', annualAllowance: slAllowance || 10, carryForwardLimit: 0, description: '10 Days paid sick leave per calendar year. Medical certificate required for >2 consecutive days.' },
-                    { _id: 'p3', name: 'Earned Leave (EL)', type: 'earned', annualAllowance: elAllowance || 20, carryForwardLimit: cfEarned || 5, description: '20 Days earned annual leave. Maximum 5 days carry forward allowed per calendar year.' },
-                    { _id: 'p4', name: 'Compensatory Off (CO)', type: 'compoff', annualAllowance: 3, carryForwardLimit: 0, description: 'Earned by working on non-working days or holidays with prior manager approval.' }
-                  ]).filter(p => !(`${p.type || ''} ${p.name || ''}`).toLowerCase().includes('maternity')).slice(0, 1).map((p, idx) => (
+                    { _id: 'p2', name: 'Sick Leave (SL)', type: 'sick', annualAllowance: slAllowance || 10, carryForwardLimit: 0, description: '10 Days paid sick leave per calendar year. Medical certificate required for >2 consecutive days.' }
+                  ]).filter(p => {
+                    const s = `${p.type || ''} ${p.name || ''}`.toLowerCase();
+                    return s.includes('casual') || s.includes('sick') || s.includes('cl') || s.includes('sl');
+                  }).slice(0, 1).map((p, idx) => (
                     <div
                       key={p._id || idx}
                       className="p-2.5 rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-[#162722]/50 hover:bg-white dark:hover:bg-[#162722] transition-all duration-200"
@@ -899,8 +900,7 @@ const LeaveManagement = ({ isChild = false }) => {
           {/* My Leave Requests */}
           <div className="bg-white dark:bg-[#111c18] rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800/80 p-5 transition-all duration-300 hover:border-[#00a76b]/40">
             <div className="flex justify-between items-center mb-2.5">
-              <h2 className="text-base font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                <Sparkles size={16} className="text-[#00a76b]" />
+              <h2 className="text-base font-bold text-gray-900 dark:text-white">
                 My Leave Requests
               </h2>
               <div className="flex items-center gap-3.5">
@@ -1303,19 +1303,11 @@ const LeaveManagement = ({ isChild = false }) => {
 
                       <div className="bg-white/90 dark:bg-slate-900/70 border border-emerald-500/25 dark:border-emerald-500/30 rounded-xl p-2.5 flex flex-col justify-between shadow-2xs">
                         <div className="text-[9px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-1 truncate">
-                          {(lastSubmittedLeaveType.includes('sick') || lastSubmittedLeaveType === 'sl') ? 'Sick Leave' :
-                           (lastSubmittedLeaveType.includes('earned') || lastSubmittedLeaveType.includes('annual') || lastSubmittedLeaveType === 'el') ? 'Earned Leave' :
-                           (lastSubmittedLeaveType.includes('emergency') || lastSubmittedLeaveType === 'eml') ? 'Emergency Leave' :
-                           (lastSubmittedLeaveType.includes('maternity') || lastSubmittedLeaveType === 'ml') ? 'Maternity Leave' :
-                           (lastSubmittedLeaveType.includes('paternity') || lastSubmittedLeaveType === 'pl') ? 'Paternity Leave' : 'Casual Leave'} Left
+                          {(lastSubmittedLeaveType.includes('sick') || lastSubmittedLeaveType === 'sl') ? 'Sick Leave' : 'Casual Leave'} Left
                         </div>
                         <div className="flex items-baseline gap-1">
                           <span className="text-base font-black text-emerald-600 dark:text-emerald-400">
-                            {formatDays((lastSubmittedLeaveType.includes('sick') || lastSubmittedLeaveType === 'sl') ? sickBalance :
-                             (lastSubmittedLeaveType.includes('earned') || lastSubmittedLeaveType.includes('annual') || lastSubmittedLeaveType === 'el') ? annualBalance :
-                             (lastSubmittedLeaveType.includes('emergency') || lastSubmittedLeaveType === 'eml') ? emergencyBalance :
-                             (lastSubmittedLeaveType.includes('maternity') || lastSubmittedLeaveType === 'ml') ? maternityBalance :
-                             (lastSubmittedLeaveType.includes('paternity') || lastSubmittedLeaveType === 'pl') ? paternityBalance : casualBalance)}
+                            {formatDays((lastSubmittedLeaveType.includes('sick') || lastSubmittedLeaveType === 'sl') ? sickBalance : casualBalance)}
                           </span>
                           <span className="text-[10px] font-bold text-emerald-700/80 dark:text-emerald-400/80">days left</span>
                         </div>
@@ -1522,19 +1514,11 @@ const LeaveManagement = ({ isChild = false }) => {
 
                       <div className="bg-white/90 dark:bg-slate-900/70 border border-emerald-500/25 dark:border-emerald-500/30 rounded-xl p-2.5 flex flex-col justify-between shadow-2xs">
                         <div className="text-[9px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-1 truncate">
-                          {(lastSubmittedLeaveType.includes('sick') || lastSubmittedLeaveType === 'sl') ? 'Sick Leave' :
-                           (lastSubmittedLeaveType.includes('earned') || lastSubmittedLeaveType.includes('annual') || lastSubmittedLeaveType === 'el') ? 'Earned Leave' :
-                           (lastSubmittedLeaveType.includes('emergency') || lastSubmittedLeaveType === 'eml') ? 'Emergency Leave' :
-                           (lastSubmittedLeaveType.includes('maternity') || lastSubmittedLeaveType === 'ml') ? 'Maternity Leave' :
-                           (lastSubmittedLeaveType.includes('paternity') || lastSubmittedLeaveType === 'pl') ? 'Paternity Leave' : 'Casual Leave'} Left
+                          {(lastSubmittedLeaveType.includes('sick') || lastSubmittedLeaveType === 'sl') ? 'Sick Leave' : 'Casual Leave'} Left
                         </div>
                         <div className="flex items-baseline gap-1">
                           <span className="text-base font-black text-emerald-600 dark:text-emerald-400">
-                            {formatDays((lastSubmittedLeaveType.includes('sick') || lastSubmittedLeaveType === 'sl') ? sickBalance :
-                             (lastSubmittedLeaveType.includes('earned') || lastSubmittedLeaveType.includes('annual') || lastSubmittedLeaveType === 'el') ? annualBalance :
-                             (lastSubmittedLeaveType.includes('emergency') || lastSubmittedLeaveType === 'eml') ? emergencyBalance :
-                             (lastSubmittedLeaveType.includes('maternity') || lastSubmittedLeaveType === 'ml') ? maternityBalance :
-                             (lastSubmittedLeaveType.includes('paternity') || lastSubmittedLeaveType === 'pl') ? paternityBalance : casualBalance)}
+                            {formatDays((lastSubmittedLeaveType.includes('sick') || lastSubmittedLeaveType === 'sl') ? sickBalance : casualBalance)}
                           </span>
                           <span className="text-[10px] font-bold text-emerald-700/80 dark:text-emerald-400/80">days left</span>
                         </div>

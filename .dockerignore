@@ -1,0 +1,42 @@
+# Git and IDE metadata
+.git
+.gitignore
+.github
+.vscode
+.claude
+.agents
+
+# Environment variables & secrets (CRITICAL: Never copy to image)
+.env
+.env.*
+!.env.example
+
+# Local dependencies & caches
+node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.cert
+
+# Physical uploads (handled via persistent Docker volume)
+uploads/
+backend/uploads/
+
+# Desktop native applications (not part of web container)
+desktop/
+desktop-tracker/
+*.exe
+
+# Zip packages, archives & backups
+*.zip
+*.patch
+*.tar.gz
+hostinger_public_html/
+
+# Logs & temp files
+*.log
+scratch/
+time_track_debug.log
+
+# Documentation files
+PROJECT_TECHNICAL_DOCUMENTATION.txt

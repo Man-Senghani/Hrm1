@@ -78,6 +78,7 @@ const TaskUpdate = lazy(() => import('./pages/TaskUpdate'));
 const Notifications = lazy(() => import('./pages/Notifications'));
 const AllNotifications = lazy(() => import('./pages/AllNotifications'));
 const EventsManagement = lazy(() => import('./pages/EventsManagement'));
+const NotFound = lazy(() => import('@shared/pages/NotFound'));
 
 const RouteLoadingFallback = () => (
   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh' }}>
@@ -275,78 +276,55 @@ const App = () => {
             </ProtectedRoute>
           }>
             <Route index element={<Navigate to="employees" replace />} />
-            <Route path="dashboard" element={<AdminDashboard />} />
+            <Route path="dashboard" element={<Navigate to="employees" replace />} />
+
+            {/* Notifications */}
+            <Route path="notifications" element={<Notifications />} />
+            <Route path="notifications/all" element={<AllNotifications />} />
+            <Route path="admin/notifications" element={<Notifications />} />
+            <Route path="admin/notifications/all" element={<AllNotifications />} />
+
+            {/* Employees */}
             <Route path="employees" element={<HREmployees />} />
             <Route path="employees/add" element={<EmployeeForm />} />
             <Route path="employees/edit/:id" element={<EmployeeForm />} />
             <Route path="employees/view/:id" element={<EmployeeDetail />} />
-            <Route path="tasks" element={<Tasks />} />
-            <Route path="events" element={<EventsManagement />} />
-            <Route path="task-management" element={<TaskManagement />} />
-            <Route path="task-management/create" element={<TaskCreate />} />
-            <Route path="task-management/update/:id" element={<TaskUpdate />} />
-
-            <Route path="leave" element={<LeaveManagement />} />
-            <Route path="attendance" element={<Attendance />} />
-            <Route path="daily-report" element={<DailyReport />} />
-            <Route path="payroll" element={<Payroll />} />
-            <Route path="performance" element={<Performance />} />
-            <Route path="reports" element={<Reports />} />
-            <Route path="recruitment" element={<Recruitment />} />
-            <Route path="settings" element={<Settings />} />
             <Route path="create-user" element={<CreateUser />} />
-            <Route path="chat" element={<Chat />} />
-            <Route path="screenshots" element={<Screenshots />} />
-            <Route path="profile" element={<Profile />} />
-            <Route path="notifications" element={<Notifications />} />
-            <Route path="notifications/all" element={<AllNotifications />} />
-            <Route path="time-tracker" element={<Navigate to="attendance" replace />} />
-            <Route path="documents" element={<EmployeeDocuments />} />
-            <Route path="training" element={<Training />} />
-            <Route path="roles-permissions" element={<RolesPermissions />} />
-            <Route path="audit-logs" element={<AuditLogs />} />
-            <Route path="integrations" element={<Integrations />} />
-            <Route path="departments" element={<Departments />} />
-            <Route path="designations" element={<Designations />} />
-
-            {/* Sub-routes with /admin prefix */}
-            <Route path="admin" element={<AdminDashboard />} />
-            <Route path="admin/dashboard" element={<AdminDashboard />} />
             <Route path="admin/employees" element={<HREmployees />} />
             <Route path="admin/employees/add" element={<EmployeeForm />} />
             <Route path="admin/employees/edit/:id" element={<EmployeeForm />} />
             <Route path="admin/employees/view/:id" element={<EmployeeDetail />} />
-            <Route path="admin/tasks" element={<Tasks />} />
-            <Route path="admin/events" element={<EventsManagement />} />
-            <Route path="admin/task-management" element={<TaskManagement />} />
-            <Route path="admin/task-management/create" element={<TaskCreate />} />
-            <Route path="admin/task-management/update/:id" element={<TaskUpdate />} />
-            <Route path="admin/leave" element={<LeaveManagement />} />
-            <Route path="admin/attendance" element={<Attendance />} />
-            <Route path="admin/daily-report" element={<DailyReport />} />
-            <Route path="admin/payroll" element={<Payroll />} />
-            <Route path="admin/performance" element={<Performance />} />
-            <Route path="admin/reports" element={<Reports />} />
-            <Route path="admin/recruitment" element={<Recruitment />} />
-            <Route path="admin/settings" element={<Settings />} />
             <Route path="admin/create-user" element={<CreateUser />} />
-            <Route path="admin/chat" element={<Chat />} />
+
+            {/* Attendance */}
+            <Route path="attendance" element={<Attendance />} />
+            <Route path="admin/attendance" element={<Attendance />} />
+
+            {/* Leave Management */}
+            <Route path="leave" element={<LeaveManagement />} />
+            <Route path="leaves" element={<LeaveManagement />} />
+            <Route path="admin/leave" element={<LeaveManagement />} />
+            <Route path="admin/leaves" element={<LeaveManagement />} />
+
+            {/* Daily Report */}
+            <Route path="daily-report" element={<DailyReport />} />
+            <Route path="admin/daily-report" element={<DailyReport />} />
+
+            {/* Screenshots */}
+            <Route path="screenshots" element={<Screenshots />} />
             <Route path="admin/screenshots" element={<Screenshots />} />
+
+            {/* Profile */}
+            <Route path="profile" element={<Profile />} />
             <Route path="admin/profile" element={<Profile />} />
-            <Route path="admin/notifications" element={<Notifications />} />
-            <Route path="admin/notifications/all" element={<AllNotifications />} />
-            <Route path="admin/documents" element={<EmployeeDocuments />} />
-            <Route path="admin/training" element={<Training />} />
-            <Route path="admin/roles-permissions" element={<RolesPermissions />} />
-            <Route path="admin/audit-logs" element={<AuditLogs />} />
-            <Route path="admin/integrations" element={<Integrations />} />
-            <Route path="admin/departments" element={<Departments />} />
-            <Route path="admin/designations" element={<Designations />} />
+
+            {/* 404 Fallback for admin */}
+            <Route path="*" element={<NotFound role="admin" />} />
           </Route>
 
           {/* Root Redirects */}
-          <Route path="/" element={<Navigate to="/admin/dashboard" replace />} />
-          <Route path="/dashboard" element={<Navigate to="/admin/dashboard" replace />} />
+          <Route path="/" element={<Navigate to="/employees" replace />} />
+          <Route path="/dashboard" element={<Navigate to="/employees" replace />} />
 
           {/* HR MODULE */}
           <Route path="/hr" element={
@@ -354,41 +332,22 @@ const App = () => {
               <MainLayout />
             </ProtectedRoute>
           }>
-            <Route index element={<HRDashboard />} />
-            <Route path="dashboard" element={<HRDashboard />} />
-            <Route path="tasks" element={<HRTasks />} />
-            <Route path="events" element={<EventsManagement />} />
-            <Route path="task-management" element={<TaskManagement />} />
-            <Route path="task-management/create" element={<TaskCreate />} />
-            <Route path="task-management/update/:id" element={<TaskUpdate />} />
-            <Route path="leave" element={<LeaveManagement />} />
-            <Route path="attendance" element={<Attendance />} />
-            <Route path="daily-report" element={<DailyReport />} />
+            <Route index element={<Navigate to="employees" replace />} />
+            <Route path="dashboard" element={<Navigate to="employees" replace />} />
             <Route path="employees" element={<HREmployees />} />
             <Route path="employees/add" element={<EmployeeForm />} />
             <Route path="employees/view/:id" element={<EmployeeDetail />} />
             <Route path="employees/edit/:id" element={<EmployeeForm />} />
             <Route path="create-user" element={<CreateUser />} />
-            <Route path="teams" element={<TeamManagement />} />
-            <Route path="recruitment" element={<Recruitment />} />
-            <Route path="performance" element={<Performance />} />
-            <Route path="reports" element={<Reports />} />
-            <Route path="projects" element={<ProjectManagement />} />
-            <Route path="chat" element={<Chat />} />
-            <Route path="screenshots" element={<Screenshots />} />
-            <Route path="profile" element={<Profile />} />
+            <Route path="attendance" element={<Attendance />} />
+            <Route path="leave" element={<LeaveManagement />} />
+            <Route path="leaves" element={<LeaveManagement />} />
+            <Route path="daily-report" element={<DailyReport />} />
             <Route path="notifications" element={<Notifications />} />
             <Route path="notifications/all" element={<AllNotifications />} />
-            <Route path="time-tracker" element={<Navigate to="../attendance" replace />} />
-            <Route path="documents" element={<EmployeeDocuments />} />
-            <Route path="payroll" element={<Payroll />} />
-            <Route path="settings" element={<Settings />} />
-            <Route path="training" element={<Training />} />
-            <Route path="roles-permissions" element={<RolesPermissions />} />
-            <Route path="audit-logs" element={<AuditLogs />} />
-            <Route path="integrations" element={<Integrations />} />
-            <Route path="departments" element={<Departments />} />
-            <Route path="designations" element={<Designations />} />
+            <Route path="screenshots" element={<Screenshots />} />
+            <Route path="profile" element={<Profile />} />
+            <Route path="*" element={<NotFound role="hr" />} />
           </Route>
 
           {/* EMPLOYEE MODULE */}
@@ -397,32 +356,14 @@ const App = () => {
               <MainLayout />
             </ProtectedRoute>
           }>
-            <Route index element={<EmployeeDashboard />} />
-            <Route path="dashboard" element={<EmployeeDashboard />} />
-            <Route path="task-management" element={<TaskManagement />} />
-            <Route path="task-management/create" element={<TaskCreate />} />
-            <Route path="task-management/update/:id" element={<TaskUpdate />} />
-            <Route path="projects" element={<EmployeeProjects />} />
-            <Route path="leave" element={<EmployeeLeave />} />
-            <Route path="holidays" element={<EmployeeHolidays />} />
+            <Route index element={<Navigate to="attendance" replace />} />
+            <Route path="dashboard" element={<Navigate to="attendance" replace />} />
             <Route path="attendance" element={<Attendance />} />
+            <Route path="leave" element={<EmployeeLeave />} />
+            <Route path="leaves" element={<Navigate to="leave" replace />} />
             <Route path="daily-report" element={<DailyReport />} />
-            <Route path="time-tracker" element={<Navigate to="../attendance" replace />} />
-            <Route path="payslips" element={<EmployeePayslips />} />
-            <Route path="documents" element={<EmployeeDocuments />} />
-            <Route path="performance" element={<EmployeePerformance />} />
-            <Route path="recruitment" element={<Recruitment />} />
-            <Route path="reports" element={<Reports />} />
-            <Route path="chat" element={<Chat />} />
             <Route path="profile" element={<Profile />} />
-            <Route path="notifications" element={<Notifications />} />
-            <Route path="notifications/all" element={<AllNotifications />} />
-            <Route path="training" element={<Training />} />
-            <Route path="roles-permissions" element={<RolesPermissions />} />
-            <Route path="audit-logs" element={<AuditLogs />} />
-            <Route path="integrations" element={<Integrations />} />
-            <Route path="departments" element={<Departments />} />
-            <Route path="designations" element={<Designations />} />
+            <Route path="*" element={<NotFound role="employee" />} />
           </Route>
 
           {/* MANAGER MODULE */}
@@ -431,44 +372,21 @@ const App = () => {
               <MainLayout />
             </ProtectedRoute>
           }>
-            <Route index element={<ManagerDashboard />} />
-            <Route path="dashboard" element={<ManagerDashboard />} />
-            <Route path="tasks" element={<ManagerTasks />} />
-            <Route path="events" element={<EventsManagement />} />
-            <Route path="employees" element={<HREmployees />} />
-            <Route path="employees/add" element={<EmployeeForm />} />
-            <Route path="employees/edit/:id" element={<EmployeeForm />} />
-            <Route path="employees/view/:id" element={<EmployeeDetail />} />
-            <Route path="create-user" element={<CreateUser />} />
-            <Route path="task-management" element={<TaskManagement />} />
-            <Route path="task-management/create" element={<TaskCreate />} />
-            <Route path="task-management/update/:id" element={<TaskUpdate />} />
-            <Route path="projects" element={<ManagerProjects />} />
-            <Route path="leave" element={<ManagerLeaveManagement />} />
+            <Route index element={<Navigate to="attendance" replace />} />
+            <Route path="dashboard" element={<Navigate to="attendance" replace />} />
             <Route path="attendance" element={<Attendance />} />
             <Route path="daily-report" element={<DailyReport />} />
-            <Route path="chat" element={<Chat />} />
-            <Route path="screenshots" element={<Screenshots />} />
-            <Route path="recruitment" element={<Recruitment />} />
-            <Route path="performance" element={<Performance />} />
-            <Route path="reports" element={<Reports />} />
-            <Route path="profile" element={<Profile />} />
-            <Route path="time-tracker" element={<Navigate to="../attendance" replace />} />
-            <Route path="documents" element={<EmployeeDocuments />} />
-            <Route path="payroll" element={<Payroll />} />
-            <Route path="settings" element={<Settings />} />
-            <Route path="training" element={<Training />} />
-            <Route path="roles-permissions" element={<RolesPermissions />} />
-            <Route path="audit-logs" element={<AuditLogs />} />
-            <Route path="integrations" element={<Integrations />} />
-            <Route path="departments" element={<Departments />} />
-            <Route path="designations" element={<Designations />} />
+            <Route path="leave" element={<ManagerLeaveManagement />} />
+            <Route path="leaves" element={<Navigate to="leave" replace />} />
             <Route path="notifications" element={<Notifications />} />
             <Route path="notifications/all" element={<AllNotifications />} />
+            <Route path="screenshots" element={<Screenshots />} />
+            <Route path="profile" element={<Profile />} />
+            <Route path="*" element={<NotFound role="manager" />} />
           </Route>
 
-          {/* FALLBACK */}
-          <Route path="*" element={<Navigate to="/" replace />} />
+          {/* GLOBAL FALLBACK */}
+          <Route path="*" element={<NotFound />} />
         </Routes>
       </Suspense>
     </>

@@ -58,7 +58,10 @@ const LeavePolicyOverview = ({ refreshTrigger }) => {
 
   const uniqueMap = new Map();
   policies
-    .filter(p => !(`${p.type || ''} ${p.name || ''}`).toLowerCase().includes('maternity'))
+    .filter(p => {
+      const cat = getCatKey(p);
+      return cat === 'casual' || cat === 'sick';
+    })
     .forEach(p => {
       const key = getCatKey(p);
       if (!uniqueMap.has(key)) uniqueMap.set(key, p);
@@ -73,7 +76,6 @@ const LeavePolicyOverview = ({ refreshTrigger }) => {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-6">
         <div>
           <h2 className="text-lg font-bold text-gray-900 dark:text-white">Leave Policy Overview</h2>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Define and manage company-wide leave entitlements and carry-forward rules</p>
         </div>
         {canManagePolicy && (
           <button

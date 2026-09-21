@@ -149,6 +149,7 @@ const ExportFilterModal = ({
   columns = [], // Array of { key, label, defaultSelected: true, getValue: (item) => string }
   customFilters = [], // Array of { key, label, options: [{ label, value }] }
   defaultFilename = 'export_data',
+  initialFormat = 'csv',
   onExport = null // Optional custom export callback (selectedCols, records, format, filename)
 }) => {
   // Determine if there is an active view filter
@@ -176,7 +177,7 @@ const ExportFilterModal = ({
 
   // State
   const [dataScope, setDataScope] = useState(hasFilterDifference ? 'filtered' : 'all');
-  const [selectedFormat, setSelectedFormat] = useState('csv'); // 'csv' | 'xlsx' | 'pdf'
+  const [selectedFormat, setSelectedFormat] = useState(initialFormat || 'csv'); // 'csv' | 'xlsx' | 'pdf'
   const [selectedColumnKeys, setSelectedColumnKeys] = useState(() => 
     columns.filter(c => c.defaultSelected !== false).map(c => c.key)
   );
@@ -206,6 +207,7 @@ const ExportFilterModal = ({
       if (!wasOpenRef.current) {
         setSelectedColumnKeys(columns.filter(c => c.defaultSelected !== false).map(c => c.key));
         setDataScope(hasFilterDifference ? 'filtered' : 'all');
+        setSelectedFormat(initialFormat || 'csv');
         setStartDate(`${todayStr.slice(0, 7)}-01`);
         setEndDate(todayStr);
         const resetFilters = {};
@@ -888,19 +890,12 @@ const ExportFilterModal = ({
             Exporting <span className="font-bold text-gray-800 dark:text-gray-200">{recordsToExport.length} records</span> with <span className="font-bold text-gray-800 dark:text-gray-200">{selectedColumnKeys.length} columns</span>
           </div>
 
-          <div className="flex items-center gap-2 w-full">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 text-xs font-semibold rounded-xl border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 bg-white dark:bg-[#0f1c18] hover:bg-gray-50 dark:hover:bg-[#162f27] transition-all cursor-pointer"
-            >
-              Cancel
-            </button>
+          <div className="w-full">
             <button
               type="button"
               onClick={handleTriggerExport}
               disabled={recordsToExport.length === 0 || selectedColumnKeys.length === 0}
-              className={`flex-1 py-2 px-3 text-xs font-bold rounded-xl text-white flex items-center justify-center gap-1.5 shadow-sm transition-all cursor-pointer ${
+              className={`w-full py-2.5 px-4 text-xs font-bold rounded-xl text-white flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer ${
                 recordsToExport.length === 0 || selectedColumnKeys.length === 0
                   ? 'bg-gray-300 dark:bg-gray-700 cursor-not-allowed text-gray-500'
                   : 'bg-[#00a76b] hover:bg-[#00915c] active:scale-95'

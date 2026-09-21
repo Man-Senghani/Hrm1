@@ -939,8 +939,7 @@ const DailyReportHR = () => {
       {/* ── HEADER WITH ADD REPORT BUTTON & CONTEXT SWITCHER ── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-semibold text-slate-900 dark:text-white tracking-tight flex items-center gap-3">
-            <FileText className="text-emerald-600 dark:text-emerald-400" size={28} />
+          <h1 className="text-2xl sm:text-3xl font-semibold text-slate-900 dark:text-white tracking-tight">
             Daily Report
           </h1>
         </div>
@@ -1064,7 +1063,6 @@ const DailyReportHR = () => {
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-4 border-b border-slate-100 dark:border-[#1a2d29]">
               <div>
                 <h3 className="text-lg font-extrabold text-slate-900 dark:text-white">My Submitted Reports</h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400">View and filter your personal daily work updates.</p>
               </div>
 
               <div className="flex items-center gap-3">
@@ -2304,22 +2302,12 @@ const DailyReportHR = () => {
             </div>
 
             {/* Drawer Footer */}
-            <div className="p-4 border-t border-slate-100 dark:border-[#1a2d29] bg-slate-50/50 dark:bg-[#111c18]/50 flex items-center justify-between gap-3 shrink-0">
-              <button
-                type="button"
-                onClick={() => {
-                  setIsFormDrawerOpen(false);
-                  setEditingReport(null);
-                }}
-                className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-[#1a2d29] text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[#1a2d29] transition-colors cursor-pointer"
-              >
-                Cancel
-              </button>
+            <div className="p-4 border-t border-slate-100 dark:border-[#1a2d29] bg-slate-50/50 dark:bg-[#111c18]/50 shrink-0">
               <button
                 type="submit"
                 form="dailyReportHRDrawerForm"
                 disabled={isSubmitting || (!editingReport && myReports.some(r => r.reportDate === formData.reportDate))}
-                className="flex-1 flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold transition-all shadow-md shadow-emerald-600/20 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold transition-all shadow-md shadow-emerald-600/20 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isSubmitting ? (
                   <RefreshCw size={14} className="animate-spin" />

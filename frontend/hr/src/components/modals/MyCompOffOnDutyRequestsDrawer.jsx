@@ -403,18 +403,11 @@ const MyCompOffOnDutyRequestsDrawer = ({ isOpen, onClose, onRefresh }) => {
           </div>
 
           {/* Fixed Bottom Action Row */}
-          <div className="shrink-0 border-t border-gray-150 dark:border-gray-800 px-6 py-4 bg-gray-50/80 dark:bg-[#162722]/80 flex items-center justify-end gap-3">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2.5 rounded-xl font-bold text-gray-600 dark:text-gray-400 hover:bg-gray-200/60 dark:hover:bg-gray-800 text-xs transition-colors cursor-pointer"
-            >
-              Cancel
-            </button>
+          <div className="shrink-0 border-t border-gray-150 dark:border-gray-800 px-6 py-4 bg-gray-50/80 dark:bg-[#162722]/80">
             <button
               type="submit"
               disabled={isSubmitting}
-              className="px-6 py-2.5 rounded-xl font-bold bg-[#00a76b] hover:bg-[#00915c] text-white text-xs shadow-md transition-all cursor-pointer disabled:opacity-50 flex items-center gap-2"
+              className="w-full py-2.5 rounded-xl font-bold bg-[#00a76b] hover:bg-[#00915c] text-white text-xs shadow-md transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
             >
               <Send size={14} />
               {isSubmitting ? 'Submitting...' : 'Submit Request'}

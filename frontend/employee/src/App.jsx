@@ -32,8 +32,7 @@ const Holidays = lazy(() => import('./pages/Holidays'));
 const MyEvents = lazy(() => import('./pages/MyEvents'));
 const Chat = lazy(() => import('@shared/pages/Chat'));
 const Profile = lazy(() => import('@shared/pages/Profile'));
-const Settings = lazy(() => import('@shared/pages/Settings'));
-const Notifications = lazy(() => import('../../admin/src/pages/Notifications'));
+const NotFound = lazy(() => import('@shared/pages/NotFound'));
 const DailyReport = lazy(() => import('./pages/DailyReport'));
 
 const ScrollToTop = () => {
@@ -154,43 +153,29 @@ function App() {
           <Routes>
             <Route path="/" element={<Navigate to="/attendance" replace />} />
             <Route path="/dashboard" element={<Navigate to="/attendance" replace />} />
-            <Route path="/time-tracker" element={<TimeTracker />} />
-            <Route path="/chat" element={<Chat />} />
-            <Route path="/projects" element={<EmployeeProjects />} />
-            <Route path="/profile" element={<Profile />} />
-            <Route path="/settings" element={<Settings />} />
+            <Route path="/employee" element={<Navigate to="/attendance" replace />} />
+            <Route path="/employee/dashboard" element={<Navigate to="/attendance" replace />} />
+
+            {/* Attendance */}
             <Route path="/attendance" element={<Attendance />} />
-            <Route path="/daily-report" element={<DailyReport />} />
-            <Route path="/events" element={<MyEvents />} />
-            <Route path="/holidays" element={<Holidays />} />
+            <Route path="/employee/attendance" element={<Attendance />} />
+
+            {/* Leave Management */}
             <Route path="/leave" element={<LeaveManagement />} />
             <Route path="/leaves" element={<Navigate to="/leave" replace />} />
-            <Route path="/payslips" element={<EmployeePayslips />} />
-            <Route path="/documents" element={<EmployeeDocuments />} />
-            <Route path="/performance" element={<EmployeePerformance />} />
-            <Route path="/notifications" element={<Notifications />} />
-
-            {/* Prefixed routes matching /employee/* */}
-            <Route path="/employee" element={<Navigate to="/" replace />} />
-            <Route path="/employee/dashboard" element={<Navigate to="/" replace />} />
             <Route path="/employee/leave" element={<LeaveManagement />} />
             <Route path="/employee/leaves" element={<Navigate to="/leave" replace />} />
-            <Route path="/employee/projects" element={<EmployeeProjects />} />
-            <Route path="/employee/attendance" element={<Attendance />} />
-            <Route path="/employee/daily-report" element={<DailyReport />} />
-            <Route path="/employee/time-tracker" element={<TimeTracker />} />
-            <Route path="/employee/payslips" element={<EmployeePayslips />} />
-            <Route path="/employee/profile" element={<Profile />} />
-            <Route path="/employee/settings" element={<Settings />} />
-            <Route path="/employee/documents" element={<EmployeeDocuments />} />
-            <Route path="/employee/performance" element={<EmployeePerformance />} />
-            <Route path="/employee/chat" element={<Chat />} />
-            <Route path="/employee/events" element={<MyEvents />} />
-            <Route path="/employee/holidays" element={<Holidays />} />
-            <Route path="/employee/notifications" element={<Notifications />} />
 
-            {/* Fallbacks */}
-            <Route path="*" element={<Navigate to="/" replace />} />
+            {/* Daily Report */}
+            <Route path="/daily-report" element={<DailyReport />} />
+            <Route path="/employee/daily-report" element={<DailyReport />} />
+
+            {/* Profile */}
+            <Route path="/profile" element={<Profile />} />
+            <Route path="/employee/profile" element={<Profile />} />
+
+            {/* Fallback 404 for any unlisted/hidden route like /projects or /employee/projects */}
+            <Route path="*" element={<NotFound role="employee" />} />
           </Routes>
         </Suspense>
       </MainLayout>

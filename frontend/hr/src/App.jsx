@@ -53,7 +53,7 @@ const Notifications = lazy(() => import('./pages/Notifications'));
 const AllNotifications = lazy(() => import('./pages/AllNotifications'));
 const Settings = lazy(() => import('./pages/Settings'));
 const Profile = lazy(() => import('@shared/pages/Profile'));
-const Chat = lazy(() => import('@shared/pages/Chat'));
+const NotFound = lazy(() => import('@shared/pages/NotFound'));
 
 const RouteLoadingFallback = () => (
   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh' }}>
@@ -168,7 +168,7 @@ function App() {
             <Route path="/hr" element={<Navigate to="/employees" replace />} />
             <Route path="/hr/dashboard" element={<Navigate to="/employees" replace />} />
 
-            {/* Workforce Management */}
+            {/* Employees */}
             <Route path="/employees" element={<HREmployees />} />
             <Route path="/hr/employees" element={<HREmployees />} />
             <Route path="/employees/add" element={<EmployeeForm />} />
@@ -179,69 +179,41 @@ function App() {
             <Route path="/hr/employees/view/:id" element={<EmployeeDetail />} />
             <Route path="/create-user" element={<CreateUser />} />
             <Route path="/hr/create-user" element={<CreateUser />} />
-            <Route path="/team" element={<TeamManagement />} />
-            <Route path="/hr/team" element={<TeamManagement />} />
-            <Route path="/teams" element={<TeamManagement />} />
-            <Route path="/hr/teams" element={<TeamManagement />} />
 
-            {/* Tasks & Projects */}
-            <Route path="/tasks" element={<Tasks />} />
-            <Route path="/hr/tasks" element={<Tasks />} />
-            <Route path="/task-management" element={<TaskManagement />} />
-            <Route path="/hr/task-management" element={<TaskManagement />} />
-            <Route path="/task-management/create" element={<TaskCreate />} />
-            <Route path="/hr/task-management/create" element={<TaskCreate />} />
-            <Route path="/task-management/update/:id" element={<TaskUpdate />} />
-            <Route path="/hr/task-management/update/:id" element={<TaskUpdate />} />
-            <Route path="/projects" element={<ProjectManagement />} />
-            <Route path="/hr/projects" element={<ProjectManagement />} />
+            {/* Attendance */}
+            <Route path="/attendance" element={<Attendance />} />
+            <Route path="/hr/attendance" element={<Attendance />} />
+            <Route path="/attendance-monitoring" element={<Attendance />} />
+            <Route path="/hr/attendance-monitoring" element={<Attendance />} />
 
-            {/* Leave & Attendance */}
+            {/* Leave Management */}
             <Route path="/leave" element={<LeaveManagement />} />
             <Route path="/hr/leave" element={<LeaveManagement />} />
             <Route path="/leaves" element={<LeaveManagement />} />
             <Route path="/hr/leaves" element={<LeaveManagement />} />
             <Route path="/leave-approvals" element={<LeaveManagement />} />
             <Route path="/hr/leave-approvals" element={<LeaveManagement />} />
-            <Route path="/attendance" element={<Attendance />} />
-            <Route path="/hr/attendance" element={<Attendance />} />
+
+            {/* Daily Report */}
             <Route path="/daily-report" element={<DailyReport />} />
             <Route path="/hr/daily-report" element={<DailyReport />} />
-            <Route path="/attendance-monitoring" element={<Attendance />} />
-            <Route path="/hr/attendance-monitoring" element={<Attendance />} />
 
-            {/* Operations */}
-            <Route path="/payroll" element={<Payroll />} />
-            <Route path="/hr/payroll" element={<Payroll />} />
-            <Route path="/recruitment" element={<Recruitment />} />
-            <Route path="/hr/recruitment" element={<Recruitment />} />
-            <Route path="/performance" element={<Performance />} />
-            <Route path="/hr/performance" element={<Performance />} />
-            <Route path="/training" element={<Training />} />
-            <Route path="/hr/training" element={<Training />} />
-            <Route path="/events" element={<EventsManagement />} />
-            <Route path="/hr/events" element={<EventsManagement />} />
-            <Route path="/reports" element={<Reports />} />
-            <Route path="/hr/reports" element={<Reports />} />
-            <Route path="/screenshots" element={<Screenshots />} />
-            <Route path="/hr/screenshots" element={<Screenshots />} />
-            <Route path="/documents" element={<EmployeeDocuments />} />
-            <Route path="/hr/documents" element={<EmployeeDocuments />} />
-
-            {/* Notifications, Chat, Profile & Settings */}
+            {/* Notifications */}
             <Route path="/notifications" element={<Notifications />} />
             <Route path="/hr/notifications" element={<Notifications />} />
             <Route path="/notifications/all" element={<AllNotifications />} />
             <Route path="/hr/notifications/all" element={<AllNotifications />} />
-            <Route path="/chat" element={<Chat />} />
-            <Route path="/hr/chat" element={<Chat />} />
+
+            {/* Screenshots */}
+            <Route path="/screenshots" element={<Screenshots />} />
+            <Route path="/hr/screenshots" element={<Screenshots />} />
+
+            {/* Profile */}
             <Route path="/profile" element={<Profile />} />
             <Route path="/hr/profile" element={<Profile />} />
-            <Route path="/settings" element={<Settings />} />
-            <Route path="/hr/settings" element={<Settings />} />
 
-            {/* Fallback */}
-            <Route path="*" element={<Navigate to="/" replace />} />
+            {/* Fallback 404 for any unlisted/hidden route like /tasks or /hr/tasks */}
+            <Route path="*" element={<NotFound role="hr" />} />
           </Routes>
         </Suspense>
       </MainLayout>

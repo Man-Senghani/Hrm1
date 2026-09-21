@@ -416,9 +416,9 @@ const HREmployees = () => {
     (filterStatus.length > 0 && !filterStatus.includes('all') ? filterStatus.length : 0);
 
   return (
-    <div className="animate-fade-in w-full space-y-6 pb-16 text-slate-800 dark:text-slate-100 font-sans">
+    <div className="animate-fade-in w-full space-y-3 pb-16 text-slate-800 dark:text-slate-100 font-sans">
       {/* 1. Top Bar / Header */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-gray-100 dark:border-[#162722] pb-6">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-gray-100 dark:border-[#162722] pb-3">
         <div>
           <h1 className="text-2xl md:text-3xl font-semibold text-gray-900 dark:text-white tracking-tight">
             Employee Directory
@@ -443,7 +443,7 @@ const HREmployees = () => {
       </div>
 
       {/* 2. Search & Filter Row */}
-      <div className="w-full mb-6">
+      <div className="w-full mb-3">
         <div className="flex gap-3 items-center w-full justify-between">
           <div className="relative w-full max-w-[320px]">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />

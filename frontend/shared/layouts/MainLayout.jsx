@@ -513,56 +513,40 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
     switch (currentRole) {
       case 'hr':
         return [
-          { name: 'Dashboard', path: `${prefix}/employees`, icon: LayoutDashboard },
           { name: 'Employees', path: `${prefix}/employees`, icon: Users },
-          { name: 'Daily Tasks Board', path: `${prefix}/tasks`, icon: CheckSquare },
-          { name: 'Daily Report', path: `${prefix}/daily-report`, icon: FileText },
-          { name: 'Events Management', path: `${prefix}/events`, icon: Calendar },
           { name: 'Attendance', path: `${prefix}/attendance`, icon: Calendar },
-          { name: 'Team Chat', path: `${prefix}/chat`, icon: MessageSquare },
-          { name: 'Payroll', path: `${prefix}/payroll`, icon: Wallet },
-          { name: 'Recruitment', path: `${prefix}/recruitment`, icon: UserPlus },
-          { name: 'Performance', path: `${prefix}/performance`, icon: TrendingUp },
-          { name: 'Reports', path: `${prefix}/reports`, icon: BarChart3 },
+          { name: 'Leave Management', path: `${prefix}/leave`, icon: ClipboardList },
+          { name: 'Daily Report', path: `${prefix}/daily-report`, icon: FileText },
+          { name: 'Notifications', path: `${prefix}/notifications`, icon: Bell },
           { name: 'Screenshots', path: `${prefix}/screenshots`, icon: Camera },
-          { name: 'Settings', path: `${prefix}/settings`, icon: Settings },
+          { name: 'My Profile', path: `${prefix}/profile`, icon: User },
         ];
       case 'employee':
         return [
-          { name: 'Dashboard', path: `${prefix}/attendance`, icon: LayoutDashboard },
           { name: 'Attendance', path: `${prefix}/attendance`, icon: Calendar },
+          { name: 'Leave Management', path: `${prefix}/leave`, icon: ClipboardList },
           { name: 'Daily Report', path: `${prefix}/daily-report`, icon: FileText },
-          { name: 'Team Chat', path: `${prefix}/chat`, icon: MessageSquare },
-          { name: 'Create Task', path: `${prefix}/task-management/create`, icon: PlusCircle },
-          { name: 'My Documents', path: `${prefix}/documents`, icon: FileText },
+          { name: 'My Profile', path: `${prefix}/profile`, icon: User },
         ];
       case 'manager':
         return [
-          { name: 'Dashboard', path: `${prefix}/employees`, icon: LayoutDashboard },
-          { name: 'Team / Employees', path: `${prefix}/employees`, icon: Users },
-          { name: 'Daily Tasks Board', path: `${prefix}/tasks`, icon: CheckSquare },
+          { name: 'Notifications', path: `${prefix}/notifications`, icon: Bell },
+          { name: 'Attendance', path: `${prefix}/attendance`, icon: Calendar },
+          { name: 'Leave Management', path: `${prefix}/leave`, icon: ClipboardList },
           { name: 'Daily Report', path: `${prefix}/daily-report`, icon: FileText },
-          { name: 'Events Management', path: `${prefix}/events`, icon: Calendar },
-          { name: 'Team Chat', path: `${prefix}/chat`, icon: MessageSquare },
-          { name: 'Team Attendance', path: `${prefix}/attendance`, icon: Calendar },
           { name: 'Screenshots', path: `${prefix}/screenshots`, icon: Camera },
+          { name: 'My Profile', path: `${prefix}/profile`, icon: User },
         ];
       case 'admin':
       default:
         return [
-          { name: 'Dashboard', path: `${prefix}/dashboard`, icon: LayoutDashboard },
+          { name: 'Notifications', path: `${prefix}/notifications`, icon: Bell },
           { name: 'Employees', path: `${prefix}/employees`, icon: Users },
-          { name: 'Daily Tasks Board', path: `${prefix}/tasks`, icon: CheckSquare },
-          { name: 'Daily Report', path: `${prefix}/daily-report`, icon: FileText },
-          { name: 'Events Management', path: `${prefix}/events`, icon: Calendar },
           { name: 'Attendance', path: `${prefix}/attendance`, icon: Calendar },
-          { name: 'Global Chat', path: `${prefix}/chat`, icon: MessageSquare },
-          { name: 'Payroll', path: `${prefix}/payroll`, icon: Wallet },
-          { name: 'Recruitment', path: `${prefix}/recruitment`, icon: UserPlus },
-          { name: 'Performance', path: `${prefix}/performance`, icon: TrendingUp },
-          { name: 'Reports', path: `${prefix}/reports`, icon: BarChart3 },
+          { name: 'Leave Management', path: `${prefix}/leave`, icon: ClipboardList },
+          { name: 'Daily Report', path: `${prefix}/daily-report`, icon: FileText },
           { name: 'Screenshots', path: `${prefix}/screenshots`, icon: Camera },
-          { name: 'Settings', path: `${prefix}/settings`, icon: Settings },
+          { name: 'My Profile', path: `${prefix}/profile`, icon: User },
         ];
     }
   };

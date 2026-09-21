@@ -3,17 +3,26 @@ import axios from 'axios';
 // 🛰️ DYNAMIC ENDPOINT CONFIGURATION
 export const getDynamicApiUrl = () => {
   if (typeof window !== 'undefined') {
+    if (import.meta.env?.VITE_API_BASE_URL) {
+      return import.meta.env.VITE_API_BASE_URL;
+    }
     const host = window.location.hostname;
     const port = window.location.port;
-    if (host.includes('staging')) {
+
+    // Legacy Render URL fallback if directly accessed
+    if (host.includes('hrm1-wljp.onrender.com')) {
       return 'https://hrm1-wljp.onrender.com';
     }
-    if (host === 'localhost' || host === '127.0.0.1') {
+
+    // Local Vite dev server (running on port 5173, etc., connecting to local backend 5000)
+    if ((host === 'localhost' || host === '127.0.0.1') && port && port !== '80' && port !== '5000') {
       return 'http://localhost:5000';
     }
-    return 'https://hrm1-1-zli1.onrender.com';
+
+    // Same-origin for Docker, Nginx reverse proxy, production VPS, and direct port 5000
+    return window.location.origin;
   }
-  return 'https://hrm1-1-zli1.onrender.com';
+  return 'http://localhost:5000';
 };
 
 export const API_BASE_URL = getDynamicApiUrl();
@@ -43,7 +52,7 @@ api.interceptors.response.use(
       try {
         localStorage.removeItem('activeAccount');
         localStorage.removeItem('token');
-      } catch (_) {}
+      } catch (_) { }
       const baseUrl = (import.meta.env.BASE_URL || '/').replace(/\/$/, '');
       window.location.href = `${baseUrl}/login`;
     }
@@ -55,10 +64,10 @@ export const getImageUrl = (path) => {
   if (!path) return '';
   if (path.startsWith('data:')) return path; // Base64 fallback
   if (path.startsWith('http://') || path.startsWith('https://')) return path;
-  
+
   const normalized = path.replace(/\\/g, '/');
   const cleanPath = normalized.startsWith('/') ? normalized : `/${normalized}`;
-  
+
   const base = API_BASE_URL || (typeof window !== 'undefined' ? window.location.origin : '');
   return `${base}${cleanPath}`;
 };
@@ -99,7 +108,7 @@ export const formatDateDDMMYYYY = formatDate;
 if (typeof window !== 'undefined') {
   setInterval(() => {
     if (!document.hidden) {
-      fetch(`${API_BASE_URL}/api/health`, { method: 'GET', cache: 'no-store' }).catch(() => {});
+      fetch(`${API_BASE_URL}/api/health`, { method: 'GET', cache: 'no-store' }).catch(() => { });
     }
   }, 3 * 60 * 1000); // Ping every 3 minutes
 }

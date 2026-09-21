@@ -133,16 +133,6 @@ const CompanyShutdownsDrawer = ({ isOpen, onClose }) => {
             )}
           </div>
 
-          {/* Footer */}
-          <div className="pt-4 border-t border-gray-200 dark:border-gray-800 flex justify-end mt-4">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2.5 rounded-xl font-bold text-gray-500 hover:text-gray-700 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 text-xs transition-colors w-full cursor-pointer"
-            >
-              Close Panel
-            </button>
-          </div>
         </div>
 
       </div>

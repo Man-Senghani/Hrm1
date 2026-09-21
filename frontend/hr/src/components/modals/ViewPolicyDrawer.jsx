@@ -16,7 +16,11 @@ const ViewPolicyDrawer = ({ isOpen, onClose }) => {
         const res = await axios.get('/api/leave-policies', {
           headers: { Authorization: `Bearer ${token}` }
         });
-        setPolicies(res.data || []);
+        const filtered = (res.data || []).filter(p => {
+          const str = `${p.type || ''} ${p.name || ''}`.toLowerCase();
+          return str.includes('casual') || str.includes('sick') || str.includes('cl') || str.includes('sl');
+        });
+        setPolicies(filtered);
       } catch (err) {
         console.error('Failed to fetch policies:', err);
       } finally {
@@ -75,11 +79,6 @@ const ViewPolicyDrawer = ({ isOpen, onClose }) => {
           </div>
         </div>
 
-        <div className="pt-4 border-t border-gray-200 dark:border-gray-800 flex justify-end mt-4">
-          <button type="button" onClick={onClose} className="w-full py-2.5 rounded-lg font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 text-xs">
-            Close Panel
-          </button>
-        </div>
       </div>
     </div>,
     document.body

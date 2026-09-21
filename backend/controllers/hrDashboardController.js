@@ -592,33 +592,24 @@ exports.getLeaveAllocations = async (req, res) => {
       balances = await LeaveBalance.find({ year: currentYear });
     }
 
-    let totalEL = 0, totalSL = 0, totalCL = 0, totalCO = 0, totalOther = 0;
+    let totalSL = 0, totalCL = 0;
     const factor = filter === 'last_month' ? 0.85 : filter === 'last_2_months' ? 1.6 : filter === 'this_year' ? 3.2 : 1;
 
     balances.forEach(b => {
-      totalEL += (b.earnedLeave || 0) * factor;
       totalSL += (b.sickLeave || 0) * factor;
       totalCL += (b.casualLeave || 0) * factor;
-      totalCO += (b.compOff || 0) * factor;
-      totalOther += (b.otherLeaves || 0) * factor;
     });
 
-    totalEL = Math.round(totalEL * 100) / 100;
     totalSL = Math.round(totalSL * 100) / 100;
     totalCL = Math.round(totalCL * 100) / 100;
-    totalCO = Math.round(totalCO * 100) / 100;
-    totalOther = Math.round(totalOther * 100) / 100;
 
-    const total = Math.round((totalEL + totalSL + totalCL + totalCO + totalOther) * 100) / 100;
+    const total = Math.round((totalSL + totalCL) * 100) / 100;
 
     res.json({
       success: true,
       data: [
-        { name: 'Earned Leave (EL)', value: totalEL, color: '#059669' },
         { name: 'Sick Leave (SL)', value: totalSL, color: '#2563eb' },
-        { name: 'Casual Leave (CL)', value: totalCL, color: '#ea580c' },
-        { name: 'Comp Off (CO)', value: totalCO, color: '#7c3aed' },
-        { name: 'Other Leaves', value: totalOther, color: '#ec4899' }
+        { name: 'Casual Leave (CL)', value: totalCL, color: '#ea580c' }
       ],
       totalDays: total
     });

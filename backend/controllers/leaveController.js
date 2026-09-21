@@ -1334,26 +1334,37 @@ const getSubordinateUserIds = async (user) => {
   const empDoc = await Employee.findOne({ $or: [{ _id: user.id }, { userId: user.id }] });
   const empRole = (empDoc?.role || '').toLowerCase();
 
-  if (['admin', 'hr', 'manager', 'team manager', 'team_manager'].includes(userRole) ||
-      ['admin', 'hr', 'manager', 'team manager', 'team_manager'].includes(empRole)) {
+  // Admin and HR can view all company personnel
+  if (['admin', 'hr'].includes(userRole) || ['admin', 'hr'].includes(empRole)) {
     const allUsers = await User.find({}).select('_id');
     return allUsers.map(u => u._id);
   }
 
+  // Manager: Strictly see direct subordinates (or company employees), NEVER Admin or HR!
   const queryConditions = [{ reportingManager: user.id }, { managerId: user.id }];
   if (empDoc) {
     queryConditions.push({ reportingManager: empDoc._id });
     queryConditions.push({ managerId: empDoc._id });
   }
 
-  const subordinates = await User.find({ $or: queryConditions }).select('_id');
+  // Find direct subordinates who are employees (excluding Admin, HR, and self)
+  const subordinates = await User.find({
+    $or: queryConditions,
+    role: { $nin: ['admin', 'hr'] },
+    _id: { $ne: user.id }
+  }).select('_id');
+  
   let subIds = subordinates.map(s => s._id);
-  subIds.push(user.id);
 
-  if (subIds.length <= 1) {
-    const allUsers = await User.find({}).select('_id');
-    return allUsers.map(u => u._id);
+  // If no direct subordinates are specifically assigned yet to this manager, show employees only (never Admin, HR, or self)
+  if (subIds.length === 0) {
+    const employees = await User.find({
+      role: { $nin: ['admin', 'hr'] },
+      _id: { $ne: user.id }
+    }).select('_id');
+    return employees.map(u => u._id);
   }
+
   return subIds;
 };
 
@@ -1673,54 +1684,6 @@ exports.getManagerCalendar = async (req, res) => {
   }
 };
 
-exports.getTeamLeaveBalances = async (req, res) => {
-  try {
-    const page = parseInt(req.query.page, 10) || 1;
-    const limit = parseInt(req.query.limit, 10) || 5;
-    const skip = (page - 1) * limit;
-
-    const now = new Date();
-    const currentMonth = now.getMonth() + 1;
-    const currentYear = now.getFullYear();
-
-    const subIds = await getSubordinateUserIds(req.user);
-    let query = { month: currentMonth, year: currentYear, employeeId: { $in: subIds } };
-
-    const total = await LeaveBalance.countDocuments(query);
-    const balances = await LeaveBalance.find(query)
-      .populate('employeeId', 'name profileImage')
-      .skip(skip)
-      .limit(limit);
-
-    console.log('Query:', query);
-    console.log('Total found:', total, balances.length);
-
-    const formattedBalances = balances.map(b => {
-      const doc = b.toObject();
-      doc.usedLeave = {
-        casual: Math.floor(Math.random() * (doc.casualLeave || 1)),
-        sick: Math.floor(Math.random() * (doc.sickLeave || 1)),
-        earned: Math.floor(Math.random() * (doc.earnedLeave || 1)),
-        compOff: Math.floor(Math.random() * (doc.compOff || 1)),
-      };
-      doc.usedLeave.total = doc.usedLeave.casual + doc.usedLeave.sick + doc.usedLeave.earned + doc.usedLeave.compOff;
-      doc.totalLeave = (doc.casualLeave || 0) + (doc.sickLeave || 0) + (doc.earnedLeave || 0) + (doc.compOff || 0);
-      return doc;
-    });
-
-    res.json({
-      data: formattedBalances,
-      pagination: {
-        total,
-        page,
-        pages: Math.ceil(total / limit)
-      }
-    });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-};
-
 exports.getLeaveMonthlyTrend = async (req, res) => {
   try {
     const year = req.query.year ? parseInt(req.query.year) : new Date().getFullYear();
@@ -1822,7 +1785,7 @@ exports.bulkApproveLeaves = async (req, res) => {
 
 exports.exportTeamLeaves = async (req, res) => {
   try {
-    const { format } = req.query; // pdf or xlsx
+    const { format, status, leaveType, startDate, endDate, employeeId } = req.query; // pdf or xlsx
 
     const formatDateSafe = (d) => {
       if (!d) return 'N/A';
@@ -1837,7 +1800,40 @@ exports.exportTeamLeaves = async (req, res) => {
 
     const subIds = await getSubordinateUserIds(req.user);
 
-    const leaves = await Leave.find({ user: { $in: subIds } })
+    const query = { user: { $in: subIds } };
+
+    if (employeeId && employeeId !== 'all') {
+      query.user = employeeId;
+    }
+
+    if (status && status !== 'all') {
+      if (status === 'pending') {
+        query.status = { $in: ['pending', 'cancellation_pending'] };
+      } else {
+        query.status = status;
+      }
+    }
+
+    if (leaveType && leaveType !== 'all') {
+      query.leaveType = leaveType;
+    }
+
+    if (startDate && startDate !== 'undefined' && startDate !== 'null') {
+      const s = new Date(startDate);
+      if (!isNaN(s.getTime())) {
+        query.startDate = { $gte: s };
+      }
+    }
+
+    if (endDate && endDate !== 'undefined' && endDate !== 'null') {
+      const e = new Date(endDate);
+      e.setHours(23, 59, 59, 999);
+      if (!isNaN(e.getTime())) {
+        query.endDate = query.endDate ? { ...query.endDate, $lte: e } : { $lte: e };
+      }
+    }
+
+    const leaves = await Leave.find(query)
       .populate('user', 'name email department')
       .sort({ startDate: -1 });
 
@@ -2355,13 +2351,18 @@ exports.getTeamLeaveBalances = async (req, res) => {
     const limit = parseInt(req.query.limit) || 10;
     const skip = (page - 1) * limit;
 
-    const employees = await User.find({ _id: { $in: subIds } })
+    const isManager = req.user?.role !== 'admin' && req.user?.role !== 'hr';
+    const filterQuery = { _id: { $in: subIds } };
+    if (isManager) {
+      filterQuery.role = { $nin: ['admin', 'hr'] };
+    }
+
+    const total = await User.countDocuments(filterQuery);
+    const employees = await User.find(filterQuery)
       .select('name email role employeeId profileImage department')
       .skip(skip)
       .limit(limit)
       .lean();
-
-    const total = subIds.length;
     const now = new Date();
     const month = now.getMonth() + 1;
     const year = now.getFullYear();

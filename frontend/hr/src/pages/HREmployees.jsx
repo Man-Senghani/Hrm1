@@ -413,7 +413,7 @@ const HREmployees = () => {
   return (
     <div className="animate-fade-in w-full pb-12">
       {/* 1. Page Title & Action Buttons Section */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-3">
         <div>
           <h1 className="text-[32px] font-semibold tracking-tight text-gray-900 dark:text-white leading-none">Employees</h1>
           <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mt-2">Directory of everyone in your company.</p>
@@ -437,7 +437,7 @@ const HREmployees = () => {
       </div>
 
       {/* 2. Search & Filter Row */}
-      <div className="w-full mb-6">
+      <div className="w-full mb-3">
         <div className="flex gap-3 items-center w-full justify-between">
           <div className="relative w-full max-w-[320px]">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />

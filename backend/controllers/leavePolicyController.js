@@ -89,7 +89,12 @@ exports.getPolicies = async (req, res) => {
       }
     });
 
-    res.json(Array.from(uniqueMap.values()));
+    const allowed = Array.from(uniqueMap.values()).filter(p => {
+      const cat = normalizePolicyCategory(p);
+      return cat === 'casual' || cat === 'sick';
+    });
+
+    res.json(allowed);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

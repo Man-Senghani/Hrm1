@@ -20,8 +20,13 @@ const LeaveAllocationSummary = ({ refreshTrigger }) => {
           headers: { Authorization: `Bearer ${token}` }
         });
         if (res.data && res.data.success) {
-          setAllocationData(res.data.data);
-          setTotalDays(res.data.totalDays);
+          const raw = Array.isArray(res.data.data) ? res.data.data : [];
+          const filtered = raw.filter(item => 
+            item.name.includes('Sick Leave') || item.name.includes('Casual Leave')
+          );
+          setAllocationData(filtered);
+          const sum = filtered.reduce((acc, curr) => acc + (curr.value || 0), 0);
+          setTotalDays(res.data.totalDays !== undefined ? res.data.totalDays : sum);
         }
       } catch (err) {
         console.error('Failed to fetch allocations:', err);
@@ -34,12 +39,12 @@ const LeaveAllocationSummary = ({ refreshTrigger }) => {
 
   return (
     <div className="bg-white dark:bg-[#1e293b] rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 p-6 flex flex-col h-full transition-all duration-200 hover:border-indigo-500">
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-lg font-bold text-gray-900 dark:text-white">Leave Allocation Summary</h2>
-        <div className="relative">
+      <div className="flex justify-between items-center mb-6 gap-2">
+        <h2 className="text-base xl:text-lg font-bold text-gray-900 dark:text-white whitespace-nowrap">Leave Allocation Summary</h2>
+        <div className="relative shrink-0">
           <button
             onClick={() => setSelectOpen(!selectOpen)}
-            className="flex items-center gap-1.5 text-xs font-bold bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700 px-3 py-1.5 rounded-lg text-gray-600 dark:text-gray-300 outline-none cursor-pointer transition-all"
+            className="flex items-center gap-1.5 text-xs font-bold bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700 px-3 py-1.5 rounded-lg text-gray-600 dark:text-gray-300 outline-none cursor-pointer transition-all whitespace-nowrap"
           >
             {filter === 'this_month' && 'This Month'}
             {filter === 'last_month' && 'Last Month'}

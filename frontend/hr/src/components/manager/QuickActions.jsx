@@ -1,50 +1,154 @@
-import React from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
 import { toast } from 'react-hot-toast';
-import { CheckCircle, Users, Calendar, Clock, Download, FileSpreadsheet } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { CheckCircle, Users, Download, FileSpreadsheet } from 'lucide-react';
+import ExportFilterModal from '@shared/components/ExportFilterModal';
 
 const QuickActions = () => {
-  const navigate = useNavigate();
+  const [hoveredIndex, setHoveredIndex] = useState(null);
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [exportFormat, setExportFormat] = useState('pdf');
+  const [teamLeaves, setTeamLeaves] = useState([]);
+  const [isLoadingLeaves, setIsLoadingLeaves] = useState(false);
 
   const getAuthToken = () => sessionStorage.getItem('token') || localStorage.getItem('token') || '';
 
-  const handleExport = async (format) => {
-    const loadingToast = toast.loading(`Generating ${format.toUpperCase()} report...`);
+  const fetchTeamLeaves = async () => {
     try {
+      setIsLoadingLeaves(true);
       const token = getAuthToken();
-      const response = await axios.get(`/api/leaves/manager/export?format=${format}`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-        responseType: 'blob', // crucial for file downloads
+      const response = await axios.get('/api/leaves/manager/pending?status=all&page=1&limit=2000', {
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
       });
-
-      const extension = format === 'pdf' ? 'pdf' : (format === 'xlsx' || format === 'excel' ? 'xlsx' : 'csv');
-      const mimeType = format === 'pdf'
-        ? 'application/pdf'
-        : (format === 'xlsx' || format === 'excel'
-            ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-            : 'text/csv');
-
-      const blob = new Blob([response.data], { type: mimeType });
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', `team_leaves_report.${extension}`);
-      document.body.appendChild(link);
-      link.click();
-      link.parentNode.removeChild(link);
-      window.URL.revokeObjectURL(url);
-
-      toast.dismiss(loadingToast);
-      toast.success(`${format.toUpperCase()} report downloaded successfully!`);
+      if (response.data?.data && Array.isArray(response.data.data)) {
+        setTeamLeaves(response.data.data);
+      }
     } catch (error) {
-      toast.dismiss(loadingToast);
-      console.error('Export error:', error);
-      toast.error('Failed to download report');
+      console.error('Failed to fetch team leaves for export:', error);
+    } finally {
+      setIsLoadingLeaves(false);
     }
   };
 
-  const [hoveredIndex, setHoveredIndex] = React.useState(null);
+  useEffect(() => {
+    fetchTeamLeaves();
+  }, []);
+
+  const openExportModal = (format) => {
+    setExportFormat(format);
+    setIsExportModalOpen(true);
+    if (teamLeaves.length === 0) {
+      fetchTeamLeaves();
+    }
+  };
+
+  const uniqueEmployees = useMemo(() => {
+    const map = new Map();
+    teamLeaves.forEach(item => {
+      const name = item.user?.name || item.employeeName;
+      if (name && !map.has(name)) {
+        map.set(name, { label: name, value: name });
+      }
+    });
+    return Array.from(map.values());
+  }, [teamLeaves]);
+
+  const exportColumns = [
+    { 
+      key: 'employee', 
+      label: 'Employee Name', 
+      defaultSelected: true, 
+      getValue: (item) => item.user?.name || item.employeeName || 'Unknown' 
+    },
+    { 
+      key: 'email', 
+      label: 'Email', 
+      defaultSelected: false, 
+      getValue: (item) => item.user?.email || '-' 
+    },
+    { 
+      key: 'department', 
+      label: 'Department', 
+      defaultSelected: true, 
+      getValue: (item) => item.user?.department || item.department || 'General' 
+    },
+    { 
+      key: 'leaveType', 
+      label: 'Leave Type', 
+      defaultSelected: true, 
+      getValue: (item) => item.leaveType || '-' 
+    },
+    { 
+      key: 'status', 
+      label: 'Status', 
+      defaultSelected: true, 
+      getValue: (item) => {
+        const s = item.status || '';
+        if (s === 'cancellation_pending') return 'Cancellation Pending';
+        return s ? (s.charAt(0).toUpperCase() + s.slice(1)) : '-';
+      }
+    },
+    { 
+      key: 'startDate', 
+      label: 'Start Date', 
+      defaultSelected: true, 
+      getValue: (item) => item.startDate ? new Date(item.startDate).toISOString().split('T')[0] : '-' 
+    },
+    { 
+      key: 'endDate', 
+      label: 'End Date', 
+      defaultSelected: true, 
+      getValue: (item) => item.endDate ? new Date(item.endDate).toISOString().split('T')[0] : '-' 
+    },
+    { 
+      key: 'totalDays', 
+      label: 'Duration (Days)', 
+      defaultSelected: true, 
+      getValue: (item) => item.totalDays ?? 1 
+    },
+    { 
+      key: 'reason', 
+      label: 'Reason', 
+      defaultSelected: true, 
+      getValue: (item) => item.reason || '-' 
+    },
+    { 
+      key: 'createdAt', 
+      label: 'Applied Date', 
+      defaultSelected: true, 
+      getValue: (item) => item.createdAt ? new Date(item.createdAt).toISOString().split('T')[0] : '-' 
+    }
+  ];
+
+  const exportFilters = [
+    {
+      key: 'status',
+      label: 'Status',
+      options: [
+        { label: 'Pending', value: 'pending' },
+        { label: 'Approved', value: 'approved' },
+        { label: 'Rejected', value: 'rejected' },
+        { label: 'Cancelled', value: 'cancelled' },
+        { label: 'Cancellation Pending', value: 'cancellation_pending' }
+      ],
+      getItemValue: (item) => item.status
+    },
+    {
+      key: 'leaveType',
+      label: 'Leave Type',
+      options: [
+        { label: 'Casual Leave (CL)', value: 'Casual Leave' },
+        { label: 'Sick Leave (SL)', value: 'Sick Leave' }
+      ],
+      getItemValue: (item) => item.leaveType
+    },
+    ...(uniqueEmployees.length > 0 ? [{
+      key: 'employee',
+      label: 'Employee',
+      options: uniqueEmployees,
+      getItemValue: (item) => item.user?.name || item.employeeName
+    }] : [])
+  ];
 
   const actions = [
     { 
@@ -86,7 +190,7 @@ const QuickActions = () => {
       borderColor: '#059669', 
       glowColor: 'rgba(5, 150, 105, 0.45)', 
       bgIcon: 'bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-100 dark:border-emerald-900/40', 
-      onClick: () => handleExport('pdf') 
+      onClick: () => openExportModal('pdf') 
     },
     { 
       label: 'Export to Excel', 
@@ -95,7 +199,7 @@ const QuickActions = () => {
       borderColor: '#059669', 
       glowColor: 'rgba(5, 150, 105, 0.45)', 
       bgIcon: 'bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-100 dark:border-emerald-900/40', 
-      onClick: () => handleExport('xlsx') 
+      onClick: () => openExportModal('xlsx') 
     }
   ];
 
@@ -126,6 +230,20 @@ const QuickActions = () => {
           );
         })}
       </div>
+
+      {/* Export Filter Modal */}
+      <ExportFilterModal
+        isOpen={isExportModalOpen}
+        onClose={() => setIsExportModalOpen(false)}
+        title="Export Team Leaves Report"
+        subtitle="Filter team leaves by date range, status, leave type, or employee and select columns before exporting."
+        allData={teamLeaves}
+        filteredData={teamLeaves}
+        columns={exportColumns}
+        customFilters={exportFilters}
+        defaultFilename="team_leaves_report"
+        initialFormat={exportFormat}
+      />
     </div>
   );
 };

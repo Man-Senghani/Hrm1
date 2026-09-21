@@ -36,8 +36,7 @@ const MyEvents = lazy(() => import('./pages/MyEvents'));
 const Notifications = lazy(() => import('./pages/Notifications'));
 const Screenshots = lazy(() => import('./pages/Screenshots'));
 const Profile = lazy(() => import('@shared/pages/Profile'));
-const Settings = lazy(() => import('@shared/pages/Settings'));
-const Chat = lazy(() => import('@shared/pages/Chat'));
+const NotFound = lazy(() => import('@shared/pages/NotFound'));
 
 const RouteLoadingFallback = () => (
   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh' }}>
@@ -86,7 +85,6 @@ function App() {
 
   const navItems = [
     { label: 'Notifications', icon: Bell, path: '/notifications' },
-    { label: 'My Team', icon: Users, path: '/manager' },
     { label: 'Attendance', icon: CalendarDays, path: '/attendance' },
     { label: 'Leave Management', icon: ClipboardList, path: '/leave' },
     { label: 'Daily Report', icon: FileText, path: '/daily-report' },
@@ -147,45 +145,39 @@ function App() {
       >
         <Suspense fallback={<RouteLoadingFallback />}>
           <Routes>
-            <Route path="/" element={<Employees />} />
-            <Route path="/dashboard" element={<Employees />} />
-            <Route path="/manager" element={<Employees />} />
-            <Route path="/manager/dashboard" element={<Employees />} />
+            <Route path="/" element={<Navigate to="/attendance" replace />} />
+            <Route path="/dashboard" element={<Navigate to="/attendance" replace />} />
+            <Route path="/manager" element={<Navigate to="/attendance" replace />} />
+            <Route path="/manager/dashboard" element={<Navigate to="/attendance" replace />} />
 
-            <Route path="/employees" element={<Employees />} />
-            <Route path="/manager/employees" element={<Employees />} />
-            <Route path="/employees/view/:id" element={<EmployeeDetail />} />
-            <Route path="/manager/employees/view/:id" element={<EmployeeDetail />} />
-            <Route path="/manager/manager/employees/view/:id" element={<EmployeeDetail />} />
+            {/* Attendance */}
             <Route path="/attendance" element={<Attendance />} />
             <Route path="/manager/attendance" element={<Attendance />} />
+
+            {/* Daily Report */}
             <Route path="/daily-report" element={<DailyReport />} />
             <Route path="/manager/daily-report" element={<DailyReport />} />
-            <Route path="/tasks" element={<ManagerTasks />} />
-            <Route path="/manager/tasks" element={<ManagerTasks />} />
-            <Route path="/tasks/create" element={<TaskCreate />} />
-            <Route path="/manager/tasks/create" element={<TaskCreate />} />
-            <Route path="/projects" element={<ManagerProjects />} />
-            <Route path="/manager/projects" element={<ManagerProjects />} />
+
+            {/* Leave Management */}
             <Route path="/leave" element={<LeaveManagement />} />
             <Route path="/manager/leave" element={<LeaveManagement />} />
             <Route path="/leaves" element={<LeaveManagement />} />
             <Route path="/manager/leaves" element={<LeaveManagement />} />
-            <Route path="/holidays" element={<Holidays />} />
-            <Route path="/manager/holidays" element={<Holidays />} />
-            <Route path="/events" element={<MyEvents />} />
-            <Route path="/manager/events" element={<MyEvents />} />
+
+            {/* Notifications */}
             <Route path="/notifications" element={<Notifications />} />
             <Route path="/manager/notifications" element={<Notifications />} />
+
+            {/* Screenshots */}
             <Route path="/screenshots" element={<Screenshots />} />
             <Route path="/manager/screenshots" element={<Screenshots />} />
-            <Route path="/chat" element={<Chat />} />
-            <Route path="/manager/chat" element={<Chat />} />
+
+            {/* Profile */}
             <Route path="/profile" element={<Profile />} />
             <Route path="/manager/profile" element={<Profile />} />
-            <Route path="/settings" element={<Settings />} />
-            <Route path="/manager/settings" element={<Settings />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
+
+            {/* Fallback 404 for unlisted/hidden routes like /tasks or /manager/tasks */}
+            <Route path="*" element={<NotFound role="manager" />} />
           </Routes>
         </Suspense>
       </MainLayout>

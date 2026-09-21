@@ -869,19 +869,12 @@ const MeetingRequestsTable = ({
               </form>
             </div>
 
-            <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-[#e2eae7] dark:border-[#133029]">
-              <button
-                type="button"
-                onClick={() => setIsNewRequestOpen(false)}
-                className="px-5 py-2.5 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[#071e17] border border-[#e2eae7] dark:border-[#133029] rounded-xl transition-all cursor-pointer"
-              >
-                Cancel
-              </button>
+            <div className="pt-4 border-t border-[#e2eae7] dark:border-[#133029]">
               <button
                 type="submit"
                 form="offline-request-form"
                 disabled={newSubmitting}
-                className="px-5 py-2.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-md shadow-emerald-600/20 transition-all cursor-pointer flex items-center gap-2 disabled:opacity-50"
+                className="w-full py-2.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-md shadow-emerald-600/20 transition-all cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
               >
                 <Check size={15} />
                 <span>{newSubmitting ? 'Submitting...' : 'Submit Request'}</span>

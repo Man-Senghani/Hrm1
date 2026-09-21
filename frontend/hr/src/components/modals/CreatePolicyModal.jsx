@@ -223,9 +223,8 @@ const CreatePolicyModal = ({ isOpen, onClose, onSuccess, policyToEdit = null }) 
             </div>
           </div>
           
-          <div className="pt-4 border-t border-gray-200 dark:border-gray-800 flex justify-end gap-3 mt-4">
-            <button type="button" onClick={onClose} className="px-4 py-2 rounded-xl font-bold text-gray-500 hover:text-gray-700 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 text-xs transition-colors cursor-pointer">Cancel</button>
-            <button type="submit" disabled={loading} className="px-4 py-2 rounded-xl font-bold text-white bg-indigo-600 hover:bg-indigo-700 text-xs transition-colors cursor-pointer disabled:opacity-50">
+          <div className="pt-4 border-t border-gray-200 dark:border-gray-800 mt-4">
+            <button type="submit" disabled={loading} className="w-full py-2.5 rounded-xl font-bold text-white bg-indigo-600 hover:bg-indigo-700 text-xs transition-colors cursor-pointer disabled:opacity-50">
               {loading ? (policyToEdit ? 'Updating...' : 'Creating...') : (policyToEdit ? 'Update Policy' : 'Create Policy')}
             </button>
           </div>
