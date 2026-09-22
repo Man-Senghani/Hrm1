@@ -15,12 +15,14 @@ import {
 } from 'lucide-react';
 
 import { API_BASE_URL } from '../services/api';
+import { getDesktopTrackerConfig } from '../services/desktopTrackerService';
 
 const DesktopAppRequiredModal = ({ isOpen, onClose, onRetry, isRetrying = false }) => {
+  const trackerConfig = getDesktopTrackerConfig();
   const [appInfo, setAppInfo] = useState({
-    version: '1.3.7',
+    version: trackerConfig.isStaging ? '1.0.0' : '1.4.1',
     platform: 'Windows (x64)',
-    downloadUrl: '/api/desktop-app/download'
+    downloadUrl: trackerConfig.downloadUrl
   });
   const [downloading, setDownloading] = useState(false);
   const token = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('token') : '';
@@ -28,7 +30,7 @@ const DesktopAppRequiredModal = ({ isOpen, onClose, onRetry, isRetrying = false 
   useEffect(() => {
     if (isOpen) {
       // Fetch latest app release info dynamically from backend
-      axios.get('/api/desktop-app/info')
+      axios.get(trackerConfig.infoUrl)
         .then(res => {
           if (res.data && res.data.success) {
             setAppInfo(res.data);
@@ -45,12 +47,12 @@ const DesktopAppRequiredModal = ({ isOpen, onClose, onRetry, isRetrying = false 
   const handleLaunchApp = () => {
     const userToken = token || (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('token') : '');
     const serverHost = API_BASE_URL || window.location.origin;
-    window.location.href = `fluidhr-tracker://start?token=${encodeURIComponent(userToken || '')}&server=${encodeURIComponent(serverHost)}`;
+    window.location.href = `${trackerConfig.protocol}://start?token=${encodeURIComponent(userToken || '')}&server=${encodeURIComponent(serverHost)}`;
   };
 
   const handleDownloadApp = () => {
     setDownloading(true);
-    const targetUrl = appInfo.downloadUrl || '/api/desktop-app/download';
+    const targetUrl = appInfo.downloadUrl || trackerConfig.downloadUrl;
     const link = document.createElement('a');
     link.href = targetUrl;
     link.target = '_blank';
@@ -104,11 +106,11 @@ const DesktopAppRequiredModal = ({ isOpen, onClose, onRetry, isRetrying = false 
                 Desktop App Required
               </h3>
               <span className="inline-flex items-center gap-1 text-[10px] font-bold tracking-wide uppercase text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800/50 px-2 py-0.5 rounded-md">
-                <AlertTriangle size={11} /> FluidHR Tracker
+                <AlertTriangle size={11} /> {trackerConfig.appName}
               </span>
             </div>
             <p className="text-xs font-semibold text-rose-600 dark:text-rose-400 mt-1">
-              FluidHR Desktop Application is not running on your computer.
+              {trackerConfig.appName} is not running on your computer.
             </p>
           </div>
         </div>
@@ -182,7 +184,7 @@ const DesktopAppRequiredModal = ({ isOpen, onClose, onRetry, isRetrying = false 
             className="w-full py-3.5 px-5 rounded-2xl font-bold text-sm bg-gradient-to-r from-[#00a76b] to-[#008f5b] hover:from-[#008f5b] hover:to-[#007a4e] text-white flex items-center justify-center gap-2.5 shadow-lg shadow-emerald-500/20 hover:shadow-emerald-500/30 transition-all cursor-pointer active:scale-[0.98]"
           >
             <ExternalLink size={16} />
-            <span>Launch FluidHR Desktop App</span>
+            <span>Launch {trackerConfig.appName}</span>
           </button>
 
           <div className="grid grid-cols-2 gap-2.5 pt-1">

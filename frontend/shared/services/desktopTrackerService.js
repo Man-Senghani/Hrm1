@@ -5,7 +5,30 @@
 
 import { API_BASE_URL } from './api';
 
-const LOCAL_BRIDGE_URL = 'http://127.0.0.1:28734';
+/**
+ * Detects if the current environment is Staging.
+ */
+export const isStagingEnvironment = () => {
+  if (typeof window === 'undefined') return false;
+  const host = window.location.hostname.toLowerCase();
+  const port = window.location.port;
+  return host.includes('staging') || port === '5174';
+};
+
+/**
+ * Returns configuration tailored to the active environment (Staging vs Production).
+ */
+export const getDesktopTrackerConfig = () => {
+  const isStaging = isStagingEnvironment();
+  return {
+    isStaging,
+    appName: isStaging ? 'FluidHR Tracker (Staging)' : 'FluidHR Tracker',
+    bridgeUrl: isStaging ? 'http://127.0.0.1:28735' : 'http://127.0.0.1:28734',
+    protocol: isStaging ? 'fluidhr-staging-tracker' : 'fluidhr-tracker',
+    downloadUrl: isStaging ? '/api/desktop-app/download?env=staging' : '/api/desktop-app/download',
+    infoUrl: isStaging ? '/api/desktop-app/info?env=staging' : '/api/desktop-app/info'
+  };
+};
 
 /**
  * Pings the local desktop tracker application to see if it's currently running.
@@ -13,11 +36,12 @@ const LOCAL_BRIDGE_URL = 'http://127.0.0.1:28734';
  * @returns {Promise<boolean>}
  */
 export const pingDesktopTracker = async (timeoutMs = 800) => {
+  const config = getDesktopTrackerConfig();
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const res = await fetch(`${LOCAL_BRIDGE_URL}/ping`, {
+    const res = await fetch(`${config.bridgeUrl}/ping`, {
       method: 'GET',
       signal: controller.signal,
       headers: { 'Accept': 'application/json' }
@@ -36,16 +60,18 @@ export const pingDesktopTracker = async (timeoutMs = 800) => {
 
 /**
  * Signals the desktop tracker application to start tracking.
- * Automatically attempts local HTTP bridge and falls back to custom URI scheme (fluidhr-tracker://).
+ * Automatically attempts local HTTP bridge and falls back to custom URI scheme.
  * @param {string} token - User's auth token
- * @returns {Promise<{ success: boolean, method?: string, error?: string }>}
+ * @returns {Promise<{ success: boolean, method?: string, error?: string, message?: string }>}
  */
 export const startDesktopTracker = async (token) => {
+  const config = getDesktopTrackerConfig();
+
   // 1. Try local HTTP bridge (if app is already running)
   const isRunning = await pingDesktopTracker(600);
   if (isRunning) {
     try {
-      const res = await fetch(`${LOCAL_BRIDGE_URL}/start?token=${encodeURIComponent(token || '')}`, {
+      const res = await fetch(`${config.bridgeUrl}/start?token=${encodeURIComponent(token || '')}`, {
         method: 'GET',
         headers: { 'Accept': 'application/json' }
       });
@@ -70,7 +96,7 @@ export const startDesktopTracker = async (token) => {
 
     // Launch custom protocol with server origin
     const serverHost = API_BASE_URL || window.location.origin;
-    const protocolUrl = `fluidhr-tracker://start?token=${encodeURIComponent(token || '')}&server=${encodeURIComponent(serverHost)}`;
+    const protocolUrl = `${config.protocol}://start?token=${encodeURIComponent(token || '')}&server=${encodeURIComponent(serverHost)}`;
     
     // Modern browsers require window.location or top-level navigation for custom protocols
     try {
@@ -99,7 +125,7 @@ export const startDesktopTracker = async (token) => {
           hasResolved = true;
           // Send start command to newly launched app
           try {
-            await fetch(`${LOCAL_BRIDGE_URL}/start?token=${encodeURIComponent(token || '')}`);
+            await fetch(`${config.bridgeUrl}/start?token=${encodeURIComponent(token || '')}`);
           } catch (_) {}
           resolve({ success: true, method: 'deep_link_launched' });
         }
@@ -111,7 +137,7 @@ export const startDesktopTracker = async (token) => {
           resolve({ 
             success: false, 
             error: 'NOT_FOUND',
-            message: 'FluidHR Desktop Application is not running or not installed on your system.' 
+            message: `${config.appName} is not running or not installed on your system.` 
           });
         }
       }
@@ -124,11 +150,13 @@ export const startDesktopTracker = async (token) => {
  * @returns {Promise<{ success: boolean, method?: string, message?: string }>}
  */
 export const stopDesktopTracker = async () => {
+  const config = getDesktopTrackerConfig();
+
   // 1. Try local HTTP bridge if running
   const isRunning = await pingDesktopTracker(600);
   if (isRunning) {
     try {
-      const res = await fetch(`${LOCAL_BRIDGE_URL}/stop`, {
+      const res = await fetch(`${config.bridgeUrl}/stop`, {
         method: 'GET',
         headers: { 'Accept': 'application/json' }
       });
@@ -141,10 +169,10 @@ export const stopDesktopTracker = async () => {
   // 2. Fallback to deep link protocol to focus and prompt confirmation in Desktop App
   try {
     const serverHost = API_BASE_URL || window.location.origin;
-    const protocolUrl = `fluidhr-tracker://stop?action=stop&server=${encodeURIComponent(serverHost)}`;
+    const protocolUrl = `${config.protocol}://stop?action=stop&server=${encodeURIComponent(serverHost)}`;
     window.location.assign(protocolUrl);
     return { success: true, method: 'deep_link' };
   } catch (err) {
-    return { success: false, error: err.message, message: 'Could not open Desktop Application.' };
+    return { success: false, error: err.message, message: `Could not open ${config.appName}.` };
   }
 };

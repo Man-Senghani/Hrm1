@@ -5,9 +5,11 @@ import { ShieldCheck, ArrowRight, Lock, Mail, AlertCircle, Zap, LogOut, UserChec
 import { EntryButton, EntryInput, EntrySelect } from '../components/EntryPrimitives';
 
 import { API_BASE_URL } from '../services/api';
+import { getDesktopTrackerConfig } from '../services/desktopTrackerService';
 
 const Login = () => {
   const navigate = useNavigate();
+  const trackerConfig = getDesktopTrackerConfig();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -24,9 +26,9 @@ const Login = () => {
       setShowThankYou(true);
       const serverHost = API_BASE_URL || window.location.origin;
       try {
-        fetch(`http://127.0.0.1:28734/auth?token=${encodeURIComponent(authToken)}&server=${encodeURIComponent(serverHost)}`, { mode: 'no-cors' }).catch(() => {});
+        fetch(`${trackerConfig.bridgeUrl}/auth?token=${encodeURIComponent(authToken)}&server=${encodeURIComponent(serverHost)}`, { mode: 'no-cors' }).catch(() => {});
       } catch (_) {}
-      window.location.href = `fluidhr-tracker://auth?token=${encodeURIComponent(authToken)}&server=${encodeURIComponent(serverHost)}`;
+      window.location.href = `${trackerConfig.protocol}://auth?token=${encodeURIComponent(authToken)}&server=${encodeURIComponent(serverHost)}`;
       return;
     }
 
@@ -225,21 +227,21 @@ const Login = () => {
                 </h1>
                 
                 <p className="text-[14px] text-[#36342e] font-medium leading-relaxed mb-6">
-                   Thank you for logging in. The **FluidHR Tracker** desktop app should launch automatically.
+                   Thank you for logging in. The **{trackerConfig.appName}** desktop app should launch automatically.
                 </p>
 
                 <div className="space-y-4">
                    <a 
-                     href={`fluidhr-tracker://auth?token=${encodeURIComponent(token)}&server=${encodeURIComponent(API_BASE_URL || window.location.origin)}`}
+                     href={`${trackerConfig.protocol}://auth?token=${encodeURIComponent(token)}&server=${encodeURIComponent(API_BASE_URL || window.location.origin)}`}
                      onClick={() => {
                        try {
                          const serverHost = API_BASE_URL || window.location.origin;
-                         fetch(`http://127.0.0.1:28734/auth?token=${encodeURIComponent(token)}&server=${encodeURIComponent(serverHost)}`, { mode: 'no-cors' }).catch(() => {});
+                         fetch(`${trackerConfig.bridgeUrl}/auth?token=${encodeURIComponent(token)}&server=${encodeURIComponent(serverHost)}`, { mode: 'no-cors' }).catch(() => {});
                        } catch (_) {}
                      }}
                      className="h-[48px] w-full text-[15px] font-bold bg-[#00a76b] text-[#fffefb] hover:bg-[#201515] rounded-[4px] flex items-center justify-center gap-2 transition-all shadow-sm"
                    >
-                      Open FluidHR Tracker <ArrowRight size={20} />
+                      Open {trackerConfig.appName} <ArrowRight size={20} />
                    </a>
                    
                    <button 

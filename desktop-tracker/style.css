@@ -900,3 +900,18 @@ body {
     border-radius: 10px !important;
     font-size: 12px !important;
 }
+
+.staging-pill {
+    font-size: 8.5px;
+    font-weight: 900;
+    background: #f59e0b;
+    color: #1a1500;
+    padding: 2px 7px;
+    border-radius: 6px;
+    margin-left: 6px;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    display: inline-block;
+    vertical-align: middle;
+    box-shadow: 0 1px 3px rgba(245, 158, 11, 0.4);
+}

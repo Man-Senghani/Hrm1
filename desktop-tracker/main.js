@@ -4,17 +4,53 @@ const Store = require('electron-store');
 const { autoUpdater } = require('electron-updater');
 const screenshot = require('screenshot-desktop');
 
+// ── App & Environment Configuration ──
+let trackerConfig = {
+  environment: 'production',
+  appId: 'com.fluidhr.tracker',
+  appName: 'FluidHR Tracker',
+  productName: 'FluidHR Tracker',
+  protocol: 'fluidhr-tracker',
+  bridgePort: 28734,
+  defaultServer: 'https://hrm.fluidhr.in',
+  version: '1.4.1'
+};
+
+try {
+  const customConfig = require('./tracker-config.json');
+  trackerConfig = { ...trackerConfig, ...customConfig };
+} catch (_) {}
+
+if (process.env.TRACKER_ENV === 'staging' || app.getName().toLowerCase().includes('staging')) {
+  trackerConfig = {
+    ...trackerConfig,
+    environment: 'staging',
+    appId: 'com.fluidhr.tracker.staging',
+    appName: 'FluidHR Tracker (Staging)',
+    productName: 'FluidHR Tracker (Staging)',
+    protocol: 'fluidhr-staging-tracker',
+    bridgePort: 28735,
+    defaultServer: 'https://staging.fluidhr.in',
+    version: '1.0.0'
+  };
+}
+
+const isStaging = trackerConfig.environment === 'staging';
+
+// Set isolated user data directory so tokens & cache never conflict between staging and production
+app.setPath('userData', path.join(app.getPath('appData'), isStaging ? 'fluidhr-desktop-tracker-staging' : 'fluidhr-desktop-tracker'));
+
 if (process.platform === 'win32') {
-  app.setAppUserModelId('com.fluidhr.tracker');
+  app.setAppUserModelId(trackerConfig.appId);
 }
 
 // Register custom protocol client
 if (process.defaultApp) {
   if (process.argv.length >= 2) {
-    app.setAsDefaultProtocolClient('fluidhr-tracker', process.execPath, [path.resolve(process.argv[1])]);
+    app.setAsDefaultProtocolClient(trackerConfig.protocol, process.execPath, [path.resolve(process.argv[1])]);
   }
 } else {
-  app.setAsDefaultProtocolClient('fluidhr-tracker');
+  app.setAsDefaultProtocolClient(trackerConfig.protocol);
 }
 
 // Window transparency fixes for Windows 11
@@ -31,7 +67,8 @@ let localServer = null;
 function handleDeepLink(urlStr) {
   try {
     const parsedUrl = new URL(urlStr);
-    if (parsedUrl.protocol === 'fluidhr-tracker:') {
+    const validProtocols = [`${trackerConfig.protocol}:`, 'fluidhr-tracker:', 'fluidhr-staging-tracker:'];
+    if (validProtocols.includes(parsedUrl.protocol)) {
       const token = parsedUrl.searchParams.get('token');
       const server = parsedUrl.searchParams.get('server');
       let action = parsedUrl.searchParams.get('action');
@@ -91,9 +128,9 @@ function handleDeepLink(urlStr) {
 
 // ── LOCAL HTTP BRIDGE SERVER (for instant browser-to-desktop communication) ──
 function startLocalBridgeServer() {
-  const PORT = 28734;
+  const PORT = trackerConfig.bridgePort;
   localServer = http.createServer((req, res) => {
-    // Set standard CORS headers so web app (http://localhost:4000) can interact seamlessly
+    // Set standard CORS headers so web app can interact seamlessly
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
@@ -112,8 +149,9 @@ function startLocalBridgeServer() {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({
           ok: true,
-          app: 'FluidHR Tracker',
-          version: app.getVersion()
+          app: trackerConfig.appName,
+          environment: trackerConfig.environment,
+          version: trackerConfig.version || app.getVersion()
         }));
         return;
       }
@@ -180,7 +218,7 @@ function startLocalBridgeServer() {
   });
 
   localServer.on('error', (err) => {
-    console.warn('[Local Server Error] Could not bind to port 28734:', err.message);
+    console.warn(`[Local Server Error] Could not bind to port ${PORT}:`, err.message);
   });
 
   localServer.listen(PORT, '127.0.0.1', () => {
@@ -253,7 +291,11 @@ if (!gotTheLock) {
       mainWindow.setAlwaysOnTop(true);
       setTimeout(() => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.setAlwaysOnTop(false); }, 800);
       
-      const url = commandLine.find(arg => arg.startsWith('fluidhr-tracker://'));
+      const url = commandLine.find(arg => 
+        arg.startsWith(`${trackerConfig.protocol}://`) || 
+        arg.startsWith('fluidhr-staging-tracker://') || 
+        arg.startsWith('fluidhr-tracker://')
+      );
       if (url) {
         handleDeepLink(url);
       }
@@ -261,7 +303,11 @@ if (!gotTheLock) {
   });
 
   app.whenReady().then(() => {
-    const url = process.argv.find(arg => arg.startsWith('fluidhr-tracker://'));
+    const url = process.argv.find(arg => 
+      arg.startsWith(`${trackerConfig.protocol}://`) || 
+      arg.startsWith('fluidhr-staging-tracker://') || 
+      arg.startsWith('fluidhr-tracker://')
+    );
     if (url) {
       app.readyUrl = url;
     }
@@ -325,7 +371,7 @@ if (!gotTheLock) {
 async function autoPauseTrackingOnExit() {
   try {
     const token = store.get('authToken');
-    let serverHost = store.get('serverHost') || 'http://hrm.aupanishad.tech';
+    let serverHost = store.get('serverHost') || trackerConfig.defaultServer;
     if (!token) return;
     console.log('[AUTO PAUSE] Sending pause signal before exit/shutdown...');
     const controller = new AbortController();
@@ -361,7 +407,11 @@ app.on('window-all-closed', () => {
 
 // ── IPC HANDLERS ─────────────────────────────────────────
 ipcMain.handle('get-app-version', () => {
-  return app.getVersion();
+  return trackerConfig.version || app.getVersion();
+});
+
+ipcMain.handle('get-app-config', () => {
+  return trackerConfig;
 });
 
 ipcMain.handle('open-external', (event, url) => {

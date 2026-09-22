@@ -94,6 +94,23 @@ const getLatestReleaseInfo = async () => {
  */
 router.get('/info', async (req, res) => {
   try {
+    const isStaging = req.query.env === 'staging' || (req.headers.host && req.headers.host.includes('staging'));
+    if (isStaging) {
+      return res.json({
+        success: true,
+        version: '1.0.0',
+        name: 'FluidHR Desktop Tracker (Staging)',
+        description: 'Official FluidHR Desktop Tracker for Staging Testing',
+        sizeMb: '76.9',
+        platform: 'Windows (x64 / x86)',
+        minOs: 'Windows 10 / 11',
+        downloadUrl: '/api/desktop-app/download?env=staging',
+        installerName: 'FluidHR-Tracker-Staging-Setup-1.0.0.exe',
+        releaseDate: new Date().toISOString().split('T')[0],
+        directDownloadUrl: '/api/desktop-app/download?env=staging'
+      });
+    }
+
     const info = await getLatestReleaseInfo();
     return res.json({
       success: true,
@@ -110,27 +127,29 @@ router.get('/info', async (req, res) => {
  * @desc Download latest official .exe installer (redirects or serves binary)
  */
 router.get('/download', async (req, res) => {
-  const pkg = getLocalPackageInfo();
-  const version = pkg.version || '1.1.1';
+  const isStaging = req.query.env === 'staging' || (req.headers.host && req.headers.host.includes('staging'));
+  const version = isStaging ? '1.0.0' : (getLocalPackageInfo().version || '1.4.1');
 
-  // 1. Check if a local build exists in desktop-tracker/dist/
-  const distDir = path.resolve(__dirname, '../../desktop-tracker/dist');
-  if (fs.existsSync(distDir)) {
-    const files = fs.readdirSync(distDir);
-    const exeFile = files.find(f => f.endsWith('.exe') && !f.includes('builder'));
-    if (exeFile) {
-      const filePath = path.join(distDir, exeFile);
-      res.setHeader('Content-Disposition', `attachment; filename="${exeFile}"`);
-      res.setHeader('Content-Type', 'application/octet-stream');
-      return res.sendFile(filePath);
-    }
-  }
-
-  // 2. Check if a custom upload exists in backend/uploads/desktop/
+  // 1. Check if a custom upload exists in backend/uploads/desktop/
   const uploadsDesktopDir = path.resolve(__dirname, '../uploads/desktop');
   if (fs.existsSync(uploadsDesktopDir)) {
+    if (isStaging) {
+      const preferredStaging = ['FluidHR-Tracker-Staging-Setup-1.0.0.exe', 'FluidHR-Tracker-Staging-Setup.exe'];
+      for (const candidate of preferredStaging) {
+        const fullPath = path.join(uploadsDesktopDir, candidate);
+        if (fs.existsSync(fullPath)) {
+          res.setHeader('Content-Disposition', `attachment; filename="${candidate}"`);
+          res.setHeader('Content-Type', 'application/octet-stream');
+          return res.sendFile(fullPath);
+        }
+      }
+    }
     const files = fs.readdirSync(uploadsDesktopDir);
-    const exeFile = files.find(f => f.endsWith('.exe'));
+    const exeFile = files.find(f => {
+      if (!f.endsWith('.exe')) return false;
+      if (isStaging) return f.toLowerCase().includes('staging');
+      return !f.toLowerCase().includes('staging');
+    });
     if (exeFile) {
       const filePath = path.join(uploadsDesktopDir, exeFile);
       res.setHeader('Content-Disposition', `attachment; filename="${exeFile}"`);
@@ -139,9 +158,39 @@ router.get('/download', async (req, res) => {
     }
   }
 
-  // 3. Otherwise redirect to official latest GitHub Release binary installer (~77MB .exe)
+  // 2. Check if a local build exists in desktop-tracker/dist/
+  const distDir = path.resolve(__dirname, '../../desktop-tracker/dist');
+  if (fs.existsSync(distDir)) {
+    if (isStaging) {
+      const preferredStaging = ['FluidHR-Tracker-Staging-Setup-1.0.0.exe', 'FluidHR-Tracker-Staging-Setup.exe'];
+      for (const candidate of preferredStaging) {
+        const fullPath = path.join(distDir, candidate);
+        if (fs.existsSync(fullPath)) {
+          res.setHeader('Content-Disposition', `attachment; filename="${candidate}"`);
+          res.setHeader('Content-Type', 'application/octet-stream');
+          return res.sendFile(fullPath);
+        }
+      }
+    }
+    const files = fs.readdirSync(distDir);
+    const exeFile = files.find(f => {
+      if (!f.endsWith('.exe') || f.includes('builder')) return false;
+      if (isStaging) return f.toLowerCase().includes('staging');
+      return !f.toLowerCase().includes('staging');
+    });
+    if (exeFile) {
+      const filePath = path.join(distDir, exeFile);
+      res.setHeader('Content-Disposition', `attachment; filename="${exeFile}"`);
+      res.setHeader('Content-Type', 'application/octet-stream');
+      return res.sendFile(filePath);
+    }
+  }
+
+  // 3. Otherwise redirect to official latest GitHub Release binary installer
   const releaseInfo = await getLatestReleaseInfo();
-  const directExeUrl = releaseInfo.downloadUrl;
+  const directExeUrl = isStaging 
+    ? `https://github.com/mansenghani/Hrm1/releases/download/v1.0.0-staging/FluidHR-Tracker-Staging-Setup-1.0.0.exe`
+    : releaseInfo.downloadUrl;
   return res.redirect(302, directExeUrl);
 });
 

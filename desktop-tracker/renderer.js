@@ -71,10 +71,10 @@ const IDLE_REMINDER_MS = 3 * 60 * 1000; // 3 minutes
 let socket = null;
 
 // ── Config ────────────────────────────────────────────────
-const PRODUCTION_BACKEND_URL = 'https://hrm.aupanishad.tech';
-const PRODUCTION_FRONTEND_URL = 'https://hrm.aupanishad.tech';
-const STAGING_BACKEND_URL = 'https://hrm-staging.aupanishad.tech';
-const STAGING_FRONTEND_URL = 'https://hrm-staging.aupanishad.tech';
+const PRODUCTION_BACKEND_URL = 'https://hrm.fluidhr.in';
+const PRODUCTION_FRONTEND_URL = 'https://hrm.fluidhr.in';
+const STAGING_BACKEND_URL = 'https://staging.fluidhr.in';
+const STAGING_FRONTEND_URL = 'https://staging.fluidhr.in';
 
 let BACKEND_HOST = PRODUCTION_BACKEND_URL;
 let FRONTEND_HOST = PRODUCTION_FRONTEND_URL;
@@ -118,18 +118,15 @@ async function autoResumeFromIdle() {
   updateUI();
 
   try {
-    const res = await fetch(`${API_BASE}/resume`, {
+    await fetch(`${API_BASE}/resume`, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${authToken}` }
-    });
-    if (res.ok) {
-      const data = await res.json().catch(() => ({}));
-      if (data?.session) {
-        applyServerState(data.session);
+      headers: {
+        Authorization: `Bearer ${authToken}`,
+        'Content-Type': 'application/json'
       }
-    }
+    });
   } catch (err) {
-    console.error('[AUTO RESUME ERROR]', err);
+    console.error('Failed to auto-resume on backend:', err);
   } finally {
     isAutoResuming = false;
   }
@@ -162,11 +159,28 @@ let lastSystemIdleSeconds = 0;
 async function loadSession() {
   requestNotificationPermission();
 
+  let appConfig = null;
   try {
-    const version = await window.electronAPI.getAppVersion();
+    if (window.electronAPI?.getAppConfig) {
+      appConfig = await window.electronAPI.getAppConfig();
+    }
+  } catch (err) {
+    console.error('Failed to get app config:', err);
+  }
+
+  const isStagingApp = appConfig?.environment === 'staging' || (appConfig?.appName && appConfig.appName.includes('Staging'));
+  
+  if (isStagingApp) {
+    const stagingBadge = document.getElementById('staging-badge');
+    if (stagingBadge) stagingBadge.style.display = 'inline-block';
+    document.title = 'FluidHR Tracker (Staging)';
+  }
+
+  try {
+    const version = appConfig?.version || (await window.electronAPI?.getAppVersion()) || (isStagingApp ? '1.0.0' : '1.4.1');
     const versionDisplayEl = document.getElementById('version-display');
     if (versionDisplayEl && version) {
-      versionDisplayEl.innerText = `V${version} PRO`;
+      versionDisplayEl.innerText = isStagingApp ? `V${version} STAGING` : `V${version} PRO`;
     }
   } catch (err) {
     console.error('Failed to get app version:', err);
@@ -190,11 +204,19 @@ async function loadSession() {
       FRONTEND_HOST = PRODUCTION_FRONTEND_URL;
     }
   } else {
-    // Standalone direct application defaults to Live Production
-    BACKEND_HOST = PRODUCTION_BACKEND_URL;
-    FRONTEND_HOST = PRODUCTION_FRONTEND_URL;
-    if (window.electronAPI?.setStoreValue) {
-      await window.electronAPI.setStoreValue('serverHost', PRODUCTION_BACKEND_URL);
+    // Defaults according to app environment
+    if (isStagingApp) {
+      BACKEND_HOST = STAGING_BACKEND_URL;
+      FRONTEND_HOST = STAGING_FRONTEND_URL;
+      if (window.electronAPI?.setStoreValue) {
+        await window.electronAPI.setStoreValue('serverHost', STAGING_BACKEND_URL);
+      }
+    } else {
+      BACKEND_HOST = PRODUCTION_BACKEND_URL;
+      FRONTEND_HOST = PRODUCTION_FRONTEND_URL;
+      if (window.electronAPI?.setStoreValue) {
+        await window.electronAPI.setStoreValue('serverHost', PRODUCTION_BACKEND_URL);
+      }
     }
   }
   API_BASE = `${BACKEND_HOST}/api/time`;

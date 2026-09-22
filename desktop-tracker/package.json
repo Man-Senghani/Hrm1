@@ -5,7 +5,9 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
+    "start:staging": "set TRACKER_ENV=staging&& electron .",
     "build": "electron-builder --win --x64",
+    "build:staging": "node build-staging.js",
     "publish": "electron-builder --win --x64 --publish always"
   },
   "build": {
