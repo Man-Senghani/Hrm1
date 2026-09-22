@@ -12,7 +12,7 @@ let trackerConfig = {
   productName: 'FluidHR Tracker',
   protocol: 'fluidhr-tracker',
   bridgePort: 28734,
-  defaultServer: 'https://hrm.fluidhr.in',
+  defaultServer: 'https://hrm.aupanishad.tech',
   version: '1.4.1'
 };
 
@@ -30,8 +30,8 @@ if (process.env.TRACKER_ENV === 'staging' || app.getName().toLowerCase().include
     productName: 'FluidHR Tracker (Staging)',
     protocol: 'fluidhr-staging-tracker',
     bridgePort: 28735,
-    defaultServer: 'https://staging.fluidhr.in',
-    version: '1.0.0'
+    defaultServer: 'https://hrm-staging.aupanishad.tech',
+    version: '1.0.1'
   };
 }
 

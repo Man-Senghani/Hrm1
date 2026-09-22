@@ -71,10 +71,10 @@ const IDLE_REMINDER_MS = 3 * 60 * 1000; // 3 minutes
 let socket = null;
 
 // ── Config ────────────────────────────────────────────────
-const PRODUCTION_BACKEND_URL = 'https://hrm.fluidhr.in';
-const PRODUCTION_FRONTEND_URL = 'https://hrm.fluidhr.in';
-const STAGING_BACKEND_URL = 'https://staging.fluidhr.in';
-const STAGING_FRONTEND_URL = 'https://staging.fluidhr.in';
+const PRODUCTION_BACKEND_URL = 'https://hrm.aupanishad.tech';
+const PRODUCTION_FRONTEND_URL = 'https://hrm.aupanishad.tech';
+const STAGING_BACKEND_URL = 'https://hrm-staging.aupanishad.tech';
+const STAGING_FRONTEND_URL = 'https://hrm-staging.aupanishad.tech';
 
 let BACKEND_HOST = PRODUCTION_BACKEND_URL;
 let FRONTEND_HOST = PRODUCTION_FRONTEND_URL;
@@ -177,7 +177,7 @@ async function loadSession() {
   }
 
   try {
-    const version = appConfig?.version || (await window.electronAPI?.getAppVersion()) || (isStagingApp ? '1.0.0' : '1.4.1');
+    const version = appConfig?.version || (await window.electronAPI?.getAppVersion()) || (isStagingApp ? '1.0.1' : '1.4.1');
     const versionDisplayEl = document.getElementById('version-display');
     if (versionDisplayEl && version) {
       versionDisplayEl.innerText = isStagingApp ? `V${version} STAGING` : `V${version} PRO`;

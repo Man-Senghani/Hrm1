@@ -98,14 +98,14 @@ router.get('/info', async (req, res) => {
     if (isStaging) {
       return res.json({
         success: true,
-        version: '1.0.0',
+        version: '1.0.1',
         name: 'FluidHR Desktop Tracker (Staging)',
         description: 'Official FluidHR Desktop Tracker for Staging Testing',
         sizeMb: '76.9',
         platform: 'Windows (x64 / x86)',
         minOs: 'Windows 10 / 11',
         downloadUrl: '/api/desktop-app/download?env=staging',
-        installerName: 'FluidHR-Tracker-Staging-Setup-1.0.0.exe',
+        installerName: 'FluidHR-Tracker-Staging-Setup-1.0.1.exe',
         releaseDate: new Date().toISOString().split('T')[0],
         directDownloadUrl: '/api/desktop-app/download?env=staging'
       });
@@ -128,13 +128,13 @@ router.get('/info', async (req, res) => {
  */
 router.get('/download', async (req, res) => {
   const isStaging = req.query.env === 'staging' || (req.headers.host && req.headers.host.includes('staging'));
-  const version = isStaging ? '1.0.0' : (getLocalPackageInfo().version || '1.4.1');
+  const version = isStaging ? '1.0.1' : (getLocalPackageInfo().version || '1.4.1');
 
   // 1. Check if a custom upload exists in backend/uploads/desktop/
   const uploadsDesktopDir = path.resolve(__dirname, '../uploads/desktop');
   if (fs.existsSync(uploadsDesktopDir)) {
     if (isStaging) {
-      const preferredStaging = ['FluidHR-Tracker-Staging-Setup-1.0.0.exe', 'FluidHR-Tracker-Staging-Setup.exe'];
+      const preferredStaging = ['FluidHR-Tracker-Staging-Setup-1.0.1.exe', 'FluidHR-Tracker-Staging-Setup.exe', 'FluidHR-Tracker-Staging-Setup-1.0.0.exe'];
       for (const candidate of preferredStaging) {
         const fullPath = path.join(uploadsDesktopDir, candidate);
         if (fs.existsSync(fullPath)) {
@@ -162,7 +162,7 @@ router.get('/download', async (req, res) => {
   const distDir = path.resolve(__dirname, '../../desktop-tracker/dist');
   if (fs.existsSync(distDir)) {
     if (isStaging) {
-      const preferredStaging = ['FluidHR-Tracker-Staging-Setup-1.0.0.exe', 'FluidHR-Tracker-Staging-Setup.exe'];
+      const preferredStaging = ['FluidHR-Tracker-Staging-Setup-1.0.1.exe', 'FluidHR-Tracker-Staging-Setup.exe', 'FluidHR-Tracker-Staging-Setup-1.0.0.exe'];
       for (const candidate of preferredStaging) {
         const fullPath = path.join(distDir, candidate);
         if (fs.existsSync(fullPath)) {

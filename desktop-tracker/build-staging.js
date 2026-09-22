@@ -6,7 +6,8 @@ const pkgPath = path.join(__dirname, 'package.json');
 const pkgBakPath = path.join(__dirname, 'package.json.bak');
 const configPath = path.join(__dirname, 'tracker-config.json');
 
-console.log('🚀 [Build Staging] Preparing Staging Desktop Tracker v1.0.0 build...');
+const STAGING_VERSION = '1.0.1';
+console.log(`🚀 [Build Staging] Preparing Staging Desktop Tracker v${STAGING_VERSION} build...`);
 
 // 1. Backup original package.json
 const origPkgRaw = fs.readFileSync(pkgPath, 'utf8');
@@ -17,7 +18,7 @@ try {
 
   // 2. Configure for Staging
   pkg.name = 'fluidhr-desktop-tracker-staging';
-  pkg.version = '1.0.0';
+  pkg.version = STAGING_VERSION;
   if (!pkg.build) pkg.build = {};
   pkg.build.appId = 'com.fluidhr.tracker.staging';
   pkg.build.productName = 'FluidHR Tracker (Staging)';
@@ -41,8 +42,8 @@ try {
     productName: 'FluidHR Tracker (Staging)',
     protocol: 'fluidhr-staging-tracker',
     bridgePort: 28735,
-    defaultServer: 'https://staging.fluidhr.in',
-    version: '1.0.0'
+    defaultServer: 'https://hrm-staging.aupanishad.tech',
+    version: STAGING_VERSION
   };
   fs.writeFileSync(configPath, JSON.stringify(stagingConfig, null, 2), 'utf8');
 
@@ -63,7 +64,7 @@ try {
 
   // Copy unversioned installer for web download endpoint
   const distDir = path.join(__dirname, 'dist');
-  const targetVersioned = path.join(distDir, 'FluidHR-Tracker-Staging-Setup-1.0.0.exe');
+  const targetVersioned = path.join(distDir, `FluidHR-Tracker-Staging-Setup-${STAGING_VERSION}.exe`);
   const targetUnversioned = path.join(distDir, 'FluidHR-Tracker-Staging-Setup.exe');
   if (fs.existsSync(targetVersioned)) {
     fs.copyFileSync(targetVersioned, targetUnversioned);
@@ -74,7 +75,7 @@ try {
   const backendDesktopUploads = path.join(__dirname, '../backend/uploads/desktop');
   if (fs.existsSync(backendDesktopUploads)) {
     if (fs.existsSync(targetVersioned)) {
-      fs.copyFileSync(targetVersioned, path.join(backendDesktopUploads, 'FluidHR-Tracker-Staging-Setup-1.0.0.exe'));
+      fs.copyFileSync(targetVersioned, path.join(backendDesktopUploads, `FluidHR-Tracker-Staging-Setup-${STAGING_VERSION}.exe`));
       fs.copyFileSync(targetVersioned, path.join(backendDesktopUploads, 'FluidHR-Tracker-Staging-Setup.exe'));
       console.log('📤 Copied Staging installer to backend/uploads/desktop/');
     }
