@@ -6,7 +6,7 @@ const pkgPath = path.join(__dirname, 'package.json');
 const pkgBakPath = path.join(__dirname, 'package.json.bak');
 const configPath = path.join(__dirname, 'tracker-config.json');
 
-const STAGING_VERSION = '1.0.1';
+const STAGING_VERSION = '1.0.2';
 console.log(`🚀 [Build Staging] Preparing Staging Desktop Tracker v${STAGING_VERSION} build...`);
 
 // 1. Backup original package.json

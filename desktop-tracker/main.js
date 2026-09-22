@@ -31,7 +31,7 @@ if (process.env.TRACKER_ENV === 'staging' || app.getName().toLowerCase().include
     protocol: 'fluidhr-staging-tracker',
     bridgePort: 28735,
     defaultServer: 'https://hrm-staging.aupanishad.tech',
-    version: '1.0.1'
+    version: '1.0.2'
   };
 }
 
