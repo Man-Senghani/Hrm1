@@ -47,8 +47,13 @@ try {
   fs.writeFileSync(configPath, JSON.stringify(stagingConfig, null, 2), 'utf8');
 
   // 4. Run electron-builder
-  console.log('🔨 [Build Staging] Compiling installer with electron-builder...');
-  execSync('npx electron-builder --win --x64', {
+  const isPublish = process.argv.includes('--publish');
+  console.log(`🔨 [Build Staging] Compiling installer with electron-builder${isPublish ? ' and publishing to GitHub...' : '...'}`);
+  const builderCmd = isPublish 
+    ? 'npx electron-builder --win --x64 --publish always'
+    : 'npx electron-builder --win --x64';
+
+  execSync(builderCmd, {
     cwd: __dirname,
     stdio: 'inherit',
     env: { ...process.env, TRACKER_ENV: 'staging' }

@@ -8,7 +8,8 @@
     "start:staging": "set TRACKER_ENV=staging&& electron .",
     "build": "electron-builder --win --x64",
     "build:staging": "node build-staging.js",
-    "publish": "electron-builder --win --x64 --publish always"
+    "publish": "electron-builder --win --x64 --publish always",
+    "publish:staging": "node build-staging.js --publish"
   },
   "build": {
     "appId": "com.fluidhr.tracker",
