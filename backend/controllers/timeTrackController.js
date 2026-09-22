@@ -440,6 +440,7 @@ exports.stopTracking = async (req, res) => {
           const diffMs = now - new Date(attendance.checkInTime);
           attendance.totalHours = parseFloat((diffMs / (1000 * 60 * 60)).toFixed(4));
         }
+        attendance.status = attendance.totalHours < 7.5 ? 'Half Day' : 'Present';
         await attendance.save();
       }
     } catch (attErr) {
@@ -1202,6 +1203,21 @@ exports.submitOfflineRequest = async (req, res) => {
 
     const targetDate = date || getToday();
 
+    // 🛡️ Prevent rapid duplicate submission (e.g. double-click race condition within 3 seconds)
+    const recentDuplicate = await OfflineRequest.findOne({
+      employeeId: req.user.id,
+      date: targetDate,
+      reason: reason.trim(),
+      requestedDurationMinutes: minutesNum,
+      createdAt: { $gte: new Date(Date.now() - 3000) }
+    });
+    if (recentDuplicate) {
+      return res.status(200).json({
+        message: 'Meeting request submitted successfully!',
+        request: recentDuplicate
+      });
+    }
+
     // 🛡️ Resolve reporting manager and employee ID
     let managerId = null;
     let empId = req.user.employeeId || '';
@@ -1305,7 +1321,7 @@ exports.submitOfflineRequest = async (req, res) => {
  */
 exports.getOfflineRequests = async (req, res) => {
   try {
-    const { status, search, date, page = 1, limit = 10 } = req.query;
+    const { status, search, date, startDate, endDate, page = 1, limit = 10 } = req.query;
     const userRole = (req.user.role || 'employee').toLowerCase();
     const query = {};
 
@@ -1326,7 +1342,13 @@ exports.getOfflineRequests = async (req, res) => {
     }
 
     // Date filter (exact match or date range)
-    if (date) {
+    if (startDate && endDate) {
+      query.date = { $gte: startDate, $lte: endDate };
+    } else if (startDate) {
+      query.date = { $gte: startDate };
+    } else if (endDate) {
+      query.date = { $lte: endDate };
+    } else if (date) {
       if (date.includes(':')) {
         const [start, end] = date.split(':');
         query.date = { $gte: start, $lte: end };
@@ -1398,15 +1420,37 @@ exports.updateOfflineRequestStatus = async (req, res) => {
       return res.status(404).json({ message: 'Offline request not found.' });
     }
 
-    // 🔒 Authorization check for Managers & Self-Review prevention
-    if (String(request.employeeId) === String(req.user.id) && !['admin', 'hr'].includes(userRole)) {
-      return res.status(403).json({ message: 'You cannot approve or reject your own meeting request. An HR or Admin must review it.' });
+    const targetRole = (request.employeeRole || 'employee').toLowerCase();
+    const isOwnRequest = String(request.employeeId) === String(req.user.id);
+
+    // 🔒 1. No self-approval unless Admin
+    if (isOwnRequest && userRole !== 'admin') {
+      return res.status(403).json({
+        message: 'You cannot approve or reject your own meeting request. A higher authority must review it.'
+      });
     }
 
-    if (userRole === 'manager') {
+    // 🔒 2. HR requests can ONLY be approved/rejected by Admin
+    if (targetRole === 'hr' && userRole !== 'admin') {
+      return res.status(403).json({
+        message: 'HR meeting requests can only be approved or rejected by an Admin.'
+      });
+    }
+
+    // 🔒 3. Manager requests can only be approved/rejected by HR or Admin
+    if (targetRole === 'manager' && !['admin', 'hr'].includes(userRole)) {
+      return res.status(403).json({
+        message: 'Manager meeting requests can only be approved or rejected by an HR or Admin.'
+      });
+    }
+
+    // 🔒 4. Employee requests: Managers can only review direct reports
+    if (targetRole === 'employee' && userRole === 'manager') {
       const isManager = String(request.managerId) === String(req.user.id);
       if (!isManager) {
-        return res.status(403).json({ message: 'You are only authorized to review requests from your direct reports.' });
+        return res.status(403).json({
+          message: 'You are only authorized to review requests from your direct reports.'
+        });
       }
     }
 
