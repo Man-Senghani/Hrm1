@@ -37,6 +37,11 @@ if (process.env.TRACKER_ENV === 'staging' || app.getName().toLowerCase().include
 
 const isStaging = trackerConfig.environment === 'staging';
 
+if (isStaging) {
+  autoUpdater.autoDownload = false;
+  autoUpdater.autoInstallOnAppQuit = false;
+}
+
 // Set isolated user data directory so tokens & cache never conflict between staging and production
 app.setPath('userData', path.join(app.getPath('appData'), isStaging ? 'fluidhr-desktop-tracker-staging' : 'fluidhr-desktop-tracker'));
 
@@ -314,8 +319,10 @@ if (!gotTheLock) {
     createWindow();
     startLocalBridgeServer();
 
-    // Check for updates
-    autoUpdater.checkForUpdatesAndNotify();
+    // Check for updates (Production only: Staging should not auto-update to production 1.4.1)
+    if (!isStaging) {
+      autoUpdater.checkForUpdatesAndNotify().catch(err => console.log('[Updater Error]', err.message));
+    }
 
     // ============================================================
     // 🌐 SYSTEM-WIDE IDLE MONITOR — MAIN PROCESS ONLY
@@ -507,9 +514,13 @@ autoUpdater.on('update-downloaded', () => {
 });
 
 ipcMain.on('install-update', () => {
-  autoUpdater.quitAndInstall();
+  if (!isStaging) {
+    autoUpdater.quitAndInstall();
+  }
 });
 
 ipcMain.handle('check-for-updates', () => {
-  autoUpdater.checkForUpdatesAndNotify();
+  if (!isStaging) {
+    autoUpdater.checkForUpdatesAndNotify();
+  }
 });

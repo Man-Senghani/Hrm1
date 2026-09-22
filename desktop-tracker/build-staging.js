@@ -32,6 +32,11 @@ try {
   if (!pkg.build.nsis) pkg.build.nsis = {};
   pkg.build.nsis.shortcutName = 'FluidHR Tracker (Staging)';
 
+  const isPublish = process.argv.includes('--publish');
+  if (!isPublish) {
+    delete pkg.build.publish;
+  }
+
   fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2), 'utf8');
 
   // 3. Write staging tracker-config.json
@@ -48,7 +53,6 @@ try {
   fs.writeFileSync(configPath, JSON.stringify(stagingConfig, null, 2), 'utf8');
 
   // 4. Run electron-builder
-  const isPublish = process.argv.includes('--publish');
   console.log(`🔨 [Build Staging] Compiling installer with electron-builder${isPublish ? ' and publishing to GitHub...' : '...'}`);
   const builderCmd = isPublish 
     ? 'npx electron-builder --win --x64 --publish always'
