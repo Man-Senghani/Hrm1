@@ -189,7 +189,7 @@ router.get('/download', async (req, res) => {
   // 3. Otherwise redirect to official latest GitHub Release binary installer
   const releaseInfo = await getLatestReleaseInfo();
   const directExeUrl = isStaging 
-    ? `https://github.com/mansenghani/Hrm1/releases/download/v1.0.0-staging/FluidHR-Tracker-Staging-Setup-1.0.0.exe`
+    ? `https://github.com/Man-Senghani/Hrm1/releases/download/v1.0.1-staging/FluidHR-Tracker-Staging-Setup-1.0.1.exe`
     : releaseInfo.downloadUrl;
   return res.redirect(302, directExeUrl);
 });
