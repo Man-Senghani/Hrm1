@@ -3193,7 +3193,14 @@ const Attendance = () => {
       ) : (
         <MeetingRequestsTable
           userRole={userRole}
-          currentUserId={sessionStorage.getItem('userId')}
+          currentUserId={(() => {
+            try {
+              const u = JSON.parse(sessionStorage.getItem('user') || '{}');
+              return u._id || u.id || '';
+            } catch {
+              return '';
+            }
+          })()}
           onStatusChanged={() => {
             fetchLiveTimeStatus();
             fetchAttendance();

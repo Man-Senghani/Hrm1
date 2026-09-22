@@ -75,6 +75,7 @@ exports.checkIn = async (req, res) => {
         att.checkOutTime = eod;
         att.clockOut = '23:59';
         att.totalHours = Math.max(0, parseFloat((diffMs / (1000 * 60 * 60)).toFixed(2)));
+        att.status = att.totalHours < 7.5 ? 'Half Day' : 'Present';
         att.autoCheckout = true;
         await att.save();
       }
@@ -157,6 +158,7 @@ exports.checkOut = async (req, res) => {
       attendance.clockOut = '23:59';
       const diffMs = eod - new Date(attendance.checkInTime);
       attendance.totalHours = Math.max(0, parseFloat((diffMs / (1000 * 60 * 60)).toFixed(2)));
+      attendance.status = attendance.totalHours < 7.5 ? 'Half Day' : 'Present';
       attendance.autoCheckout = true;
       await attendance.save();
       return res.status(200).json(attendance);
@@ -166,9 +168,10 @@ exports.checkOut = async (req, res) => {
     attendance.checkOutTime = checkOutTime;
     attendance.clockOut = clockOutStr;
 
-    // Calculate total hours
+    // Calculate total hours (< 7.5 hrs is Half Day, >= 7.5 hrs is Present)
     const diffMs = checkOutTime - new Date(attendance.checkInTime);
     attendance.totalHours = parseFloat((diffMs / (1000 * 60 * 60)).toFixed(2));
+    attendance.status = attendance.totalHours < 7.5 ? 'Half Day' : 'Present';
 
     await attendance.save();
 
@@ -209,6 +212,8 @@ exports.checkOut = async (req, res) => {
         // Use session activeTime if it exists
         if (session.activeTime) {
           attendance.totalHours = parseFloat((session.activeTime / 3600).toFixed(4));
+          attendance.status = attendance.totalHours < 7.5 ? 'Half Day' : 'Present';
+          await attendance.save();
         }
       }
     } catch (ttErr) {
@@ -1117,12 +1122,8 @@ exports.clockIn = async (req, res) => {
       return res.status(400).json({ message: 'Already clocked in for today' });
     }
 
-    let status = 'Present';
-    if (timeInMinutes >= 14 * 60 + 30) { // 2:30 PM
-      status = 'Half Day';
-    } else if (timeInMinutes >= 10 * 60 + 30) { // 10:30 AM
-      status = 'Late';
-    }
+    // Check-in status is always Present (Half Day is evaluated at checkout if worked < 7.5 hrs)
+    const status = 'Present';
 
     const clockInStr = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
 
@@ -1199,6 +1200,7 @@ exports.clockOut = async (req, res) => {
       if (attendance.checkInTime) {
         const diffMs = eod - new Date(attendance.checkInTime);
         attendance.totalHours = Math.max(0, parseFloat((diffMs / (1000 * 60 * 60)).toFixed(2)));
+        attendance.status = attendance.totalHours < 7.5 ? 'Half Day' : 'Present';
       }
       attendance.autoCheckout = true;
       await attendance.save();
@@ -1212,18 +1214,7 @@ exports.clockOut = async (req, res) => {
     if (attendance.checkInTime) {
       const diffMs = now - new Date(attendance.checkInTime);
       attendance.totalHours = parseFloat((diffMs / (1000 * 60 * 60)).toFixed(2));
-      if (attendance.totalHours < 7.5) {
-        attendance.status = 'Half Day';
-      } else {
-        const { timeInMinutes } = getTimeDetails(new Date(attendance.checkInTime));
-        if (timeInMinutes >= 14 * 60 + 30) {
-          attendance.status = 'Half Day';
-        } else if (timeInMinutes >= 10 * 60 + 30) {
-          attendance.status = 'Late';
-        } else {
-          attendance.status = 'Present';
-        }
-      }
+      attendance.status = attendance.totalHours < 7.5 ? 'Half Day' : 'Present';
     }
     await attendance.save();
 
@@ -1253,18 +1244,7 @@ exports.clockOut = async (req, res) => {
         // Use TimeTrack active time for Attendance totalHours
         if (attendance.checkInTime) {
           attendance.totalHours = parseFloat(((session.activeTime || 0) / 3600).toFixed(4));
-          if (attendance.totalHours < 7.5) {
-            attendance.status = 'Half Day';
-          } else {
-            const { timeInMinutes } = getTimeDetails(new Date(attendance.checkInTime));
-            if (timeInMinutes >= 14 * 60 + 30) {
-              attendance.status = 'Half Day';
-            } else if (timeInMinutes >= 10 * 60 + 30) {
-              attendance.status = 'Late';
-            } else {
-              attendance.status = 'Present';
-            }
-          }
+          attendance.status = attendance.totalHours < 7.5 ? 'Half Day' : 'Present';
           await attendance.save();
         }
 

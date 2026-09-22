@@ -41,6 +41,7 @@ function initCronJobs() {
         att.checkOutTime = checkoutTime;
         att.clockOut = '23:59';
         att.totalHours = Math.max(0, parseFloat((diffMs / (1000 * 60 * 60)).toFixed(2)));
+        att.status = att.totalHours < 7.5 ? 'Half Day' : 'Present';
         att.autoCheckout = true; // audit flag — system-initiated checkout
         await att.save();
         console.log(`[CRON] Auto-checkout applied → user: ${att.user}, date: ${todayIST}`);
@@ -200,6 +201,7 @@ async function runAutoCheckoutCatchAll() {
       att.checkOutTime = eodIST;
       att.clockOut = '23:59';
       att.totalHours = Math.max(0, parseFloat((diffMs / (1000 * 60 * 60)).toFixed(2)));
+      att.status = att.totalHours < 7.5 ? 'Half Day' : 'Present';
       att.autoCheckout = true;
       await att.save();
       console.log(`[CRON] Catch-all auto-checkout → user: ${att.user}, date: ${att.date}`);

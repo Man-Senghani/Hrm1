@@ -1998,21 +1998,6 @@ const Attendance = () => {
         return true;
       });
     } else {
-      const currentUser = JSON.parse(sessionStorage.getItem('user') || '{}');
-      const currentUserId = currentUser._id || currentUser.id;
-      const currentUserName = (currentUser.name || '').toLowerCase().trim();
-
-      filtered = filtered.filter(r => {
-        const recUserId = r.user?._id || r.user?.id || r.user;
-        const recUserName = (r.user?.name || r.userName || '').toLowerCase().trim();
-        if (currentUserId && recUserId) {
-          return String(recUserId) !== String(currentUserId);
-        }
-        if (currentUserName && recUserName) {
-          return recUserName !== currentUserName;
-        }
-        return true;
-      });
 
       if (userRole === 'hr') {
         filtered = filtered.filter(r => {
@@ -3377,7 +3362,14 @@ const Attendance = () => {
       ) : (
         <MeetingRequestsTable
           userRole={userRole}
-          currentUserId={sessionStorage.getItem('userId')}
+          currentUserId={(() => {
+            try {
+              const u = JSON.parse(sessionStorage.getItem('user') || '{}');
+              return u._id || u.id || '';
+            } catch {
+              return '';
+            }
+          })()}
           onStatusChanged={() => {
             fetchLiveTimeStatus();
             fetchRecords();

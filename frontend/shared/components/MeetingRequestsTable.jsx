@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import {
@@ -7,6 +7,7 @@ import {
   FileText, Plus, MessageSquare, ShieldCheck, UserCheck, Timer
 } from 'lucide-react';
 import CustomDatePicker from './CustomDatePicker';
+import AttendanceDatePicker from './AttendanceDatePicker';
 
 const STATUS_BADGES = {
   pending: {
@@ -60,9 +61,20 @@ const MeetingRequestsTable = ({
   const [newDate, setNewDate] = useState(new Date().toISOString().split('T')[0]);
   const [availableInactiveMins, setAvailableInactiveMins] = useState(null);
   const [newSubmitting, setNewSubmitting] = useState(false);
+  const submittingRef = useRef(false);
+  const reviewSubmittingRef = useRef(false);
+  const rejectSubmittingRef = useRef(false);
 
-  const isReviewer = ['admin', 'hr', 'manager'].includes(userRole.toLowerCase());
-  const effectiveUserId = currentUserId || sessionStorage.getItem('userId') || '';
+  const sessionUser = (() => {
+    try {
+      return JSON.parse(sessionStorage.getItem('user') || '{}');
+    } catch {
+      return {};
+    }
+  })();
+  const effectiveUserId = currentUserId || sessionUser._id || sessionUser.id || sessionStorage.getItem('userId') || '';
+  const effectiveUserRole = (userRole || sessionUser.role || 'employee').toLowerCase();
+  const isReviewer = ['admin', 'hr', 'manager'].includes(effectiveUserRole);
 
   // 📡 Fetch Requests
   const fetchRequests = useCallback(async () => {
@@ -75,7 +87,17 @@ const MeetingRequestsTable = ({
       };
       if (statusFilter !== 'All') params.status = statusFilter.toLowerCase();
       if (searchQuery.trim()) params.search = searchQuery.trim();
-      if (selectedDate) params.date = selectedDate;
+      if (selectedDate) {
+        params.date = selectedDate;
+        if (selectedDate.includes(':')) {
+          const [s, e] = selectedDate.split(':');
+          params.startDate = s;
+          params.endDate = e;
+        } else {
+          params.startDate = selectedDate;
+          params.endDate = selectedDate;
+        }
+      }
 
       const res = await axios.get('/api/time/offline-requests', {
         params,
@@ -166,7 +188,9 @@ const MeetingRequestsTable = ({
   };
 
   const handleSubmitNewRequest = async (e) => {
-    e.preventDefault();
+    if (e && e.preventDefault) e.preventDefault();
+    if (submittingRef.current || newSubmitting) return;
+
     if (!newReason.trim()) {
       return toast.error('Please enter a reason for the meeting / offline time');
     }
@@ -179,6 +203,7 @@ const MeetingRequestsTable = ({
       return toast.error(`Requested minutes (${mins}) cannot exceed your recorded inactive time (${availableInactiveMins} mins)`);
     }
 
+    submittingRef.current = true;
     setNewSubmitting(true);
     try {
       const token = sessionStorage.getItem('token');
@@ -197,6 +222,7 @@ const MeetingRequestsTable = ({
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to submit request');
     } finally {
+      submittingRef.current = false;
       setNewSubmitting(false);
     }
   };
@@ -210,7 +236,7 @@ const MeetingRequestsTable = ({
 
   // Submit Approval
   const handleConfirmApproval = async () => {
-    if (!reviewModalRequest) return;
+    if (!reviewModalRequest || reviewSubmittingRef.current || reviewSubmitting) return;
     const finalMins = parseInt(finalMinutesInput, 10);
     if (isNaN(finalMins) || finalMins <= 0) {
       return toast.error('Approved duration must be at least 1 minute');
@@ -222,6 +248,7 @@ const MeetingRequestsTable = ({
       return toast.error(`Final approved time (${finalMins} mins) cannot exceed recorded inactive time (${maxAllowed} mins). You can approve a lower number.`);
     }
 
+    reviewSubmittingRef.current = true;
     setReviewSubmitting(true);
     try {
       const token = sessionStorage.getItem('token');
@@ -240,6 +267,7 @@ const MeetingRequestsTable = ({
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to approve request');
     } finally {
+      reviewSubmittingRef.current = false;
       setReviewSubmitting(false);
     }
   };
@@ -252,8 +280,9 @@ const MeetingRequestsTable = ({
 
   // Submit Rejection
   const handleConfirmRejection = async () => {
-    if (!rejectModalRequest) return;
+    if (!rejectModalRequest || rejectSubmittingRef.current || rejectSubmitting) return;
 
+    rejectSubmittingRef.current = true;
     setRejectSubmitting(true);
     try {
       const token = sessionStorage.getItem('token');
@@ -271,6 +300,7 @@ const MeetingRequestsTable = ({
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to reject request');
     } finally {
+      rejectSubmittingRef.current = false;
       setRejectSubmitting(false);
     }
   };
@@ -347,12 +377,15 @@ const MeetingRequestsTable = ({
         )}
 
         <div className="w-full sm:w-auto flex items-center gap-2">
-          <input
-            type="date"
-            value={selectedDate}
-            onChange={(e) => { setSelectedDate(e.target.value); setPage(1); }}
-            className="w-full sm:w-auto px-3 py-1.5 text-xs rounded-xl bg-slate-50 dark:bg-[#0d2a22] border border-[#e2eae7] dark:border-[#133029] text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/30 transition-all cursor-pointer"
-          />
+          <div className="w-full sm:w-auto min-w-[160px]">
+            <AttendanceDatePicker
+              value={selectedDate}
+              onChange={(val) => { setSelectedDate(val); setPage(1); }}
+              placeholder="dd-mm-yyyy"
+              allowRange={true}
+              align="right"
+            />
+          </div>
 
           {(searchQuery || selectedDate || statusFilter !== 'All') && (
             <button
@@ -426,7 +459,29 @@ const MeetingRequestsTable = ({
               requests.map((item) => {
                 const badge = STATUS_BADGES[item.status] || STATUS_BADGES.pending;
                 const isOwnRequest = Boolean(effectiveUserId && String(item.employeeId || '') === String(effectiveUserId));
-                const canReview = isReviewer && !isOwnRequest && item.status === 'pending';
+                const targetRole = (item.employeeRole || 'employee').toLowerCase();
+
+                let canReview = false;
+                if (item.status === 'pending') {
+                  if (effectiveUserRole === 'admin') {
+                    canReview = true;
+                  } else if (effectiveUserRole === 'hr') {
+                    // HR can review Employee and Manager requests, but NOT HR requests or own request
+                    canReview = !isOwnRequest && targetRole !== 'hr';
+                  } else if (effectiveUserRole === 'manager') {
+                    // Manager can review direct Employee requests, but NOT Manager, HR, or own request
+                    canReview = !isOwnRequest && targetRole === 'employee';
+                  }
+                }
+
+                let pendingLabel = 'Awaiting Review';
+                if (targetRole === 'hr') {
+                  pendingLabel = 'Awaiting Admin Review';
+                } else if (targetRole === 'manager') {
+                  pendingLabel = 'Awaiting HR Review';
+                } else {
+                  pendingLabel = isOwnRequest ? 'Awaiting Review' : 'Pending Review';
+                }
 
                 return (
                   <tr
@@ -511,9 +566,9 @@ const MeetingRequestsTable = ({
                             <X size={14} />
                           </button>
                         </div>
-                      ) : isOwnRequest && item.status === 'pending' ? (
+                      ) : item.status === 'pending' ? (
                         <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-800/60">
-                          Awaiting Review
+                          {pendingLabel}
                         </span>
                       ) : (
                         <span className="text-[10px] text-slate-400 dark:text-[#829e92]">
@@ -874,7 +929,7 @@ const MeetingRequestsTable = ({
                 type="submit"
                 form="offline-request-form"
                 disabled={newSubmitting}
-                className="w-full py-2.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-md shadow-emerald-600/20 transition-all cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
+                className="w-full py-2.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-md shadow-emerald-600/20 transition-all cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none"
               >
                 <Check size={15} />
                 <span>{newSubmitting ? 'Submitting...' : 'Submit Request'}</span>

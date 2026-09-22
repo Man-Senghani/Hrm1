@@ -1530,14 +1530,14 @@ const DailyReportHR = () => {
             <button
               onClick={() => setShowFilterModal(true)}
               className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
-                (search || department !== 'all' || project !== 'all' || status !== 'all' || period !== 'all' || startDate || endDate)
+                (search || department !== 'all' || employeeId !== 'all' || project !== 'all' || status !== 'all' || period !== 'all' || startDate || endDate)
                   ? 'bg-emerald-500 text-white border-emerald-500 shadow-sm shadow-emerald-200 dark:shadow-emerald-900/30'
                   : 'bg-white dark:bg-[#162722] border-slate-200 dark:border-[#1a2d29] text-slate-700 dark:text-slate-200 hover:border-emerald-400'
               }`}
             >
               <Filter size={14} />
               Filter
-              {(search || department !== 'all' || project !== 'all' || status !== 'all' || period !== 'all' || startDate || endDate) && (
+              {(search || department !== 'all' || employeeId !== 'all' || project !== 'all' || status !== 'all' || period !== 'all' || startDate || endDate) && (
                 <span className="w-1.5 h-1.5 rounded-full bg-white/80 ml-0.5" />
               )}
             </button>
@@ -1599,6 +1599,22 @@ const DailyReportHR = () => {
                       ]}
                       value={department}
                       onChange={(val) => setDepartment(val)}
+                    />
+                  </div>
+
+                  {/* Employee */}
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Employee</label>
+                    <CustomSelect
+                      options={[
+                        { label: 'All Employees', value: 'all' },
+                        ...employeeOptions.map(e => ({
+                          label: e.fullName || e.name || e.email,
+                          value: (e.userId?._id || e.userId || e._id).toString()
+                        }))
+                      ]}
+                      value={employeeId}
+                      onChange={(val) => setEmployeeId(val)}
                     />
                   </div>
 
