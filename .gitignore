@@ -51,5 +51,6 @@ deploy_key*
 # Scratch
 scratch/
 
-
-
+# Desktop Tracker Temporary Build Artifacts
+desktop-tracker/package.json.bak
+desktop-tracker/tracker-config.json
