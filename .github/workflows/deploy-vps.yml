@@ -20,6 +20,9 @@ jobs:
           script: |
             cd /var/www/hrm
             git checkout Master
-            git pull origin Master
-            docker compose up --build -d
+            git fetch origin Master
+            git reset --hard origin/Master
+            if [ -f .env ]; then rm -f .env; fi
+            docker compose down
+            docker compose up --build --force-recreate -d
             echo "✅ FluidHR auto-deploy completed successfully!"
