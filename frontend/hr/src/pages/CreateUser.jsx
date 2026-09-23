@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import axios from 'axios';
 import {
@@ -31,7 +31,7 @@ import { useNavigate } from 'react-router-dom';
 import CustomDatePicker from '../components/CustomDatePicker';
 import { compressImageAndConvertToBase64 } from '@shared/utils/imageCompressor';
 import EditableSelect from '@shared/components/EditableSelect';
-import { resolveRoleFromDesignation, getRoleAccessMetadata } from '@shared/utils/roleResolver';
+import { resolveRole, resolveRoleFromDesignation, getRoleAccessMetadata, getDesignationsForDepartment } from '@shared/utils/roleResolver';
 
 // ─── Premium Custom Dropdown ──────────────────────────────────────────────────
 const StyledSelect = ({ name, value, onChange, options, placeholder, required, error }) => {
@@ -147,38 +147,76 @@ const CreateUser = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
+  const [isManagerChecked, setIsManagerChecked] = useState(false);
 
   const defaultDepartments = [
     'Admin',
-    'Engineering',
-    'Sales',
-    'Marketing',
-    'Finance',
-    'HR',
+    'Developer',
+    'QA',
     'Design',
-    'Operations'
+    'BDE',
+    'HR',
+    'Marketing',
+    'Finance'
   ];
 
-  const departmentList = departments.length > 0
-    ? departments.map(d => typeof d === 'string' ? d : d.name).filter(Boolean)
-    : defaultDepartments;
+  const departmentList = useMemo(() => {
+    const fetched = departments.length > 0
+      ? departments.map(d => typeof d === 'string' ? d : d.name).filter(Boolean)
+      : [];
+    const combined = [...defaultDepartments];
+    fetched.forEach(name => {
+      if (!combined.some(d => d.toLowerCase() === name.toLowerCase())) {
+        combined.push(name);
+      }
+    });
+    return combined;
+  }, [departments]);
 
-  const defaultDesignations = [
-    'Admin',
-    'Software Engineer',
-    'Senior Software Engineer',
-    'Frontend Developer',
-    'Backend Developer',
-    'Full Stack Developer',
-    'UI/UX Designer',
-    'QA Tester',
-    'Product Manager',
-    'HR Executive',
-    'Support Staff',
-    'Operations Lead'
-  ];
+  const [customDesignations, setCustomDesignations] = useState([]);
 
-  const [designationList, setDesignationList] = useState(defaultDesignations);
+  const availableDesignations = useMemo(() => {
+    if (!formData.department) return [];
+    const list = getDesignationsForDepartment(formData.department, customDesignations);
+    if (formData.designation && !list.some(d => d.toLowerCase() === formData.designation.toLowerCase())) {
+      return [...list, formData.designation];
+    }
+    return list;
+  }, [formData.department, formData.designation, customDesignations]);
+
+  const filteredManagerOptions = useMemo(() => {
+    const isDeptHr = (formData.department || '').toLowerCase() === 'hr';
+    const isElevated = isManagerChecked || (formData.role || '').toLowerCase() === 'hr' || (formData.role || '').toLowerCase() === 'manager';
+    if (isElevated || isDeptHr) {
+      const adminList = managers.filter(m => (m.role || '').toLowerCase() === 'admin');
+      const targetList = adminList.length > 0 ? adminList : managers;
+      return targetList.map(m => ({
+        value: m._id,
+        label: `${m.name || m.fullName} (Admin)`
+      }));
+    } else {
+      const managerList = managers.filter(m => (m.role || '').toLowerCase() === 'manager');
+      const targetList = managerList.length > 0 ? managerList : managers;
+      return targetList.map(m => ({
+        value: m._id,
+        label: `${m.name || m.fullName} (${(m.role || 'Manager').toUpperCase()})`
+      }));
+    }
+  }, [isManagerChecked, formData.role, formData.department, managers]);
+
+  const handleManagerToggle = (checked) => {
+    setIsManagerChecked(checked);
+    const newRole = resolveRole({
+      department: formData.department,
+      isManager: checked,
+      designation: formData.designation
+    });
+    setFormData(prev => ({
+      ...prev,
+      role: newRole,
+      reportingManager: (newRole === 'admin') ? '' : prev.reportingManager
+    }));
+  };
 
   const handleAddDepartment = async (name) => {
     try {
@@ -232,17 +270,17 @@ const CreateUser = () => {
   };
 
   const handleAddDesignation = async (name) => {
-    setDesignationList(prev => prev.includes(name) ? prev : [...prev, name]);
+    setCustomDesignations(prev => prev.includes(name) ? prev : [...prev, name]);
     toast.success(`Designation "${name}" added`);
   };
 
   const handleEditDesignation = async (oldName, newName) => {
-    setDesignationList(prev => prev.map(d => d === oldName ? newName : d));
+    setCustomDesignations(prev => prev.map(d => d === oldName ? newName : d));
     toast.success(`Designation updated to "${newName}"`);
   };
 
   const handleDeleteDesignation = async (nameToDelete) => {
-    setDesignationList(prev => prev.filter(d => d !== nameToDelete));
+    setCustomDesignations(prev => prev.filter(d => d !== nameToDelete));
     toast.success(`Designation "${nameToDelete}" deleted`);
   };
 
@@ -258,7 +296,7 @@ const CreateUser = () => {
   };
 
   const handleReorderDesignations = (newDesigNames) => {
-    setDesignationList(newDesigNames);
+    setCustomDesignations(newDesigNames);
   };
 
   const defaultRoles = [
@@ -412,9 +450,24 @@ const CreateUser = () => {
 
     if (name === 'department') {
       const isDeptAdmin = value?.trim().toLowerCase() === 'admin';
-      const newDesignation = isDeptAdmin ? 'Admin' : formData.designation;
-      const autoRole = isDeptAdmin ? 'admin' : (newDesignation ? resolveRoleFromDesignation(newDesignation, formData.role) : formData.role);
-      if (isDeptAdmin && newErrors.designation) {
+      const isDeptHr = value?.trim().toLowerCase() === 'hr';
+      const validDesigs = getDesignationsForDepartment(value, customDesignations);
+      const isStillValid = validDesigs.some(d => d.toLowerCase() === (formData.designation || '').toLowerCase().trim());
+      const newDesignation = isDeptAdmin ? 'Head of Admin' : (isStillValid ? formData.designation : '');
+      const isIntern = newDesignation.toLowerCase().includes('intern');
+      let nextManagerChecked = isManagerChecked;
+      if (isDeptAdmin || isIntern) {
+        nextManagerChecked = false;
+        setIsManagerChecked(false);
+      } else if (isDeptHr && newDesignation.toLowerCase() === 'senior hr') {
+        nextManagerChecked = true;
+        setIsManagerChecked(true);
+      }
+      const autoRole = resolveRole({ department: value, isManager: nextManagerChecked, designation: newDesignation });
+      if (value && newErrors.department) {
+        delete newErrors.department;
+      }
+      if (newDesignation && newErrors.designation) {
         delete newErrors.designation;
       }
       setErrors(newErrors);
@@ -422,13 +475,28 @@ const CreateUser = () => {
         ...prev,
         department: value,
         designation: newDesignation,
-        role: autoRole
+        role: autoRole,
+        reportingManager: isDeptAdmin ? '' : prev.reportingManager
       }));
       return;
     }
 
     if (name === 'designation') {
-      const autoRole = resolveRoleFromDesignation(value, formData.role);
+      const isDeptAdmin = (formData.department || '').trim().toLowerCase() === 'admin';
+      const isDeptHr = (formData.department || '').trim().toLowerCase() === 'hr';
+      const isIntern = (value || '').toLowerCase().includes('intern');
+      let nextManagerChecked = isManagerChecked;
+      if (isDeptAdmin || isIntern) {
+        nextManagerChecked = false;
+        setIsManagerChecked(false);
+      } else if (isDeptHr && (value || '').toLowerCase() === 'senior hr') {
+        nextManagerChecked = true;
+        setIsManagerChecked(true);
+      }
+      const autoRole = resolveRole({ department: formData.department, isManager: nextManagerChecked, designation: value });
+      if (value && newErrors.designation) {
+        delete newErrors.designation;
+      }
       setErrors(newErrors);
       setFormData(prev => ({ ...prev, designation: value, role: autoRole }));
       return;
@@ -744,7 +812,7 @@ const CreateUser = () => {
                   : 'New Employee'}
               </h3>
               <p className="text-xs font-semibold text-slate-400 dark:text-slate-400 capitalize mt-0.5">
-                {formData.department || formData.designation || 'Staff Member'}
+                {formData.designation || formData.department || 'Staff Member'}
               </p>
 
 
@@ -1022,10 +1090,11 @@ const CreateUser = () => {
                     name="designation"
                     value={formData.designation}
                     onChange={handleChange}
-                    placeholder="Select or add Designation"
+                    placeholder={!formData.department ? "Select Department first" : "Select or add Designation"}
+                    disabled={!formData.department}
                     label="Designation"
                     error={errors.designation}
-                    options={designationList}
+                    options={availableDesignations}
                     onAddOption={handleAddDesignation}
                     onEditOption={handleEditDesignation}
                     onDeleteOption={handleDeleteDesignation}
@@ -1034,6 +1103,37 @@ const CreateUser = () => {
                   {errors.designation && <p className="text-red-500 text-[10px] font-semibold">{errors.designation}</p>}
                 </div>
               </div>
+
+              {/* Access Checkbox (Shown for non-admin departments, but NOT for interns) */}
+              {(() => {
+                const isIntern = (formData.designation || '').toLowerCase().includes('intern');
+                const isDeptAdmin = (formData.department || '').toLowerCase() === 'admin';
+                const isDeptHr = (formData.department || '').toLowerCase() === 'hr';
+                const showAccessCheckbox = formData.department && !isDeptAdmin && !isIntern;
+
+                if (!showAccessCheckbox) return null;
+
+                return (
+                  <label className="flex items-center gap-3 p-3.5 rounded-xl border border-slate-200 dark:border-[#38352e] bg-slate-50/60 dark:bg-[#1a1714] cursor-pointer hover:border-[#00a76b]/50 transition-all select-none">
+                    <input
+                      type="checkbox"
+                      checked={isManagerChecked}
+                      onChange={(e) => handleManagerToggle(e.target.checked)}
+                      className="w-4 h-4 text-[#00a76b] rounded border-slate-300 focus:ring-[#00a76b] cursor-pointer"
+                    />
+                    <div className="space-y-0.5">
+                      <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block">
+                        {isDeptHr ? 'Grant Full HR Portal Access' : 'Designate as Manager / Team Lead'}
+                      </span>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                        {isDeptHr
+                          ? 'Grants access to HR Portal to manage personnel, leaves, and attendance. User will report directly to Admin.'
+                          : 'Grants Manager Portal access; manager will report directly to an Admin.'}
+                      </p>
+                    </div>
+                  </label>
+                );
+              })()}
 
               {/* Portal Access Auto-Resolution Indicator */}
               {formData.designation && (
@@ -1097,21 +1197,18 @@ const CreateUser = () => {
               </div>
 
               {/* Reporting Manager */}
-              {formData.role !== 'admin' && (
+              {formData.role?.toLowerCase() !== 'admin' && formData.department?.toLowerCase() !== 'admin' && (
                 <div className="space-y-1.5 max-w-md">
-                  <label className="text-[11px] font-extrabold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Reporting Manager <span className="text-red-500">*</span></label>
+                  <label className="text-[11px] font-extrabold text-slate-600 dark:text-slate-300 uppercase tracking-wider">
+                    {((formData.department || '').toLowerCase() === 'hr' || isManagerChecked || (formData.role || '').toLowerCase() === 'manager') ? 'Reporting To (Admin)' : 'Reporting Manager'} <span className="text-red-500">*</span>
+                  </label>
                   <StyledSelect
                     name="reportingManager"
                     value={formData.reportingManager}
                     onChange={handleChange}
-                    placeholder="Select Manager"
+                    placeholder={((formData.department || '').toLowerCase() === 'hr' || isManagerChecked || (formData.role || '').toLowerCase() === 'manager') ? "Select Admin" : "Select Manager"}
                     error={errors.reportingManager}
-                    options={[
-                      ...managers.map(m => ({
-                        value: m._id,
-                        label: `${m.name || m.fullName} (${(m.role || 'Manager').toUpperCase()})`
-                      }))
-                    ]}
+                    options={filteredManagerOptions}
                   />
                   {errors.reportingManager && <p className="text-red-500 text-[10px] font-semibold">{errors.reportingManager}</p>}
                 </div>

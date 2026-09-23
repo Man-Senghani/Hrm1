@@ -190,6 +190,22 @@ exports.getMe = async (req, res) => {
 
     console.log(`[PROFILE TRACE] User: ${user.name || user.email} | Role: ${user.role} | Master Registry: ${!!employeeData}`);
 
+    const rawDesignation = employeeData?.designation || employeeData?.position || '';
+    const resolvedDesignation = (rawDesignation && rawDesignation.toLowerCase() !== 'admin')
+      ? rawDesignation
+      : (user.role === 'admin' ? 'Head of Admin' : (rawDesignation || ''));
+
+    const rawDepartment = employeeData?.department || '';
+    const resolvedDepartment = rawDepartment || (user.role === 'admin' ? 'Admin' : '');
+
+    // Auto-sync legacy admin employee record if designation was 'Admin' or missing
+    if (employeeData && user.role === 'admin' && (!employeeData.designation || employeeData.designation.toLowerCase() === 'admin')) {
+      Employee.updateOne(
+        { _id: employeeData._id },
+        { $set: { designation: 'Head of Admin', position: 'Head of Admin', department: 'Admin' } }
+      ).catch(err => console.error('Failed to sync admin designation:', err));
+    }
+
     // Merge data - preserve the master User role and use registry data only for identity fields.
     const profile = {
       ...employeeData,
@@ -198,6 +214,9 @@ exports.getMe = async (req, res) => {
       fullName: employeeData?.fullName || user.fullName || user.name || '',
       name: user.name || employeeData?.fullName || '',
       employeeId: employeeData?.employeeId || user.employeeId || '',
+      designation: resolvedDesignation,
+      position: resolvedDesignation,
+      department: resolvedDepartment,
       employeeRecordId: employeeData?._id,
       _id: user._id
     };

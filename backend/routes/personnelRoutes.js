@@ -29,7 +29,7 @@ router.get('/employees', authorize('admin', 'hr', 'manager'), async (req, res) =
 
 router.get('/all', authorize('admin', 'hr', 'manager', 'employee'), async (req, res) => {
   try {
-    const all = await User.find({ role: { $ne: 'admin' } }, 'name email role');
+    const all = await User.find({ status: { $ne: 'inactive' } }, 'name fullName email role');
     res.json(all);
   } catch (e) {
     res.status(500).json({ error: e.message });

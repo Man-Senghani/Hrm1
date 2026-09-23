@@ -88,9 +88,10 @@ const Profile = () => {
   const userDept = (safeUserData.department && typeof safeUserData.department === 'object') ? (safeUserData.department.name || '') : (safeUserData.department || safeUserData.dept || '');
   const currentRole = (userRole || '').toLowerCase();
   const isDeptAdmin = (userDept || '').trim().toLowerCase() === 'admin';
-  const displayDesignation = isDeptAdmin
-    ? 'Admin'
-    : (safeUserData.designation || safeUserData.position || (currentRole === 'admin' ? 'Admin' : ''));
+  const rawDesignation = safeUserData.designation || safeUserData.position || '';
+  const displayDesignation = (rawDesignation && rawDesignation.toLowerCase() !== 'admin')
+    ? rawDesignation
+    : ((currentRole === 'admin' || isDeptAdmin) ? 'Head of Admin' : (userRole || ''));
   const showReportingManager = currentRole !== 'admin';
 
   const empId = safeUserData.employeeId || '';
@@ -400,7 +401,7 @@ const Profile = () => {
             </div>
 
             <h3 style={{ fontSize: 18, fontWeight: 800, color: '#3b3e3c', margin: '0 0 4px' }}>{fullName}</h3>
-            {userRole ? <p style={{ fontSize: 13, color: '#8c918f', margin: '0 0 2px', fontWeight: 600 }}>{userRole.toUpperCase()}</p> : null}
+            {displayDesignation ? <p style={{ fontSize: 13, color: '#8c918f', margin: '0 0 2px', fontWeight: 600 }}>{displayDesignation.toUpperCase()}</p> : null}
             {empId ? <p style={{ fontSize: 13, color: '#00a76b', margin: '0 0 2px', fontWeight: 700 }}>ID: {empId}</p> : null}
             {userDept ? <p style={{ fontSize: 12, color: '#9ca3af', margin: 0, fontWeight: 600 }}>{userDept}</p> : null}
           </div>

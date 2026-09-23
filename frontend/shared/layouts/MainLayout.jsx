@@ -487,6 +487,11 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
 
   const activeRoleTitle = userRealRole;
 
+  const rawHeaderDesignation = userProfile?.designation || userProfile?.position || '';
+  const headerDesignation = (rawHeaderDesignation && rawHeaderDesignation.toLowerCase() !== 'admin')
+    ? rawHeaderDesignation
+    : (actualRole === 'admin' ? 'Head of Admin' : activeRoleTitle);
+
   const initials = displayName.split(' ').filter(Boolean).map(n => n[0]).join('').toUpperCase().substring(0, 2) || 'U';
 
   useEffect(() => {
@@ -1076,8 +1081,8 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
                     )}
                   </div>
                   <div className="hidden md:flex flex-col items-start leading-none">
-                    <span className="text-[12px] font-bold text-[#201515] dark:text-white truncate max-w-[120px]">{displayName}</span>
-                    <span className="text-[9px] font-bold text-[#939084] dark:text-[#a3b3af] uppercase tracking-wider mt-1">{activeRoleTitle}</span>
+                    <span className="text-[12px] font-bold text-[#201515] dark:text-white truncate max-w-[130px]">{displayName}</span>
+                    <span className="text-[9px] font-bold text-[#939084] dark:text-[#a3b3af] uppercase tracking-wider mt-1 truncate max-w-[150px]">{headerDesignation}</span>
                   </div>
                   <ChevronDown size={14} className={`hidden md:block text-gray-500 transition-transform duration-200 ${isProfileDropdownOpen ? 'rotate-180' : ''}`} />
                 </button>
@@ -1095,7 +1100,12 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
                 >
                   <div className="px-6 pt-5 pb-4 flex flex-col">
                     <span className="text-[17px] font-semibold text-slate-900 dark:text-white leading-tight">{displayName}</span>
-                    <span className="text-[13px] text-slate-500 dark:text-slate-400 mt-1 leading-none">{displayEmail}</span>
+                    <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/50 text-[#00a76b] dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/60 uppercase tracking-wide">
+                        {headerDesignation}
+                      </span>
+                      <span className="text-[12px] text-slate-500 dark:text-slate-400 leading-none">{displayEmail}</span>
+                    </div>
                   </div>
                   <div className="h-px bg-slate-100 dark:bg-slate-800/80 w-full" />
                   <div className="flex flex-col animate-fade-in">
