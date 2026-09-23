@@ -801,9 +801,6 @@ const Screenshots = () => {
                 <div className="py-20 text-center bg-white dark:bg-[#111c18] border border-slate-200/80 dark:border-[#38352e] rounded-2xl">
                   <Users size={36} className="mx-auto mb-3 text-slate-300 dark:text-slate-600" />
                   <p className="text-xs font-bold text-slate-700 dark:text-slate-300">No employee folders found</p>
-                  <p className="text-[11px] text-slate-400 mt-1">
-                    {searchEmployeeName || activeFolderFiltersCount > 0 ? 'Try adjusting your search query or filter options' : 'No employee records or activity captures found'}
-                  </p>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">

@@ -54,7 +54,7 @@ const StylishFilterSelect = ({ label, value, options, onChange }) => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const allOption = { label: `All (${label})`, value: 'all' };
+  const allOption = { label: 'All', value: 'all' };
   const fullOptions = [allOption, ...options];
   const current = fullOptions.find(o => String(o.value).toLowerCase() === String(value).toLowerCase()) || allOption;
 
@@ -609,24 +609,19 @@ const ExportFilterModal = ({
                   <button
                     type="button"
                     onClick={() => setDataScope('filtered')}
-                    className={`flex items-start gap-2.5 p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                    className={`flex items-center gap-2.5 p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
                       dataScope === 'filtered'
                         ? 'border-[#00a76b] bg-emerald-50/60 dark:bg-emerald-950/30 ring-1 ring-[#00a76b]'
                         : 'border-gray-200 dark:border-[#1a332b] bg-white dark:bg-[#11221d] hover:bg-gray-50 dark:hover:bg-[#162f27]'
                     }`}
                   >
-                    <div className={`w-3.5 h-3.5 rounded-full border mt-0.5 flex items-center justify-center shrink-0 ${
+                    <div className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center shrink-0 ${
                       dataScope === 'filtered' ? 'border-[#00a76b] bg-[#00a76b]' : 'border-gray-300 dark:border-gray-600'
                     }`}>
                       {dataScope === 'filtered' && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
                     </div>
-                    <div>
-                      <div className="text-xs font-bold text-gray-900 dark:text-white">
-                        Current Filtered View ({filteredData.length})
-                      </div>
-                      <div className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5 leading-tight">
-                        Export only items matching active search and page filters
-                      </div>
+                    <div className="text-xs font-bold text-gray-900 dark:text-white">
+                      Current Filtered View
                     </div>
                   </button>
                 )}
@@ -634,24 +629,19 @@ const ExportFilterModal = ({
                 <button
                   type="button"
                   onClick={() => setDataScope('all')}
-                  className={`flex items-start gap-2.5 p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                  className={`flex items-center gap-2.5 p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
                     dataScope === 'all'
                       ? 'border-[#00a76b] bg-emerald-50/60 dark:bg-emerald-950/30 ring-1 ring-[#00a76b]'
                       : 'border-gray-200 dark:border-[#1a332b] bg-white dark:bg-[#11221d] hover:bg-gray-50 dark:hover:bg-[#162f27]'
                   }`}
                 >
-                  <div className={`w-3.5 h-3.5 rounded-full border mt-0.5 flex items-center justify-center shrink-0 ${
+                  <div className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center shrink-0 ${
                     dataScope === 'all' ? 'border-[#00a76b] bg-[#00a76b]' : 'border-gray-300 dark:border-gray-600'
                   }`}>
                     {dataScope === 'all' && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
                   </div>
-                  <div>
-                    <div className="text-xs font-bold text-gray-900 dark:text-white">
-                      All Records ({allData.length})
-                    </div>
-                    <div className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5 leading-tight">
-                      Export complete dataset without active page search/filter limits
-                    </div>
+                  <div className="text-xs font-bold text-gray-900 dark:text-white">
+                    All Records
                   </div>
                 </button>
 
@@ -660,29 +650,21 @@ const ExportFilterModal = ({
                     <button
                       type="button"
                       onClick={() => setDataScope('dateRange')}
-                      className={`w-full flex items-start gap-2.5 p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                      className={`w-full flex items-center gap-2.5 p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
                         dataScope === 'dateRange'
                           ? 'border-[#00a76b] bg-emerald-50/60 dark:bg-emerald-950/30 ring-1 ring-[#00a76b]'
                           : 'border-gray-200 dark:border-[#1a332b] bg-white dark:bg-[#11221d] hover:bg-gray-50 dark:hover:bg-[#162f27]'
                       }`}
                     >
-                      <div className={`w-3.5 h-3.5 rounded-full border mt-0.5 flex items-center justify-center shrink-0 ${
+                      <div className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center shrink-0 ${
                         dataScope === 'dateRange' ? 'border-[#00a76b] bg-[#00a76b]' : 'border-gray-300 dark:border-gray-600'
                       }`}>
                         {dataScope === 'dateRange' && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="text-xs font-bold text-gray-900 dark:text-white flex items-center justify-between">
-                          <span className="flex items-center gap-1.5">
-                            <Calendar size={13} className="text-[#00a76b]" />
-                            <span>Select Date Range</span>
-                          </span>
-                          <span className="text-[10.5px] font-bold text-emerald-600 dark:text-emerald-400">
-                            ({dateRangeRecords.length} {dateRangeRecords.length === 1 ? 'record' : 'records'})
-                          </span>
-                        </div>
-                        <div className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5 leading-tight">
-                          Export records between 2 specific dates (From &amp; To, max: Today)
+                        <div className="text-xs font-bold text-gray-900 dark:text-white flex items-center gap-1.5">
+                          <Calendar size={13} className="text-[#00a76b]" />
+                          <span>Select Date Range</span>
                         </div>
                       </div>
                     </button>
@@ -705,7 +687,7 @@ const ExportFilterModal = ({
 
                           <div>
                             <label className="text-[10.5px] font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300 block mb-1">
-                              To Date (Max Date)
+                              To Date
                             </label>
                             <input
                               type="date"
@@ -783,9 +765,6 @@ const ExportFilterModal = ({
               <label className="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 flex items-center gap-1.5 shrink-0">
                 <SlidersHorizontal size={13} />
                 <span>Fields</span>
-                <span className="text-[10.5px] font-medium normal-case text-gray-400 dark:text-gray-500">
-                  ({selectedColumnKeys.length}/{columns.length} selected)
-                </span>
               </label>
               <div className="flex items-center gap-1.5 shrink-0 text-[11px]">
                 <button
@@ -885,11 +864,7 @@ const ExportFilterModal = ({
         </div>
 
         {/* Footer */}
-        <div className="px-5 py-3.5 border-t border-gray-100 dark:border-[#1a332b] bg-gray-50/70 dark:bg-[#12241f] space-y-2.5 shrink-0">
-          <div className="text-[11px] text-gray-500 dark:text-gray-400 text-center">
-            Exporting <span className="font-bold text-gray-800 dark:text-gray-200">{recordsToExport.length} records</span> with <span className="font-bold text-gray-800 dark:text-gray-200">{selectedColumnKeys.length} columns</span>
-          </div>
-
+        <div className="px-5 py-3.5 border-t border-gray-100 dark:border-[#1a332b] bg-gray-50/70 dark:bg-[#12241f] shrink-0">
           <div className="w-full">
             <button
               type="button"

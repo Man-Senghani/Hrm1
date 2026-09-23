@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import {
@@ -27,6 +28,63 @@ const STATUS_BADGES = {
   }
 };
 
+// ── ReasonCell: fixed-position tooltip (no clipping) that opens UP or DOWN ──
+const ReasonCell = ({ reason }) => {
+  const textRef = useRef(null);
+  const [isClamped, setIsClamped] = useState(false);
+  const [tooltip, setTooltip] = useState(null); // { top, left, dir }
+
+  useEffect(() => {
+    const el = textRef.current;
+    if (el) setIsClamped(el.scrollHeight > el.clientHeight + 1);
+  }, [reason]);
+
+  const showTooltip = () => {
+    const el = textRef.current;
+    if (!el || !isClamped) return;
+    const rect = el.getBoundingClientRect();
+    const tipW = 288; // w-72
+    const spaceAbove = rect.top;
+    const dir = spaceAbove < 140 ? 'bottom' : 'top';
+    let left = Math.max(8, Math.min(rect.left, window.innerWidth - tipW - 8));
+    setTooltip({ dir, left, rectTop: rect.top, rectBottom: rect.bottom });
+  };
+
+  const hideTooltip = () => setTooltip(null);
+
+  return (
+    <div className="relative" onMouseEnter={showTooltip} onMouseLeave={hideTooltip}>
+      <p ref={textRef} className="font-semibold line-clamp-2 cursor-default">
+        {reason}
+      </p>
+      {tooltip && createPortal(
+        <div
+          style={{
+            position: 'fixed',
+            zIndex: 999999,
+            left: tooltip.left,
+            ...(tooltip.dir === 'top'
+              ? { bottom: window.innerHeight - tooltip.rectTop + 8 }
+              : { top: tooltip.rectBottom + 8 }
+            ),
+            width: 288,
+            pointerEvents: 'none'
+          }}
+          className="bg-slate-800 dark:bg-[#071e17] text-white text-xs rounded-xl px-3 py-2.5 shadow-2xl border border-slate-600 dark:border-[#1a4a35] leading-relaxed"
+        >
+          {reason}
+          {tooltip.dir === 'top' ? (
+            <div className="absolute top-full left-4 border-4 border-transparent border-t-slate-800 dark:border-t-[#071e17]" />
+          ) : (
+            <div className="absolute bottom-full left-4 border-4 border-transparent border-b-slate-800 dark:border-b-[#071e17]" />
+          )}
+        </div>,
+        document.body
+      )}
+    </div>
+  );
+};
+
 const MeetingRequestsTable = ({
   userRole = 'employee',
   currentUserId = null,
@@ -44,13 +102,13 @@ const MeetingRequestsTable = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDate, setSelectedDate] = useState('');
 
-  // Modals state
-  const [reviewModalRequest, setReviewModalRequest] = useState(null);
+  // Drawer / Review state
+  const [selectedRequest, setSelectedRequest] = useState(null);
+  const [reviewMode, setReviewMode] = useState('approve'); // 'approve' | 'reject' | 'view'
   const [finalMinutesInput, setFinalMinutesInput] = useState('');
   const [reviewRemarks, setReviewRemarks] = useState('');
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
 
-  const [rejectModalRequest, setRejectModalRequest] = useState(null);
   const [rejectRemarks, setRejectRemarks] = useState('');
   const [rejectSubmitting, setRejectSubmitting] = useState(false);
 
@@ -64,6 +122,10 @@ const MeetingRequestsTable = ({
   const submittingRef = useRef(false);
   const reviewSubmittingRef = useRef(false);
   const rejectSubmittingRef = useRef(false);
+
+  const isInactiveZero = availableInactiveMins !== null && availableInactiveMins <= 0;
+  const isOverInactive = availableInactiveMins !== null && availableInactiveMins > 0 && Number(newMinutes) > availableInactiveMins;
+  const isSubmitDisabled = newSubmitting || availableInactiveMins === null || isInactiveZero || isOverInactive || !newMinutes || !newReason.trim() || Number(newMinutes) <= 0;
 
   const sessionUser = (() => {
     try {
@@ -107,6 +169,7 @@ const MeetingRequestsTable = ({
       setRequests(res.data.requests || []);
       setTotal(res.data.total || 0);
       setTotalPages(res.data.totalPages || 1);
+
     } catch (err) {
       console.error('Failed to load meeting requests:', err);
       toast.error('Failed to load meeting requests');
@@ -172,7 +235,11 @@ const MeetingRequestsTable = ({
         }
       }
 
-      setAvailableInactiveMins(Math.floor(idleSec / 60));
+      const available = Math.floor(idleSec / 60);
+      setAvailableInactiveMins(available);
+      if (available <= 0) {
+        setNewMinutes('');
+      }
     } catch (err) {
       setAvailableInactiveMins(null);
     }
@@ -191,16 +258,20 @@ const MeetingRequestsTable = ({
     if (e && e.preventDefault) e.preventDefault();
     if (submittingRef.current || newSubmitting) return;
 
+    if (isInactiveZero || (availableInactiveMins !== null && availableInactiveMins <= 0)) {
+      return toast.error('Inactive time is 0 mins. You cannot submit a meeting request without recorded inactive time.');
+    }
+
     if (!newReason.trim()) {
-      return toast.error('Please enter a reason for the meeting / offline time');
+      return toast.error('Meeting reason is required.');
     }
     const mins = parseInt(newMinutes, 10);
     if (isNaN(mins) || mins <= 0) {
-      return toast.error('Please enter a valid duration in minutes (greater than 0)');
+      return toast.error('Duration in minutes is required and must be greater than 0.');
     }
 
     if (availableInactiveMins !== null && mins > availableInactiveMins) {
-      return toast.error(`Requested minutes (${mins}) cannot exceed your recorded inactive time (${availableInactiveMins} mins)`);
+      return toast.error(`Inactive time is not sufficient for this request. Maximum allowed duration is ${availableInactiveMins} mins.`);
     }
 
     submittingRef.current = true;
@@ -217,42 +288,79 @@ const MeetingRequestsTable = ({
 
       toast.success('Meeting request submitted successfully!');
       setIsNewRequestOpen(false);
-      fetchRequests();
-      if (onStatusChanged) onStatusChanged();
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to submit request');
+      return;
     } finally {
       submittingRef.current = false;
       setNewSubmitting(false);
     }
+
+    // Refresh data after successful submission
+    try {
+      fetchRequests();
+      if (onStatusChanged) onStatusChanged();
+    } catch (refreshErr) {
+      console.error('Error refreshing requests after submission:', refreshErr);
+    }
   };
 
-  // Open Approval Review Modal
+  const checkCanReview = useCallback((item) => {
+    if (!item || item.status !== 'pending') return false;
+    const isOwn = Boolean(effectiveUserId && String(item.employeeId || '') === String(effectiveUserId));
+    const tRole = (item.employeeRole || 'employee').toLowerCase();
+    if (effectiveUserRole === 'admin') return true;
+    if (effectiveUserRole === 'hr') return !isOwn && tRole !== 'hr';
+    if (effectiveUserRole === 'manager') return !isOwn && tRole === 'employee';
+    return false;
+  }, [effectiveUserId, effectiveUserRole]);
+
+  // Open drawer on row click
+  const handleRowClick = (item) => {
+    setSelectedRequest(item);
+    if (checkCanReview(item)) {
+      setReviewMode('approve');
+      setFinalMinutesInput(String(item.requestedDurationMinutes || ''));
+      setReviewRemarks('');
+      setRejectRemarks('');
+    } else {
+      setReviewMode('view');
+    }
+  };
+
+  // Open Approval Review Drawer
   const handleOpenReviewModal = (reqItem) => {
-    setReviewModalRequest(reqItem);
+    setSelectedRequest(reqItem);
+    setReviewMode('approve');
     setFinalMinutesInput(String(reqItem.requestedDurationMinutes || ''));
     setReviewRemarks('');
   };
 
+  // Open Rejection Drawer
+  const handleOpenRejectModal = (reqItem) => {
+    setSelectedRequest(reqItem);
+    setReviewMode('reject');
+    setRejectRemarks('');
+  };
+
   // Submit Approval
   const handleConfirmApproval = async () => {
-    if (!reviewModalRequest || reviewSubmittingRef.current || reviewSubmitting) return;
+    if (!selectedRequest || reviewSubmittingRef.current || reviewSubmitting) return;
     const finalMins = parseInt(finalMinutesInput, 10);
     if (isNaN(finalMins) || finalMins <= 0) {
       return toast.error('Approved duration must be at least 1 minute');
     }
 
     // Inactive Time Ceiling check
-    const maxAllowed = reviewModalRequest.recordedInactiveMinutes || 0;
+    const maxAllowed = selectedRequest.recordedInactiveMinutes || 0;
     if (maxAllowed > 0 && finalMins > maxAllowed) {
       return toast.error(`Final approved time (${finalMins} mins) cannot exceed recorded inactive time (${maxAllowed} mins). You can approve a lower number.`);
     }
-
     reviewSubmittingRef.current = true;
     setReviewSubmitting(true);
     try {
       const token = sessionStorage.getItem('token');
-      await axios.put(`/api/time/offline-request/${reviewModalRequest._id}/status`, {
+      await axios.put(`/api/time/offline-request/${selectedRequest._id}/status`, {
         status: 'approved',
         finalMinutes: finalMins,
         reviewRemarks: reviewRemarks.trim()
@@ -261,32 +369,33 @@ const MeetingRequestsTable = ({
       });
 
       toast.success(`Meeting request approved for ${finalMins} minutes!`);
-      setReviewModalRequest(null);
-      fetchRequests();
-      if (onStatusChanged) onStatusChanged();
+      setSelectedRequest(null);
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to approve request');
+      return;
     } finally {
       reviewSubmittingRef.current = false;
       setReviewSubmitting(false);
     }
-  };
 
-  // Open Rejection Modal
-  const handleOpenRejectModal = (reqItem) => {
-    setRejectModalRequest(reqItem);
-    setRejectRemarks('');
+    // Refresh data after successful API update
+    try {
+      fetchRequests();
+      if (onStatusChanged) onStatusChanged();
+    } catch (refreshErr) {
+      console.error('Error refreshing requests after approval:', refreshErr);
+    }
   };
 
   // Submit Rejection
   const handleConfirmRejection = async () => {
-    if (!rejectModalRequest || rejectSubmittingRef.current || rejectSubmitting) return;
+    if (!selectedRequest || rejectSubmittingRef.current || rejectSubmitting) return;
 
     rejectSubmittingRef.current = true;
     setRejectSubmitting(true);
     try {
       const token = sessionStorage.getItem('token');
-      await axios.put(`/api/time/offline-request/${rejectModalRequest._id}/status`, {
+      await axios.put(`/api/time/offline-request/${selectedRequest._id}/status`, {
         status: 'rejected',
         reviewRemarks: rejectRemarks.trim()
       }, {
@@ -294,14 +403,21 @@ const MeetingRequestsTable = ({
       });
 
       toast.success('Meeting request rejected.');
-      setRejectModalRequest(null);
-      fetchRequests();
-      if (onStatusChanged) onStatusChanged();
+      setSelectedRequest(null);
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to reject request');
+      return;
     } finally {
       rejectSubmittingRef.current = false;
       setRejectSubmitting(false);
+    }
+
+    // Refresh data after successful API update
+    try {
+      fetchRequests();
+      if (onStatusChanged) onStatusChanged();
+    } catch (refreshErr) {
+      console.error('Error refreshing requests after rejection:', refreshErr);
     }
   };
 
@@ -324,6 +440,17 @@ const MeetingRequestsTable = ({
 
         {/* Action Controls */}
         <div className="flex flex-wrap items-center gap-2">
+          {/* Date Range Picker */}
+          <div className="w-auto min-w-[145px]">
+            <AttendanceDatePicker
+              value={selectedDate}
+              onChange={(val) => { setSelectedDate(val); setPage(1); }}
+              placeholder="dd-mm-yyyy"
+              allowRange={true}
+              align="right"
+            />
+          </div>
+
           {/* Status Filter */}
           <div className="flex items-center gap-1 bg-slate-50 dark:bg-[#0d2a22] border border-[#e2eae7] dark:border-[#133029] p-1 rounded-xl">
             {['All', 'Pending', 'Approved', 'Rejected'].map(s => (
@@ -358,34 +485,6 @@ const MeetingRequestsTable = ({
           >
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
           </button>
-        </div>
-      </div>
-
-      {/* ── Search & Date Filters ── */}
-      <div className="flex flex-col sm:flex-row items-center gap-2 mb-3">
-        {isReviewer && (
-          <div className="flex-1 w-full relative">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-[#829e92]" />
-            <input
-              type="text"
-              placeholder="Search employee, ID, reason..."
-              value={searchQuery}
-              onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }}
-              className="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl bg-slate-50 dark:bg-[#0d2a22] border border-[#e2eae7] dark:border-[#133029] text-slate-800 dark:text-white placeholder-slate-400 dark:placeholder-[#829e92] focus:outline-none focus:ring-2 focus:ring-emerald-500/30 transition-all"
-            />
-          </div>
-        )}
-
-        <div className="w-full sm:w-auto flex items-center gap-2">
-          <div className="w-full sm:w-auto min-w-[160px]">
-            <AttendanceDatePicker
-              value={selectedDate}
-              onChange={(val) => { setSelectedDate(val); setPage(1); }}
-              placeholder="dd-mm-yyyy"
-              allowRange={true}
-              align="right"
-            />
-          </div>
 
           {(searchQuery || selectedDate || statusFilter !== 'All') && (
             <button
@@ -397,6 +496,20 @@ const MeetingRequestsTable = ({
           )}
         </div>
       </div>
+
+      {/* ── Search Filter (Reviewers Only) ── */}
+      {isReviewer && (
+        <div className="w-full relative mb-3">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-[#829e92]" />
+          <input
+            type="text"
+            placeholder="Search employee, ID, reason..."
+            value={searchQuery}
+            onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }}
+            className="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl bg-slate-50 dark:bg-[#0d2a22] border border-[#e2eae7] dark:border-[#133029] text-slate-800 dark:text-white placeholder-slate-400 dark:placeholder-[#829e92] focus:outline-none focus:ring-2 focus:ring-emerald-500/30 transition-all"
+          />
+        </div>
+      )}
 
       {/* ── Table Container (Auto Height) ── */}
       <div className="h-auto overflow-x-auto rounded-xl border border-[#e2eae7] dark:border-[#133029]">
@@ -461,18 +574,7 @@ const MeetingRequestsTable = ({
                 const isOwnRequest = Boolean(effectiveUserId && String(item.employeeId || '') === String(effectiveUserId));
                 const targetRole = (item.employeeRole || 'employee').toLowerCase();
 
-                let canReview = false;
-                if (item.status === 'pending') {
-                  if (effectiveUserRole === 'admin') {
-                    canReview = true;
-                  } else if (effectiveUserRole === 'hr') {
-                    // HR can review Employee and Manager requests, but NOT HR requests or own request
-                    canReview = !isOwnRequest && targetRole !== 'hr';
-                  } else if (effectiveUserRole === 'manager') {
-                    // Manager can review direct Employee requests, but NOT Manager, HR, or own request
-                    canReview = !isOwnRequest && targetRole === 'employee';
-                  }
-                }
+                const canReview = checkCanReview(item);
 
                 let pendingLabel = 'Awaiting Review';
                 if (targetRole === 'hr') {
@@ -486,7 +588,8 @@ const MeetingRequestsTable = ({
                 return (
                   <tr
                     key={item._id}
-                    className="hover:bg-slate-50/60 dark:hover:bg-[#0d2a22]/50 transition-colors"
+                    onClick={() => handleRowClick(item)}
+                    className="hover:bg-slate-50 dark:hover:bg-[#0d2a22]/50 cursor-pointer transition-colors"
                   >
                     {/* Employee Info */}
                     {isReviewer && (
@@ -507,7 +610,7 @@ const MeetingRequestsTable = ({
 
                     {/* Reason */}
                     <td className="px-3.5 py-2.5 text-slate-700 dark:text-slate-300 max-w-[220px]">
-                      <p className="font-semibold line-clamp-2">{item.reason}</p>
+                      <ReasonCell reason={item.reason} />
                       {item.reviewRemarks && (
                         <p className="text-[10px] text-slate-400 dark:text-[#829e92] mt-0.5 italic">
                           Remark: {item.reviewRemarks}
@@ -549,9 +652,13 @@ const MeetingRequestsTable = ({
                     {/* Actions */}
                     <td className="px-3.5 py-2.5 text-right whitespace-nowrap">
                       {canReview ? (
-                        <div className="flex items-center justify-end gap-1.5">
+                        <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
                           <button
-                            onClick={() => handleOpenReviewModal(item)}
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenReviewModal(item);
+                            }}
                             title="Approve / Adjust Final Timer"
                             className="flex items-center gap-1 px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-[11px] shadow-sm transition-all cursor-pointer"
                           >
@@ -559,7 +666,11 @@ const MeetingRequestsTable = ({
                             <span>Approve</span>
                           </button>
                           <button
-                            onClick={() => handleOpenRejectModal(item)}
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenRejectModal(item);
+                            }}
                             title="Reject Request"
                             className="p-1 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400 rounded-lg font-bold transition-all cursor-pointer"
                           >
@@ -620,169 +731,281 @@ const MeetingRequestsTable = ({
         </div>
       )}
 
-      {/* ── APPROVAL REVIEW MODAL (With Inactive Time Ceiling & Editable Final Timer) ── */}
-      {reviewModalRequest && (
+      {/* ── UNIFIED REQUEST DETAILS & REVIEW SIDEBAR (Right-side slide-over) ── */}
+      {selectedRequest && (
         <div
-          onClick={() => setReviewModalRequest(null)}
-          className="fixed inset-0 z-[99999] bg-slate-900/60 dark:bg-black/75 backdrop-blur-md flex items-center justify-center p-4"
+          onClick={() => setSelectedRequest(null)}
+          className="fixed inset-0 z-[99999] bg-slate-900/60 dark:bg-black/75 backdrop-blur-md flex justify-end animate-in fade-in duration-200"
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-md bg-white dark:bg-[#0d2a22] rounded-2xl border border-[#e2eae7] dark:border-[#133029] shadow-2xl p-5"
+            className="w-full max-w-md h-full bg-white dark:bg-[#0a1f1a] border-l border-[#e2eae7] dark:border-[#133029] shadow-2xl p-6 flex flex-col justify-between overflow-y-auto animate-in slide-in-from-right duration-300"
           >
-            <div className="flex items-center justify-between pb-3 border-b border-[#e2eae7] dark:border-[#133029]">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
-                  <CheckCircle size={18} />
+            <div>
+              {/* Header */}
+              <div className="flex items-center justify-between pb-4 border-b border-[#e2eae7] dark:border-[#133029]">
+                <div className="flex items-center gap-2.5">
+                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${
+                    reviewMode === 'reject' || selectedRequest.status === 'rejected'
+                      ? 'bg-rose-50 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400'
+                      : reviewMode === 'approve' && selectedRequest.status === 'pending'
+                      ? 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400'
+                      : 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400'
+                  }`}>
+                    {reviewMode === 'reject' || selectedRequest.status === 'rejected' ? (
+                      <XCircle size={20} />
+                    ) : reviewMode === 'approve' && selectedRequest.status === 'pending' ? (
+                      <CheckCircle size={20} />
+                    ) : (
+                      <Timer size={20} />
+                    )}
+                  </div>
+                  <div>
+                    <h3 className="text-base font-extrabold text-slate-900 dark:text-white">
+                      {selectedRequest.status === 'pending' && checkCanReview(selectedRequest)
+                        ? reviewMode === 'approve'
+                          ? 'Approve Request'
+                          : 'Reject Request'
+                        : 'Meeting Request Details'}
+                    </h3>
+                    <p className="text-[11px] text-slate-500 dark:text-[#829e92]">
+                      {selectedRequest.status === 'pending' && checkCanReview(selectedRequest)
+                        ? reviewMode === 'approve'
+                          ? 'Adjust final approved minutes if needed'
+                          : 'Provide rejection reason to employee'
+                        : `Submitted for ${selectedRequest.date}`}
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h4 className="text-sm font-extrabold text-slate-900 dark:text-white">Approve Meeting Request</h4>
-                  <p className="text-[10px] text-slate-400 dark:text-[#829e92]">Adjust final approved minutes if needed</p>
+                <button
+                  type="button"
+                  onClick={() => setSelectedRequest(null)}
+                  className="text-slate-400 hover:text-slate-700 dark:hover:text-white p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-[#071e17] transition-all cursor-pointer"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              {/* Mode Switcher (only for pending reviewable requests) */}
+              {selectedRequest.status === 'pending' && checkCanReview(selectedRequest) && (
+                <div className="mt-4 bg-slate-100 dark:bg-[#133029] p-1 rounded-xl border border-slate-200/80 dark:border-[#38352e] inline-flex items-center w-full">
+                  <button
+                    type="button"
+                    onClick={() => setReviewMode('approve')}
+                    className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                      reviewMode === 'approve'
+                        ? 'bg-emerald-600 text-white shadow-sm'
+                        : 'text-slate-500 hover:text-slate-800 dark:text-[#829e92] dark:hover:text-white'
+                    }`}
+                  >
+                    <Check size={13} />
+                    <span>Approve Mode</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setReviewMode('reject')}
+                    className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                      reviewMode === 'reject'
+                        ? 'bg-rose-600 text-white shadow-sm'
+                        : 'text-slate-500 hover:text-slate-800 dark:text-[#829e92] dark:hover:text-white'
+                    }`}
+                  >
+                    <X size={13} />
+                    <span>Reject Mode</span>
+                  </button>
                 </div>
+              )}
+
+              {/* Request Info Details Table */}
+              <div className={`mt-4 rounded-xl border overflow-hidden text-xs ${
+                reviewMode === 'reject' || selectedRequest.status === 'rejected'
+                  ? 'border-rose-200 dark:border-rose-900/50'
+                  : 'border-[#e2eae7] dark:border-[#133029]'
+              }`}>
+                <table className="w-full">
+                  <tbody>
+                    <tr className={`border-b ${
+                      reviewMode === 'reject' || selectedRequest.status === 'rejected'
+                        ? 'border-rose-200 dark:border-rose-900/50'
+                        : 'border-[#e2eae7] dark:border-[#133029]'
+                    }`}>
+                      <td className={`px-3.5 py-2.5 text-slate-400 dark:text-[#829e92] font-semibold w-[38%] ${
+                        reviewMode === 'reject' || selectedRequest.status === 'rejected'
+                          ? 'bg-rose-50/60 dark:bg-rose-950/20'
+                          : 'bg-slate-50 dark:bg-[#071e17]'
+                      }`}>Employee:</td>
+                      <td className="px-3.5 py-2.5 font-bold text-slate-800 dark:text-white text-right">
+                        {selectedRequest.employeeName} {selectedRequest.empId ? `(${selectedRequest.empId})` : ''}
+                      </td>
+                    </tr>
+                    <tr className={`border-b ${
+                      reviewMode === 'reject' || selectedRequest.status === 'rejected'
+                        ? 'border-rose-200 dark:border-rose-900/50'
+                        : 'border-[#e2eae7] dark:border-[#133029]'
+                    }`}>
+                      <td className={`px-3.5 py-2.5 text-slate-400 dark:text-[#829e92] font-semibold ${
+                        reviewMode === 'reject' || selectedRequest.status === 'rejected'
+                          ? 'bg-rose-50/60 dark:bg-rose-950/20'
+                          : 'bg-slate-50 dark:bg-[#071e17]'
+                      }`}>Date:</td>
+                      <td className="px-3.5 py-2.5 font-bold text-slate-800 dark:text-white text-right">{selectedRequest.date}</td>
+                    </tr>
+                    <tr className={`border-b ${
+                      reviewMode === 'reject' || selectedRequest.status === 'rejected'
+                        ? 'border-rose-200 dark:border-rose-900/50'
+                        : 'border-[#e2eae7] dark:border-[#133029]'
+                    }`}>
+                      <td className={`px-3.5 py-2.5 text-slate-400 dark:text-[#829e92] font-semibold align-top ${
+                        reviewMode === 'reject' || selectedRequest.status === 'rejected'
+                          ? 'bg-rose-50/60 dark:bg-rose-950/20'
+                          : 'bg-slate-50 dark:bg-[#071e17]'
+                      }`}>Reason:</td>
+                      <td className="px-3.5 py-2.5 font-bold text-slate-800 dark:text-white text-right leading-relaxed whitespace-pre-wrap">
+                        {selectedRequest.reason}
+                      </td>
+                    </tr>
+                    <tr className={`border-b ${
+                      reviewMode === 'reject' || selectedRequest.status === 'rejected'
+                        ? 'border-rose-200 dark:border-rose-900/50'
+                        : 'border-[#e2eae7] dark:border-[#133029]'
+                    }`}>
+                      <td className={`px-3.5 py-2.5 text-slate-400 dark:text-[#829e92] font-semibold ${
+                        reviewMode === 'reject' || selectedRequest.status === 'rejected'
+                          ? 'bg-rose-50/60 dark:bg-rose-950/20'
+                          : 'bg-slate-50 dark:bg-[#071e17]'
+                      }`}>Recorded Inactive:</td>
+                      <td className="px-3.5 py-2.5 font-mono font-bold text-slate-600 dark:text-slate-300 text-right">
+                        {selectedRequest.recordedInactiveMinutes || 0} mins
+                      </td>
+                    </tr>
+                    <tr className={selectedRequest.status !== 'pending' ? `border-b ${
+                      selectedRequest.status === 'rejected' ? 'border-rose-200 dark:border-rose-900/50' : 'border-[#e2eae7] dark:border-[#133029]'
+                    }` : ''}>
+                      <td className={`px-3.5 py-2.5 text-slate-400 dark:text-[#829e92] font-semibold ${
+                        reviewMode === 'reject' || selectedRequest.status === 'rejected'
+                          ? 'bg-rose-50/60 dark:bg-rose-950/20'
+                          : 'bg-slate-50 dark:bg-[#071e17]'
+                      }`}>Employee Requested:</td>
+                      <td className="px-3.5 py-2.5 font-black text-amber-600 dark:text-amber-400 text-right">
+                        {selectedRequest.requestedDurationMinutes} mins
+                      </td>
+                    </tr>
+                    {selectedRequest.status === 'approved' && (
+                      <>
+                        <tr className="border-b border-[#e2eae7] dark:border-[#133029]">
+                          <td className="px-3.5 py-2.5 text-slate-400 dark:text-[#829e92] font-semibold bg-emerald-50/40 dark:bg-emerald-950/20">Final Approved:</td>
+                          <td className="px-3.5 py-2.5 font-black text-emerald-600 dark:text-emerald-400 text-right">{selectedRequest.approvedDurationMinutes} mins</td>
+                        </tr>
+                        {selectedRequest.reviewRemarks && (
+                          <tr className="border-b border-[#e2eae7] dark:border-[#133029]">
+                            <td className="px-3.5 py-2.5 text-slate-400 dark:text-[#829e92] font-semibold bg-slate-50 dark:bg-[#071e17]">Remarks:</td>
+                            <td className="px-3.5 py-2.5 font-bold text-slate-700 dark:text-slate-300 text-right">{selectedRequest.reviewRemarks}</td>
+                          </tr>
+                        )}
+                        <tr>
+                          <td className="px-3.5 py-2.5 text-slate-400 dark:text-[#829e92] font-semibold bg-slate-50 dark:bg-[#071e17]">Reviewed At:</td>
+                          <td className="px-3.5 py-2.5 font-semibold text-slate-500 dark:text-slate-400 text-right">
+                            {selectedRequest.reviewedAt ? new Date(selectedRequest.reviewedAt).toLocaleString() : '--'}
+                          </td>
+                        </tr>
+                      </>
+                    )}
+                    {selectedRequest.status === 'rejected' && (
+                      <>
+                        <tr className="border-b border-rose-200 dark:border-rose-900/50">
+                          <td className="px-3.5 py-2.5 text-slate-400 dark:text-[#829e92] font-semibold bg-rose-50/60 dark:bg-rose-950/20">Rejection Reason:</td>
+                          <td className="px-3.5 py-2.5 font-bold text-rose-600 dark:text-rose-400 text-right leading-relaxed">{selectedRequest.reviewRemarks || 'No remark provided'}</td>
+                        </tr>
+                        <tr>
+                          <td className="px-3.5 py-2.5 text-slate-400 dark:text-[#829e92] font-semibold bg-rose-50/60 dark:bg-rose-950/20">Reviewed At:</td>
+                          <td className="px-3.5 py-2.5 font-semibold text-slate-500 dark:text-slate-400 text-right">
+                            {selectedRequest.reviewedAt ? new Date(selectedRequest.reviewedAt).toLocaleString() : '--'}
+                          </td>
+                        </tr>
+                      </>
+                    )}
+                  </tbody>
+                </table>
               </div>
-              <button
-                onClick={() => setReviewModalRequest(null)}
-                className="text-slate-400 hover:text-slate-700 dark:hover:text-white p-1 rounded-lg"
-              >
-                <X size={16} />
-              </button>
+
+              {/* Form Controls for Reviewers when pending */}
+              {selectedRequest.status === 'pending' && checkCanReview(selectedRequest) && (
+                <>
+                  {reviewMode === 'approve' ? (
+                    <div className="mt-5 space-y-4">
+                      <div>
+                        <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-200 mb-1.5">
+                          Final Approved Time (Minutes)
+                        </label>
+                        <input
+                          type="number"
+                          min="1"
+                          max={selectedRequest.recordedInactiveMinutes || 480}
+                          value={finalMinutesInput}
+                          onChange={(e) => setFinalMinutesInput(e.target.value)}
+                          className="w-full px-3 py-2.5 text-sm font-bold rounded-xl border border-[#cbd5e1] dark:border-[#133029] bg-white dark:bg-[#071e17] text-slate-800 dark:text-white focus:ring-2 focus:ring-emerald-500/30 outline-none"
+                        />
+                        <p className="text-[10px] text-slate-400 dark:text-[#829e92] mt-1">
+                          Max {selectedRequest.recordedInactiveMinutes || 0} mins (cannot exceed recorded inactive time).
+                        </p>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-200 mb-1.5">
+                          Reviewer Remarks (Optional)
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="e.g. Approved for 15m meeting"
+                          value={reviewRemarks}
+                          onChange={(e) => setReviewRemarks(e.target.value)}
+                          className="w-full px-3 py-2 text-xs rounded-xl border border-[#cbd5e1] dark:border-[#133029] bg-white dark:bg-[#071e17] text-slate-800 dark:text-white focus:ring-2 focus:ring-emerald-500/30 outline-none"
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="mt-5">
+                      <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-200 mb-1.5">
+                        Reason for Rejection
+                      </label>
+                      <textarea
+                        rows={4}
+                        placeholder="e.g. Overlapping with scheduled sprint standup"
+                        value={rejectRemarks}
+                        onChange={(e) => setRejectRemarks(e.target.value)}
+                        className="w-full px-3 py-2.5 text-xs rounded-xl border border-[#cbd5e1] dark:border-[#133029] bg-white dark:bg-[#071e17] text-slate-800 dark:text-white focus:ring-2 focus:ring-rose-500/30 outline-none resize-none"
+                      />
+                    </div>
+                  )}
+                </>
+              )}
             </div>
 
-            {/* Details Box */}
-            <div className="my-4 p-3 rounded-xl bg-slate-50 dark:bg-[#071e17] border border-[#e2eae7] dark:border-[#133029] space-y-1.5 text-xs">
-              <div className="flex justify-between">
-                <span className="text-slate-400 dark:text-[#829e92] font-semibold">Employee:</span>
-                <span className="font-bold text-slate-800 dark:text-white">{reviewModalRequest.employeeName} ({reviewModalRequest.empId})</span>
+            {/* Sidebar Footer */}
+            {selectedRequest.status === 'pending' && checkCanReview(selectedRequest) && (
+              <div className="pt-4 border-t border-[#e2eae7] dark:border-[#133029] mt-6">
+                {reviewMode === 'approve' ? (
+                  <button
+                    type="button"
+                    onClick={handleConfirmApproval}
+                    disabled={reviewSubmitting}
+                    className="w-full px-4 py-2.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-sm transition-all cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-50"
+                  >
+                    <Check size={14} />
+                    <span>{reviewSubmitting ? 'Approving...' : 'Confirm & Approve'}</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleConfirmRejection}
+                    disabled={rejectSubmitting}
+                    className="w-full px-4 py-2.5 text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white rounded-xl shadow-sm transition-all cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-50"
+                  >
+                    <X size={14} />
+                    <span>{rejectSubmitting ? 'Rejecting...' : 'Confirm Rejection'}</span>
+                  </button>
+                )}
               </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400 dark:text-[#829e92] font-semibold">Date:</span>
-                <span className="font-bold text-slate-800 dark:text-white">{reviewModalRequest.date}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400 dark:text-[#829e92] font-semibold">Reason:</span>
-                <span className="font-bold text-slate-800 dark:text-white text-right max-w-[240px] truncate">{reviewModalRequest.reason}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400 dark:text-[#829e92] font-semibold">Recorded Inactive Time:</span>
-                <span className="font-mono font-bold text-slate-600 dark:text-slate-300">{reviewModalRequest.recordedInactiveMinutes || 0} mins</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400 dark:text-[#829e92] font-semibold">Employee Requested:</span>
-                <span className="font-black text-amber-600 dark:text-amber-400">{reviewModalRequest.requestedDurationMinutes} mins</span>
-              </div>
-            </div>
-
-            {/* Editable Final Approved Timer */}
-            <div className="space-y-3">
-              <div>
-                <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-200 mb-1">
-                  Final Approved Time (Minutes)
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  max={reviewModalRequest.recordedInactiveMinutes || 480}
-                  value={finalMinutesInput}
-                  onChange={(e) => setFinalMinutesInput(e.target.value)}
-                  className="w-full px-3 py-2 text-sm font-bold rounded-xl border border-[#cbd5e1] dark:border-[#133029] bg-white dark:bg-[#071e17] text-slate-800 dark:text-white focus:ring-2 focus:ring-emerald-500/30 outline-none"
-                />
-                <p className="text-[10px] text-slate-400 dark:text-[#829e92] mt-1">
-                  Ceiling Cap: Max {reviewModalRequest.recordedInactiveMinutes || 0} mins (cannot exceed recorded inactive time).
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-200 mb-1">
-                  Reviewer Remarks (Optional)
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. Approved for 30m actual call duration"
-                  value={reviewRemarks}
-                  onChange={(e) => setReviewRemarks(e.target.value)}
-                  className="w-full px-3 py-1.5 text-xs rounded-xl border border-[#cbd5e1] dark:border-[#133029] bg-white dark:bg-[#071e17] text-slate-800 dark:text-white focus:ring-2 focus:ring-emerald-500/30 outline-none"
-                />
-              </div>
-            </div>
-
-            {/* Modal Actions */}
-            <div className="flex items-center justify-end gap-2 mt-5">
-              <button
-                onClick={() => setReviewModalRequest(null)}
-                className="px-4 py-2 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[#071e17] rounded-xl transition-all cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleConfirmApproval}
-                disabled={reviewSubmitting}
-                className="px-4 py-2 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-sm transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
-              >
-                <Check size={14} />
-                <span>{reviewSubmitting ? 'Approving...' : 'Confirm & Approve'}</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── REJECTION MODAL ── */}
-      {rejectModalRequest && (
-        <div
-          onClick={() => setRejectModalRequest(null)}
-          className="fixed inset-0 z-[99999] bg-slate-900/60 dark:bg-black/75 backdrop-blur-md flex items-center justify-center p-4"
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-sm bg-white dark:bg-[#0d2a22] rounded-2xl border border-[#e2eae7] dark:border-[#133029] shadow-2xl p-5"
-          >
-            <div className="flex items-center justify-between pb-3 border-b border-[#e2eae7] dark:border-[#133029]">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-rose-50 dark:bg-rose-950/50 flex items-center justify-center text-rose-600 dark:text-rose-400">
-                  <XCircle size={18} />
-                </div>
-                <div>
-                  <h4 className="text-sm font-extrabold text-slate-900 dark:text-white">Reject Meeting Request</h4>
-                  <p className="text-[10px] text-slate-400 dark:text-[#829e92]">Provide rejection reason to employee</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setRejectModalRequest(null)}
-                className="text-slate-400 hover:text-slate-700 dark:hover:text-white p-1 rounded-lg"
-              >
-                <X size={16} />
-              </button>
-            </div>
-
-            <div className="my-4">
-              <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-200 mb-1">
-                Reason for Rejection
-              </label>
-              <textarea
-                rows={3}
-                placeholder="e.g. Overlapping with daily sprint standup"
-                value={rejectRemarks}
-                onChange={(e) => setRejectRemarks(e.target.value)}
-                className="w-full px-3 py-2 text-xs rounded-xl border border-[#cbd5e1] dark:border-[#133029] bg-white dark:bg-[#071e17] text-slate-800 dark:text-white focus:ring-2 focus:ring-rose-500/30 outline-none resize-none"
-              />
-            </div>
-
-            <div className="flex items-center justify-end gap-2">
-              <button
-                onClick={() => setRejectModalRequest(null)}
-                className="px-4 py-2 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[#071e17] rounded-xl transition-all cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleConfirmRejection}
-                disabled={rejectSubmitting}
-                className="px-4 py-2 text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white rounded-xl shadow-sm transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
-              >
-                <X size={14} />
-                <span>{rejectSubmitting ? 'Rejecting...' : 'Confirm Rejection'}</span>
-              </button>
-            </div>
+            )}
           </div>
         </div>
       )}
@@ -820,7 +1043,7 @@ const MeetingRequestsTable = ({
               <form onSubmit={handleSubmitNewRequest} id="offline-request-form" className="space-y-4 my-5">
                 <div>
                   <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-200 mb-1.5">
-                    Meeting Date
+                    Meeting Date <span className="text-rose-500 font-bold ml-0.5">*</span>
                   </label>
                   <div className="relative">
                     <CustomDatePicker
@@ -849,78 +1072,110 @@ const MeetingRequestsTable = ({
                   </span>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-200 mb-1.5">
-                    Meeting Reason
-                  </label>
-                  <textarea
-                    rows={3}
-                    placeholder="e.g. Client Call on Zoom, Product Architecture Discussion"
-                    value={newReason}
-                    onChange={(e) => setNewReason(e.target.value)}
-                    className="w-full px-3.5 py-2 text-xs rounded-xl border border-[#cbd5e1] dark:border-[#133029] bg-white dark:bg-[#071e17] text-slate-800 dark:text-white focus:ring-2 focus:ring-emerald-500/30 outline-none resize-none"
-                  />
-                </div>
-
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-200">
-                      Duration in Minutes
-                    </label>
-                    {availableInactiveMins !== null && availableInactiveMins > 0 && (
-                      <span className="text-[10.5px] font-bold text-amber-700 dark:text-amber-400">
-                        Max: {availableInactiveMins} mins
-                      </span>
-                    )}
-                  </div>
-                  <input
-                    type="number"
-                    min="1"
-                    max={availableInactiveMins !== null && availableInactiveMins > 0 ? availableInactiveMins : 480}
-                    placeholder="e.g. 30"
-                    value={newMinutes}
-                    onChange={(e) => setNewMinutes(e.target.value)}
-                    className="w-full px-3.5 py-2.5 text-xs rounded-xl border border-[#cbd5e1] dark:border-[#133029] bg-white dark:bg-[#071e17] text-slate-800 dark:text-white focus:ring-2 focus:ring-emerald-500/30 outline-none font-semibold"
-                  />
-
-                  {/* 🚀 Quick Fill Preset Buttons */}
-                  {availableInactiveMins !== null && availableInactiveMins > 0 && (
-                    <div className="flex flex-wrap items-center gap-1.5 mt-2">
-                      <span className="text-[10.5px] font-semibold text-slate-400 dark:text-[#829e92]">Quick Fill:</span>
-                      {[15, 30, 45, 60].filter(m => m <= availableInactiveMins).map(m => (
-                        <button
-                          key={m}
-                          type="button"
-                          onClick={() => setNewMinutes(String(m))}
-                          className={`px-2.5 py-1 text-[11px] font-bold rounded-lg border transition-all cursor-pointer ${
-                            Number(newMinutes) === m
-                              ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
-                              : 'bg-slate-100 dark:bg-[#133029] text-slate-700 dark:text-slate-300 border-[#cbd5e1] dark:border-[#1a3d34] hover:border-emerald-500'
-                          }`}
-                        >
-                          {m}m
-                        </button>
-                      ))}
-                      <button
-                        type="button"
-                        onClick={() => setNewMinutes(String(availableInactiveMins))}
-                        className={`px-2.5 py-1 text-[11px] font-bold rounded-lg border transition-all cursor-pointer ${
-                          Number(newMinutes) === availableInactiveMins
-                            ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
-                            : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800/60 hover:bg-emerald-100'
-                        }`}
-                      >
-                        Full ({availableInactiveMins}m)
-                      </button>
+                {isInactiveZero ? (
+                  <div className="p-4 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/50 flex items-start gap-3 text-xs text-rose-700 dark:text-rose-300 animate-in fade-in slide-in-from-top-1">
+                    <AlertTriangle size={18} className="text-rose-500 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-bold text-[13px]">Your inactive time is 0 mins</p>
+                      <p className="text-xs text-rose-600/90 dark:text-rose-400/90 mt-1 leading-relaxed">
+                        Your inactive time is 0 so you can't able to make request.
+                      </p>
                     </div>
-                  )}
+                  </div>
+                ) : (
+                  <>
+                    <div>
+                      <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-200 mb-1.5">
+                        Meeting Reason <span className="text-rose-500 font-bold ml-0.5">*</span>
+                      </label>
+                      <textarea
+                        rows={3}
+                        placeholder="e.g. Client Call on Zoom, Product Architecture Discussion"
+                        value={newReason}
+                        onChange={(e) => setNewReason(e.target.value)}
+                        required
+                        className="w-full px-3.5 py-2 text-xs rounded-xl border border-[#cbd5e1] dark:border-[#133029] bg-white dark:bg-[#071e17] text-slate-800 dark:text-white focus:ring-2 focus:ring-emerald-500/30 outline-none resize-none"
+                      />
+                    </div>
 
-                  <p className="text-[11px] text-slate-400 dark:text-[#829e92] mt-1.5">
-                    {availableInactiveMins !== null && availableInactiveMins > 0
-                      ? `Cannot exceed your recorded inactive time (${availableInactiveMins} mins).`
-                      : 'Capped at your recorded inactive time.'}
-                  </p>
-                </div>
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-200">
+                          Duration in Minutes <span className="text-rose-500 font-bold ml-0.5">*</span>
+                        </label>
+                        {availableInactiveMins !== null && availableInactiveMins > 0 && (
+                          <span className="text-[10.5px] font-bold text-amber-700 dark:text-amber-400">
+                            Max: {availableInactiveMins} mins
+                          </span>
+                        )}
+                      </div>
+                      <input
+                        type="number"
+                        min="1"
+                        max={480}
+                        placeholder="e.g. 30"
+                        value={newMinutes}
+                        onChange={(e) => setNewMinutes(e.target.value)}
+                        className={`w-full px-3.5 py-2.5 text-xs rounded-xl border transition-all outline-none font-semibold ${
+                          isOverInactive
+                            ? 'border-rose-500 ring-2 ring-rose-500/20 bg-rose-50/20 dark:bg-rose-950/20 text-rose-700 dark:text-rose-300'
+                            : 'border-[#cbd5e1] dark:border-[#133029] bg-white dark:bg-[#071e17] text-slate-800 dark:text-white focus:ring-2 focus:ring-emerald-500/30'
+                        }`}
+                      />
+
+                      {/* 🚀 Quick Fill Preset Buttons */}
+                      {availableInactiveMins !== null && availableInactiveMins > 0 && (
+                        <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                          <span className="text-[10.5px] font-semibold text-slate-400 dark:text-[#829e92]">Quick Fill:</span>
+                          {[15, 30, 45, 60].filter(m => m <= availableInactiveMins).map(m => (
+                            <button
+                              key={m}
+                              type="button"
+                              onClick={() => setNewMinutes(String(m))}
+                              className={`px-2.5 py-1 text-[11px] font-bold rounded-lg border transition-all cursor-pointer ${
+                                Number(newMinutes) === m
+                                  ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                                  : 'bg-slate-100 dark:bg-[#133029] text-slate-700 dark:text-slate-300 border-[#cbd5e1] dark:border-[#1a3d34] hover:border-emerald-500'
+                              }`}
+                            >
+                              {m}m
+                            </button>
+                          ))}
+                          <button
+                            type="button"
+                            onClick={() => setNewMinutes(String(availableInactiveMins))}
+                            className={`px-2.5 py-1 text-[11px] font-bold rounded-lg border transition-all cursor-pointer ${
+                              Number(newMinutes) === availableInactiveMins
+                                ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                                : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800/60 hover:bg-emerald-100'
+                            }`}
+                          >
+                            Full ({availableInactiveMins}m)
+                          </button>
+                        </div>
+                      )}
+
+                      <p className="text-[11px] text-slate-400 dark:text-[#829e92] mt-1.5">
+                        {availableInactiveMins !== null && availableInactiveMins > 0
+                          ? `Cannot exceed your recorded inactive time (${availableInactiveMins} mins).`
+                          : 'Capped at your recorded inactive time.'}
+                      </p>
+
+                      {/* 🛑 Inactive Time Insufficient Error Messages */}
+                      {isOverInactive && (
+                        <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/50 flex items-start gap-2.5 text-xs text-rose-700 dark:text-rose-300 mt-2.5 animate-in fade-in slide-in-from-top-1">
+                          <AlertTriangle size={16} className="text-rose-500 shrink-0 mt-0.5" />
+                          <div>
+                            <p className="font-bold">Inactive time is not sufficient for this request.</p>
+                            <p className="text-[11px] text-rose-600/90 dark:text-rose-400/90 mt-0.5">
+                              Requested duration ({newMinutes} mins) exceeds your recorded inactive time ({availableInactiveMins} mins).
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
               </form>
             </div>
 
@@ -928,8 +1183,12 @@ const MeetingRequestsTable = ({
               <button
                 type="submit"
                 form="offline-request-form"
-                disabled={newSubmitting}
-                className="w-full py-2.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-md shadow-emerald-600/20 transition-all cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none"
+                disabled={isSubmitDisabled}
+                className={`w-full py-2.5 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-2 select-none ${
+                  isSubmitDisabled
+                    ? 'bg-slate-200 dark:bg-[#133029] text-slate-400 dark:text-[#829e92] cursor-not-allowed shadow-none'
+                    : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-600/20 cursor-pointer active:scale-[0.99]'
+                }`}
               >
                 <Check size={15} />
                 <span>{newSubmitting ? 'Submitting...' : 'Submit Request'}</span>

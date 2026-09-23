@@ -813,7 +813,6 @@ const DailyReport = () => {
             <div className="py-12 text-center text-slate-400 dark:text-slate-500 bg-slate-50/50 dark:bg-[#111c18]/50 rounded-2xl border border-dashed border-slate-200 dark:border-[#1a2d29]">
               <FileText className="mx-auto mb-2 opacity-50 text-slate-400" size={32} />
               <p className="text-sm font-bold text-slate-700 dark:text-slate-300">No daily reports matching criteria</p>
-              <p className="text-xs mt-1">Try adjusting your project, status, or date filter.</p>
             </div>
           ) : (
             <table className="w-full min-w-[750px] text-left border-collapse">

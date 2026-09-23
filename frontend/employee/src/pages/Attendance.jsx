@@ -5,7 +5,7 @@ import axios from 'axios';
 import toast from 'react-hot-toast';
 import {
   Clock, Calendar, Users, CheckCircle, XCircle, AlertTriangle,
-  Search, Filter, Download, RefreshCw, ChevronLeft, ChevronRight, ChevronDown,
+  Search, Filter, Download, RefreshCw, ChevronLeft, ChevronRight, ChevronDown, ChevronUp,
   LogIn, LogOut, Timer, TrendingUp, ArrowUpRight, ArrowDownRight,
   Sun, Moon, Coffee, MoreVertical, Square, Activity, Zap
 } from 'lucide-react';
@@ -2511,9 +2511,14 @@ const Attendance = () => {
                       Working Hours
                     </span>
                   </div>
-                  <p className="text-base sm:text-lg font-black text-teal-600 dark:text-teal-400 tracking-tight font-mono truncate">
-                    {todayWorkingHoursDisplay}
-                  </p>
+                  <div className="flex items-baseline gap-1 min-w-0 flex-wrap">
+                    <p className="text-base sm:text-lg font-black text-teal-600 dark:text-teal-400 tracking-tight font-mono truncate">
+                      {todayWorkingHoursDisplay}
+                    </p>
+                    <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 dark:text-slate-500 shrink-0 whitespace-nowrap">
+                      / {formatTargetHours(8.5)}
+                    </span>
+                  </div>
                 </div>
               </div>
 
@@ -2547,14 +2552,9 @@ const Attendance = () => {
                       Today's Hours
                     </span>
                   </div>
-                  <div className="flex items-baseline gap-1 min-w-0 flex-wrap">
-                    <p className="text-base sm:text-lg font-black text-amber-600 dark:text-amber-400 tracking-tight font-mono truncate">
-                      {todayTotalHoursDisplay}
-                    </p>
-                    <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 dark:text-slate-500 shrink-0 whitespace-nowrap">
-                      / {formatTargetHours(8.5)}
-                    </span>
-                  </div>
+                  <p className="text-base sm:text-lg font-black text-amber-600 dark:text-amber-400 tracking-tight font-mono truncate">
+                    {todayTotalHoursDisplay}
+                  </p>
                 </div>
               </div>
 
@@ -2874,30 +2874,31 @@ const Attendance = () => {
       )}
 
       {/* ── ATTENDANCE SUB-TAB NAVIGATION ── */}
-      <div className="flex items-center gap-2 mb-3">
-        <button
-          onClick={() => setAttendanceSubTab('history')}
-          className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
-            attendanceSubTab === 'history'
-              ? 'bg-emerald-600 text-white shadow-sm'
-              : 'bg-white dark:bg-[#071e17] text-slate-600 dark:text-slate-300 border border-[#e2eae7] dark:border-[#133029] hover:bg-slate-50 dark:hover:bg-[#0d2a22]'
-          }`}
-        >
-          <Calendar size={14} />
-          <span>Attendance History</span>
-        </button>
-
-        <button
-          onClick={() => setAttendanceSubTab('meetingRequests')}
-          className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
-            attendanceSubTab === 'meetingRequests'
-              ? 'bg-emerald-600 text-white shadow-sm'
-              : 'bg-white dark:bg-[#071e17] text-slate-600 dark:text-slate-300 border border-[#e2eae7] dark:border-[#133029] hover:bg-slate-50 dark:hover:bg-[#0d2a22]'
-          }`}
-        >
-          <Timer size={14} />
-          <span>Meeting & Offline Requests</span>
-        </button>
+      <div className="mb-3">
+        <div className="bg-white dark:bg-[#181612] p-1 rounded-xl border border-slate-200/80 dark:border-[#38352e] shadow-xs inline-flex items-center">
+          <button
+            onClick={() => setAttendanceSubTab('history')}
+            className={`flex items-center gap-1.5 px-5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              attendanceSubTab === 'history'
+                ? 'bg-[#00a76b] text-white shadow-sm'
+                : 'text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-white'
+            }`}
+          >
+            <Calendar size={14} />
+            <span>Attendance History</span>
+          </button>
+          <button
+            onClick={() => setAttendanceSubTab('meetingRequests')}
+            className={`flex items-center gap-1.5 px-5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              attendanceSubTab === 'meetingRequests'
+                ? 'bg-[#00a76b] text-white shadow-sm'
+                : 'text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-white'
+            }`}
+          >
+            <Timer size={14} />
+            <span>Meeting &amp; Offline Requests</span>
+          </button>
+        </div>
       </div>
 
       {attendanceSubTab === 'history' ? (
@@ -2997,7 +2998,7 @@ const Attendance = () => {
                     <div className="flex items-center gap-1">
                       {col.label}
                       {sortField === col.key && (
-                        <span className="text-emerald-500">{sortDir === 'asc' ? '↑' : '↓'}</span>
+                        sortDir === 'asc' ? <ChevronUp size={13} className="text-emerald-500 inline" /> : <ChevronDown size={13} className="text-emerald-500 inline" />
                       )}
                     </div>
                   </th>
@@ -3011,7 +3012,6 @@ const Attendance = () => {
                     <div className="flex flex-col items-center gap-2">
                       <Calendar size={28} className="text-slate-300 dark:text-slate-600" />
                       <p className="text-xs font-semibold text-slate-400 dark:text-slate-500">No attendance records found</p>
-                      <p className="text-[10px] text-slate-400 dark:text-slate-600">Try adjusting your search or filters</p>
                     </div>
                   </td>
                 </tr>
@@ -3155,7 +3155,7 @@ const Attendance = () => {
         <div className="flex items-center justify-between mt-3.5 min-h-[36px]">
           <p className="text-xs font-semibold text-slate-400 dark:text-[#829e92]">
             {filteredRecords.length > 0
-              ? `Showing ${(currentPage - 1) * pageSize + 1}–${Math.min(currentPage * pageSize, filteredRecords.length)} of ${filteredRecords.length}`
+              ? `Showing ${(currentPage - 1) * pageSize + 1} - ${Math.min(currentPage * pageSize, filteredRecords.length)} of ${filteredRecords.length}`
               : 'Showing 0 records'}
           </p>
           {totalPages > 1 ? (
