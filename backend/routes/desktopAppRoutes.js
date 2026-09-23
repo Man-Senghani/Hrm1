@@ -113,12 +113,16 @@ router.get('/download', async (req, res) => {
   const pkg = getLocalPackageInfo();
   const version = pkg.version || '1.1.1';
 
-  // 1. Check if a local build exists in desktop-tracker/dist/
+  // 1. Check if a local build exists in desktop-tracker/dist/ (pick newest by mtime)
   const distDir = path.resolve(__dirname, '../../desktop-tracker/dist');
   if (fs.existsSync(distDir)) {
-    const files = fs.readdirSync(distDir);
-    const exeFile = files.find(f => f.endsWith('.exe') && !f.includes('builder'));
-    if (exeFile) {
+    const files = fs.readdirSync(distDir)
+      .filter(f => f.endsWith('.exe') && !f.includes('builder') && !f.toLowerCase().includes('staging'))
+      .map(f => ({ name: f, time: fs.statSync(path.join(distDir, f)).mtime.getTime() }))
+      .sort((a, b) => b.time - a.time);
+
+    if (files.length > 0) {
+      const exeFile = files[0].name;
       const filePath = path.join(distDir, exeFile);
       res.setHeader('Content-Disposition', `attachment; filename="${exeFile}"`);
       res.setHeader('Content-Type', 'application/octet-stream');
@@ -126,12 +130,16 @@ router.get('/download', async (req, res) => {
     }
   }
 
-  // 2. Check if a custom upload exists in backend/uploads/desktop/
+  // 2. Check if a custom upload exists in backend/uploads/desktop/ (pick newest by mtime)
   const uploadsDesktopDir = path.resolve(__dirname, '../uploads/desktop');
   if (fs.existsSync(uploadsDesktopDir)) {
-    const files = fs.readdirSync(uploadsDesktopDir);
-    const exeFile = files.find(f => f.endsWith('.exe'));
-    if (exeFile) {
+    const files = fs.readdirSync(uploadsDesktopDir)
+      .filter(f => f.endsWith('.exe') && !f.toLowerCase().includes('staging'))
+      .map(f => ({ name: f, time: fs.statSync(path.join(uploadsDesktopDir, f)).mtime.getTime() }))
+      .sort((a, b) => b.time - a.time);
+
+    if (files.length > 0) {
+      const exeFile = files[0].name;
       const filePath = path.join(uploadsDesktopDir, exeFile);
       res.setHeader('Content-Disposition', `attachment; filename="${exeFile}"`);
       res.setHeader('Content-Type', 'application/octet-stream');

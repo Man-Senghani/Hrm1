@@ -438,45 +438,74 @@ async function triggerIdle(idleSeconds = 600) {
 // ============================================================
 async function startSession() {
   if (!authToken) return alert('Please login first.');
-  try {
-    const res = await fetch(`${API_BASE}/start`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${authToken}` }
-    });
-    if (res.status === 401) {
-      logout();
-      alert('Session expired. Please log in again.');
-      return;
-    }
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      if (err.isOnLeave) {
-        applyServerState({ status: 'ON_LEAVE', isOnLeave: true, ...err });
-      }
-      return alert(err.message || 'Unable to start session.');
-    }
-    const data = await res.json();
-    notifyDesktop('Session Started', 'Your tracking session is now active.');
-
-    status = 'ACTIVE';
-    isIdle = false;
-    isSessionRunning = true;
-    idleNotificationSent = false;
-    lastStartOrResumeTime = Date.now();
-
-    if (data?.session) {
-      applyServerState(data.session);
-    }
-
-    stopIdleReminderLoop();
-    startPolling();
-    startHeartbeat();
-    initScreenshotLoop(true);
-    takeScreenshot(true); // 📸 Capture immediately on start
-  } catch (err) {
-    console.error('[START ERROR]', err);
-    alert('Connection error. Is the server running?');
+  const startBtn = document.getElementById('start-btn');
+  const originalHtml = startBtn ? startBtn.innerHTML : '';
+  if (startBtn) {
+    startBtn.disabled = true;
+    startBtn.innerHTML = '<span class="material-symbols-outlined" style="animation: spin 1s linear infinite;">sync</span> CONNECTING...';
   }
+
+  const maxAttempts = 3;
+  let lastError = null;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const res = await fetch(`${API_BASE}/start`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${authToken}` }
+      });
+      if (res.status === 401) {
+        logout();
+        alert('Session expired. Please log in again.');
+        if (startBtn) { startBtn.disabled = false; startBtn.innerHTML = originalHtml; }
+        return;
+      }
+      if (!res.ok) {
+        // If 502/503/504 gateway response, retry automatically
+        if ([502, 503, 504].includes(res.status) && attempt < maxAttempts) {
+          console.warn(`[START] Gateway response (${res.status}), retrying attempt ${attempt + 1}...`);
+          await new Promise(r => setTimeout(r, 2000));
+          continue;
+        }
+        const err = await res.json().catch(() => ({}));
+        if (err.isOnLeave) {
+          applyServerState({ status: 'ON_LEAVE', isOnLeave: true, ...err });
+        }
+        if (startBtn) { startBtn.disabled = false; startBtn.innerHTML = originalHtml; }
+        return alert(err.message || 'Unable to start session.');
+      }
+      const data = await res.json();
+      notifyDesktop('Session Started', 'Your tracking session is now active.');
+
+      status = 'ACTIVE';
+      isIdle = false;
+      isSessionRunning = true;
+      idleNotificationSent = false;
+      lastStartOrResumeTime = Date.now();
+
+      if (data?.session) {
+        applyServerState(data.session);
+      }
+
+      stopIdleReminderLoop();
+      startPolling();
+      startHeartbeat();
+      initScreenshotLoop(true);
+      takeScreenshot(true); // 📸 Capture immediately on start
+      if (startBtn) { startBtn.disabled = false; startBtn.innerHTML = originalHtml; }
+      return;
+    } catch (err) {
+      console.warn(`[START ERROR attempt ${attempt}]`, err);
+      lastError = err;
+      if (attempt < maxAttempts) {
+        await new Promise(r => setTimeout(r, 2000));
+      }
+    }
+  }
+
+  if (startBtn) { startBtn.disabled = false; startBtn.innerHTML = originalHtml; }
+  console.error('[START FAILED]', lastError);
+  alert('Connection error. Please check your internet connection or try again.');
 }
 
 // ============================================================
