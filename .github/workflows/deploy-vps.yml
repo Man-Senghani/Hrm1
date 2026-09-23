@@ -23,6 +23,10 @@ jobs:
             git fetch origin Master
             git reset --hard origin/Master
             if [ -f .env ]; then rm -f .env; fi
+            if [ -f secrets.env ]; then
+              cat secrets.env >> .env.production
+              cat secrets.env >> .env.staging
+            fi
             docker compose down
             docker compose up --build --force-recreate -d
             echo "✅ FluidHR auto-deploy completed successfully!"
