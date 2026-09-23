@@ -45,7 +45,9 @@ const DesktopAppRequiredModal = ({ isOpen, onClose, onRetry, isRetrying = false 
   const handleLaunchApp = () => {
     const userToken = token || (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('token') : '');
     const serverHost = API_BASE_URL || window.location.origin;
-    window.location.href = `fluidhr-tracker://start?token=${encodeURIComponent(userToken || '')}&server=${encodeURIComponent(serverHost)}`;
+    const isStaging = (serverHost && serverHost.includes('staging')) || (typeof window !== 'undefined' && window.location.hostname.includes('staging'));
+    const protocolScheme = isStaging ? 'fluidhr-staging-tracker' : 'fluidhr-tracker';
+    window.location.href = `${protocolScheme}://start?token=${encodeURIComponent(userToken || '')}&server=${encodeURIComponent(serverHost)}`;
   };
 
   const handleDownloadApp = () => {

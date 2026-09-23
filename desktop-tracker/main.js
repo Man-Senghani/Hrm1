@@ -4,16 +4,23 @@ const Store = require('electron-store');
 const { autoUpdater } = require('electron-updater');
 const screenshot = require('screenshot-desktop');
 
+const isStagingApp = app.getName().toLowerCase().includes('staging') || process.env.TRACKER_ENV === 'staging';
+const primaryProtocol = isStagingApp ? 'fluidhr-staging-tracker' : 'fluidhr-tracker';
+
 if (process.platform === 'win32') {
-  app.setAppUserModelId('com.fluidhr.tracker');
+  app.setAppUserModelId(isStagingApp ? 'com.fluidhr.tracker.staging' : 'com.fluidhr.tracker');
 }
 
 // Register custom protocol client
 if (process.defaultApp) {
   if (process.argv.length >= 2) {
+    app.setAsDefaultProtocolClient(primaryProtocol, process.execPath, [path.resolve(process.argv[1])]);
+    app.setAsDefaultProtocolClient('fluidhr-staging-tracker', process.execPath, [path.resolve(process.argv[1])]);
     app.setAsDefaultProtocolClient('fluidhr-tracker', process.execPath, [path.resolve(process.argv[1])]);
   }
 } else {
+  app.setAsDefaultProtocolClient(primaryProtocol);
+  app.setAsDefaultProtocolClient('fluidhr-staging-tracker');
   app.setAsDefaultProtocolClient('fluidhr-tracker');
 }
 
@@ -31,7 +38,7 @@ let localServer = null;
 function handleDeepLink(urlStr) {
   try {
     const parsedUrl = new URL(urlStr);
-    if (parsedUrl.protocol === 'fluidhr-tracker:') {
+    if (parsedUrl.protocol === 'fluidhr-tracker:' || parsedUrl.protocol === 'fluidhr-staging-tracker:') {
       const token = parsedUrl.searchParams.get('token');
       const server = parsedUrl.searchParams.get('server');
       let action = parsedUrl.searchParams.get('action');
@@ -54,7 +61,9 @@ function handleDeepLink(urlStr) {
       }
       if (server) {
         let cleanServer = server.replace(/\/+$/, '');
-        if (cleanServer.includes('aupanishad.tech') || cleanServer.includes(':3000')) {
+        if (cleanServer.includes('staging')) {
+          cleanServer = 'https://hrm-staging.aupanishad.tech';
+        } else if (cleanServer.includes('aupanishad.tech') || cleanServer.includes(':3000')) {
           cleanServer = 'https://hrm.aupanishad.tech';
         }
         store.set('serverHost', cleanServer);
@@ -91,7 +100,7 @@ function handleDeepLink(urlStr) {
 
 // ── LOCAL HTTP BRIDGE SERVER (for instant browser-to-desktop communication) ──
 function startLocalBridgeServer() {
-  const PORT = 28734;
+  const PORT = isStagingApp ? 28735 : 28734;
   localServer = http.createServer((req, res) => {
     // Set standard CORS headers so web app (http://localhost:4000) can interact seamlessly
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -253,7 +262,10 @@ if (!gotTheLock) {
       mainWindow.setAlwaysOnTop(true);
       setTimeout(() => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.setAlwaysOnTop(false); }, 800);
       
-      const url = commandLine.find(arg => arg.startsWith('fluidhr-tracker://'));
+      const url = commandLine.find(arg => 
+        arg.startsWith('fluidhr-tracker://') || 
+        arg.startsWith('fluidhr-staging-tracker://')
+      );
       if (url) {
         handleDeepLink(url);
       }
@@ -261,7 +273,10 @@ if (!gotTheLock) {
   });
 
   app.whenReady().then(() => {
-    const url = process.argv.find(arg => arg.startsWith('fluidhr-tracker://'));
+    const url = process.argv.find(arg => 
+      arg.startsWith('fluidhr-tracker://') || 
+      arg.startsWith('fluidhr-staging-tracker://')
+    );
     if (url) {
       app.readyUrl = url;
     }
@@ -382,6 +397,15 @@ ipcMain.handle('set-store-value', (event, key, value) => {
 ipcMain.handle('close-app', async () => {
   await autoPauseTrackingOnExit();
   app.quit();
+});
+
+ipcMain.handle('get-app-config', () => {
+  return {
+    isStaging: isStagingApp,
+    environment: isStagingApp ? 'staging' : 'production',
+    protocol: primaryProtocol,
+    bridgePort: isStagingApp ? 28735 : 28734
+  };
 });
 
 ipcMain.handle('minimize-app', () => {

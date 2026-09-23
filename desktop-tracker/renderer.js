@@ -156,6 +156,21 @@ if (window.electronAPI?.onSystemIdleStatus) {
 // Track last known system idle seconds (for heartbeat type decision)
 let lastSystemIdleSeconds = 0;
 
+let currentAppVersion = '1.4.2';
+
+function updateEnvironmentBadge() {
+  const isStaging = BACKEND_HOST.includes('staging');
+  const stagingBadge = document.getElementById('staging-badge');
+  if (stagingBadge) {
+    stagingBadge.style.display = isStaging ? 'inline-block' : 'none';
+  }
+  document.title = isStaging ? 'FluidHR Tracker (Staging)' : 'FluidHR Tracker';
+  const versionDisplayEl = document.getElementById('version-display');
+  if (versionDisplayEl && currentAppVersion) {
+    versionDisplayEl.innerText = isStaging ? `V${currentAppVersion} STAGING` : `V${currentAppVersion} PRO`;
+  }
+}
+
 // ============================================================
 // 🔄 STARTUP
 // ============================================================
@@ -164,10 +179,8 @@ async function loadSession() {
 
   try {
     const version = await window.electronAPI.getAppVersion();
-    const versionDisplayEl = document.getElementById('version-display');
-    if (versionDisplayEl && version) {
-      versionDisplayEl.innerText = `V${version} PRO`;
-    }
+    if (version) currentAppVersion = version;
+    updateEnvironmentBadge();
   } catch (err) {
     console.error('Failed to get app version:', err);
   }
@@ -205,6 +218,7 @@ async function loadSession() {
     }
   }
   API_BASE = `${BACKEND_HOST}/api/time`;
+  updateEnvironmentBadge();
   console.log('🚀 Desktop Tracker Initialized with BACKEND_HOST:', BACKEND_HOST, 'FRONTEND_HOST:', FRONTEND_HOST);
 
   if (!authToken) {
@@ -1084,6 +1098,7 @@ if (window.electronAPI?.onDeepLinkServer) {
       BACKEND_HOST = cleanUrl;
       API_BASE = `${BACKEND_HOST}/api/time`;
       await window.electronAPI.setStoreValue('serverHost', cleanUrl);
+      updateEnvironmentBadge();
       initSocket();
     }
   });
@@ -1104,6 +1119,7 @@ if (window.electronAPI?.onDeepLinkToken) {
       API_BASE = `${BACKEND_HOST}/api/time`;
       await window.electronAPI.setStoreValue('serverHost', BACKEND_HOST);
     }
+    updateEnvironmentBadge();
 
     hideAuthSection();
     await fetchUserProfile();

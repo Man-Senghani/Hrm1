@@ -23,10 +23,14 @@ const Login = () => {
     if (isDesktop) {
       setShowThankYou(true);
       const serverHost = API_BASE_URL || window.location.origin;
+      const isStaging = (serverHost && serverHost.includes('staging')) || (typeof window !== 'undefined' && window.location.hostname.includes('staging'));
+      const bridgePort = isStaging ? 28735 : 28734;
+      const trackerProtocol = isStaging ? 'fluidhr-staging-tracker' : 'fluidhr-tracker';
+
       try {
-        fetch(`http://127.0.0.1:28734/auth?token=${encodeURIComponent(authToken)}&server=${encodeURIComponent(serverHost)}`, { mode: 'no-cors' }).catch(() => {});
+        fetch(`http://127.0.0.1:${bridgePort}/auth?token=${encodeURIComponent(authToken)}&server=${encodeURIComponent(serverHost)}`, { mode: 'no-cors' }).catch(() => {});
       } catch (_) {}
-      window.location.href = `fluidhr-tracker://auth?token=${encodeURIComponent(authToken)}&server=${encodeURIComponent(serverHost)}`;
+      window.location.href = `${trackerProtocol}://auth?token=${encodeURIComponent(authToken)}&server=${encodeURIComponent(serverHost)}`;
       return;
     }
 
@@ -229,18 +233,26 @@ const Login = () => {
                 </p>
 
                 <div className="space-y-4">
-                   <a 
-                     href={`fluidhr-tracker://auth?token=${encodeURIComponent(token)}&server=${encodeURIComponent(API_BASE_URL || window.location.origin)}`}
-                     onClick={() => {
-                       try {
-                         const serverHost = API_BASE_URL || window.location.origin;
-                         fetch(`http://127.0.0.1:28734/auth?token=${encodeURIComponent(token)}&server=${encodeURIComponent(serverHost)}`, { mode: 'no-cors' }).catch(() => {});
-                       } catch (_) {}
-                     }}
-                     className="h-[48px] w-full text-[15px] font-bold bg-[#00a76b] text-[#fffefb] hover:bg-[#201515] rounded-[4px] flex items-center justify-center gap-2 transition-all shadow-sm"
-                   >
-                      Open FluidHR Tracker <ArrowRight size={20} />
-                   </a>
+                   {(() => {
+                      const serverHost = API_BASE_URL || (typeof window !== 'undefined' ? window.location.origin : '');
+                      const isStaging = (serverHost && serverHost.includes('staging')) || (typeof window !== 'undefined' && window.location.hostname.includes('staging'));
+                      const bridgePort = isStaging ? 28735 : 28734;
+                      const trackerProtocol = isStaging ? 'fluidhr-staging-tracker' : 'fluidhr-tracker';
+
+                      return (
+                        <a 
+                          href={`${trackerProtocol}://auth?token=${encodeURIComponent(token)}&server=${encodeURIComponent(serverHost)}`}
+                          onClick={() => {
+                            try {
+                              fetch(`http://127.0.0.1:${bridgePort}/auth?token=${encodeURIComponent(token)}&server=${encodeURIComponent(serverHost)}`, { mode: 'no-cors' }).catch(() => {});
+                            } catch (_) {}
+                          }}
+                          className="h-[48px] w-full text-[15px] font-bold bg-[#00a76b] text-[#fffefb] hover:bg-[#201515] rounded-[4px] flex items-center justify-center gap-2 transition-all shadow-sm"
+                        >
+                           Open FluidHR Tracker {isStaging ? '(Staging)' : ''} <ArrowRight size={20} />
+                        </a>
+                      );
+                    })()}
                    
                    <button 
                      onClick={() => {
