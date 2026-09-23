@@ -672,6 +672,35 @@ exports.getSessionStatus = async (req, res) => {
       });
     }
 
+    // 🛡️ Dead-Man's Switch: If session is active but no heartbeat for > 25 seconds, auto-pause it immediately
+    if (session.status === 'active' && session.lastHeartbeat) {
+      const secondsSinceHeartbeat = (Date.now() - new Date(session.lastHeartbeat).getTime()) / 1000;
+      if (secondsSinceHeartbeat > 25) {
+        const pauseTime = new Date(session.lastHeartbeat);
+        session.activeTime += flushSegment(session, pauseTime);
+        session.segmentStart = null;
+        session.idleStart = pauseTime;
+        session.status = 'paused';
+        session.isRunning = false;
+
+        const lastIdx = (session.sessions || []).length - 1;
+        if (lastIdx >= 0 && !session.sessions[lastIdx].pause && !session.sessions[lastIdx].end) {
+          session.sessions[lastIdx].pause = pauseTime;
+        }
+
+        await session.save();
+
+        const io = req.app?.get ? req.app.get('io') : null;
+        if (io) {
+          io.to(`user_${targetId}`).emit('timer_paused', {
+            reason: 'stale_heartbeat',
+            employeeId: targetId,
+            ...buildPayload(session)
+          });
+        }
+      }
+    }
+
     // ── Session Status ──
     res.json(buildPayload(session));
   } catch (err) {

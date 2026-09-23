@@ -379,6 +379,53 @@ server.listen(PORT, '0.0.0.0', () => {
   // Initialize Cron Jobs
   initCronJobs();
 
+  // 💓 Background Dead-Man's Switch: Auto-pause active sessions if laptop stops sending heartbeats for > 25 seconds
+  setInterval(async () => {
+    try {
+      const staleThreshold = new Date(Date.now() - 25000);
+      const TimeTrack = require('./models/TimeTrack');
+      const staleSessions = await TimeTrack.find({
+        status: 'active',
+        lastHeartbeat: { $lt: staleThreshold, $ne: null }
+      });
+
+      for (const session of staleSessions) {
+        const pauseTime = new Date(session.lastHeartbeat);
+        if (session.segmentStart) {
+          const segSecs = Math.max(0, Math.floor((pauseTime - new Date(session.segmentStart)) / 1000));
+          session.activeTime = (session.activeTime || 0) + segSecs;
+        }
+        session.segmentStart = null;
+        session.idleStart = pauseTime;
+        session.status = 'paused';
+        session.isRunning = false;
+
+        const lastIdx = (session.sessions || []).length - 1;
+        if (lastIdx >= 0 && !session.sessions[lastIdx].pause && !session.sessions[lastIdx].end) {
+          session.sessions[lastIdx].pause = pauseTime;
+        }
+
+        await session.save();
+        console.log(`[DEAD-MAN SWITCH] Auto-paused stale session for employee ${session.employeeId}`);
+
+        io.to(`user_${session.employeeId}`).emit('timer_paused', {
+          reason: 'stale_heartbeat',
+          employeeId: session.employeeId,
+          hasActiveSession: true,
+          status: 'paused',
+          isRunning: false,
+          activeTime: session.activeTime,
+          idleTime: session.idleTime,
+          idleStart: pauseTime,
+          startTime: session.startTime,
+          lastHeartbeat: session.lastHeartbeat
+        });
+      }
+    } catch (err) {
+      console.error('[DEAD-MAN SWITCH ERROR]', err.message);
+    }
+  }, 10000); // Sweep every 10 seconds
+
   // 🔄 Keep-Alive Auto-Pinger (Prevents cloud hosts like Render free tier from sleeping)
   const isCloudHost = process.env.RENDER || process.env.RENDER_EXTERNAL_URL || process.env.NODE_ENV === 'production';
   if (isCloudHost) {

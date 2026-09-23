@@ -157,7 +157,7 @@ if (window.electronAPI?.onSystemIdleStatus) {
 // Track last known system idle seconds (for heartbeat type decision)
 let lastSystemIdleSeconds = 0;
 
-let currentAppVersion = '1.4.3';
+let currentAppVersion = '1.4.4';
 
 function updateEnvironmentBadge() {
   const isStaging = isStagingApp || BACKEND_HOST.includes('staging');
@@ -1287,33 +1287,31 @@ document.getElementById('confirm-checkout-btn')?.addEventListener('click', confi
 document.getElementById('cancel-checkout-btn')?.addEventListener('click', hideCheckoutConfirmationModal);
 document.getElementById('device-logout-ok-btn')?.addEventListener('click', handleDismissDeviceLogout);
 document.getElementById('device-logout-section')?.addEventListener('click', handleDismissDeviceLogout);
+const handleCloseApp = async () => {
+  if (authToken && (status === 'ACTIVE' || isSessionRunning)) {
+    try {
+      await fetch(`${API_BASE}/pause`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${authToken}` }
+      });
+    } catch (_) {}
+  }
+  window.electronAPI.closeApp();
+};
+
 document.getElementById('minimize-btn')?.addEventListener('click', () => window.electronAPI.minimizeApp());
-document.getElementById('close-btn')?.addEventListener('click', () => window.electronAPI.closeApp());
+document.getElementById('close-btn')?.addEventListener('click', handleCloseApp);
 document.getElementById('web-auth-btn')?.addEventListener('click', redirectToWebLogin);
 document.getElementById('logout-btn')?.addEventListener('click', logout);
 document.getElementById('completed-logout-btn')?.addEventListener('click', logout);
 document.getElementById('leave-logout-btn')?.addEventListener('click', logout);
 document.getElementById('auth-minimize-btn')?.addEventListener('click', () => window.electronAPI.minimizeApp());
-document.getElementById('auth-close-btn')?.addEventListener('click', () => window.electronAPI.closeApp());
+document.getElementById('auth-close-btn')?.addEventListener('click', handleCloseApp);
 
 // Re-poll when window regains focus (catches state changes while minimized)
 window.addEventListener('focus', () => { if (authToken) pollSessionStatus(); });
 window.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && authToken) pollSessionStatus();
-});
-
-// ── Window Controls ─────────────────────────────────────
-document.getElementById('minimize-btn')?.addEventListener('click', () => {
-  window.electronAPI.minimizeApp();
-});
-document.getElementById('close-btn')?.addEventListener('click', () => {
-  window.electronAPI.closeApp();
-});
-document.getElementById('auth-minimize-btn')?.addEventListener('click', () => {
-  window.electronAPI.minimizeApp();
-});
-document.getElementById('auth-close-btn')?.addEventListener('click', () => {
-  window.electronAPI.closeApp();
 });
 
 // ── Custom Auto-Updater Modal Logic ─────────────────────
