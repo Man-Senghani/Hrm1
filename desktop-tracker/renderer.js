@@ -157,7 +157,7 @@ if (window.electronAPI?.onSystemIdleStatus) {
 // Track last known system idle seconds (for heartbeat type decision)
 let lastSystemIdleSeconds = 0;
 
-let currentAppVersion = '1.4.2';
+let currentAppVersion = '1.4.3';
 
 function updateEnvironmentBadge() {
   const isStaging = isStagingApp || BACKEND_HOST.includes('staging');
