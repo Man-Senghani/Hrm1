@@ -1197,10 +1197,10 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
                       <button
                         onClick={toggleSidebar}
                         className="hidden md:flex items-center justify-center w-6 h-6 rounded-md text-slate-500 dark:text-[#829e92] hover:text-[#00a76b] dark:hover:text-[#00a76b] hover:bg-slate-100 dark:hover:bg-[#111c18] transition-all cursor-pointer border-none bg-transparent active:scale-95"
-                        title={isSidebarOpen ? "Collapse sidebar" : "Keep sidebar open"}
-                        aria-label={isSidebarOpen ? "Collapse sidebar" : "Keep sidebar open"}
+                        title={isSidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
+                        aria-label={isSidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
                       >
-                        <ChevronLeft size={16} strokeWidth={2.8} />
+                        <ChevronLeft size={16} strokeWidth={2.8} className={`transition-transform duration-300 ease-in-out ${!isSidebarOpen ? 'rotate-180' : ''}`} />
                       </button>
                     </div>
                   ) : (
