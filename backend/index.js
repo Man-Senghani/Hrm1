@@ -384,7 +384,7 @@ server.listen(PORT, '0.0.0.0', () => {
   if (isCloudHost) {
     const keepAliveUrl = process.env.RENDER_EXTERNAL_URL
       ? `${process.env.RENDER_EXTERNAL_URL}/api/health`
-      : 'https://hrm1-1-zli1.onrender.com/api/health';
+      : 'https://hrm.aupanishad.tech/api/health';
     const https = require('https');
     console.log(`[KEEP-ALIVE] Cloud keep-alive pinger initialized for ${keepAliveUrl}`);
     setInterval(() => {

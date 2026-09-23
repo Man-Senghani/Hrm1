@@ -102,7 +102,7 @@ const getAppBaseUrl = (req) => {
   }
 
   if (process.env.NODE_ENV === 'production') {
-    return 'https://hrm1-1-zli1.onrender.com';
+    return 'https://hrm.aupanishad.tech';
   }
 
   const port = process.env.PORT || 5000;

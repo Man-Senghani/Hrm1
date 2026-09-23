@@ -181,7 +181,14 @@ async function loadSession() {
 
   const savedServer = await window.electronAPI.getStoreValue('serverHost');
   if (savedServer && typeof savedServer === 'string' && savedServer.trim() !== '') {
-    BACKEND_HOST = savedServer.replace(/\/+$/, '');
+    let cleanSaved = savedServer.replace(/\/+$/, '');
+    if (cleanSaved.includes('onrender.com') || cleanSaved.startsWith('http://hrm.')) {
+      cleanSaved = PRODUCTION_BACKEND_URL;
+      if (window.electronAPI?.setStoreValue) {
+        await window.electronAPI.setStoreValue('serverHost', PRODUCTION_BACKEND_URL);
+      }
+    }
+    BACKEND_HOST = cleanSaved;
     if (BACKEND_HOST.includes('staging')) {
       FRONTEND_HOST = STAGING_FRONTEND_URL;
     } else if (BACKEND_HOST.includes('localhost') || BACKEND_HOST.includes('127.0.0.1')) {

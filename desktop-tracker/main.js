@@ -55,7 +55,7 @@ function handleDeepLink(urlStr) {
       if (server) {
         let cleanServer = server.replace(/\/+$/, '');
         if (cleanServer.includes('aupanishad.tech') || cleanServer.includes(':3000')) {
-          cleanServer = 'http://hrm.aupanishad.tech';
+          cleanServer = 'https://hrm.aupanishad.tech';
         }
         store.set('serverHost', cleanServer);
       }
@@ -325,7 +325,10 @@ if (!gotTheLock) {
 async function autoPauseTrackingOnExit() {
   try {
     const token = store.get('authToken');
-    let serverHost = store.get('serverHost') || 'http://hrm.aupanishad.tech';
+    let serverHost = store.get('serverHost') || 'https://hrm.aupanishad.tech';
+    if (serverHost.includes('onrender.com') || serverHost.startsWith('http://')) {
+      serverHost = 'https://hrm.aupanishad.tech';
+    }
     if (!token) return;
     console.log('[AUTO PAUSE] Sending pause signal before exit/shutdown...');
     const controller = new AbortController();
