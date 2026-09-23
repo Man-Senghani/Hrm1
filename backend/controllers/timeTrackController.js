@@ -275,11 +275,32 @@ exports.pauseTracking = async (req, res) => {
 
     const { id } = req.user;
     const now = new Date();
-    const session = await TimeTrack.findOne({ employeeId: id, date: getToday(), status: 'active' });
-    if (!session) return res.status(404).json({ message: 'No active session to pause' });
+    const session = await TimeTrack.findOne({
+      employeeId: id,
+      date: getToday(),
+      status: { $in: ['active', 'idle', 'paused'] }
+    });
 
-    // Commit the current active segment to activeTime
-    session.activeTime += flushSegment(session, now);
+    if (!session) {
+      const completedSession = await TimeTrack.findOne({ employeeId: id, date: getToday(), status: 'completed' });
+      if (completedSession) {
+        return res.json({ message: 'Session already completed', session: buildPayload(completedSession) });
+      }
+      return res.status(404).json({ message: 'No session to pause' });
+    }
+
+    if (session.status === 'paused' && !session.isRunning) {
+      return res.json({ message: 'Tracking already paused', session: buildPayload(session) });
+    }
+
+    // Commit the current active or idle segment
+    if (session.status === 'active') {
+      session.activeTime += flushSegment(session, now);
+    } else if (session.status === 'idle' && session.idleStart) {
+      const idleDuration = Math.floor((now - new Date(session.idleStart)) / 1000);
+      session.idleTime += Math.max(0, idleDuration);
+    }
+
     session.segmentStart = null;
     session.idleStart = now; // 🕒 Track pause duration as inactive time
     session.status = 'paused';
@@ -397,7 +418,13 @@ exports.stopTracking = async (req, res) => {
     const session = await TimeTrack.findOne({
       employeeId: id, date: getToday(), status: { $in: ['active', 'paused', 'idle'] }
     });
-    if (!session) return res.status(404).json({ message: 'No session to stop' });
+    if (!session) {
+      const alreadyCompleted = await TimeTrack.findOne({ employeeId: id, date: getToday(), status: 'completed' });
+      if (alreadyCompleted) {
+        return res.json({ message: 'Session already completed', session: buildPayload(alreadyCompleted) });
+      }
+      return res.status(404).json({ message: 'No session to stop' });
+    }
 
     // Commit final active segment or idle segment
     if (session.status === 'active') {

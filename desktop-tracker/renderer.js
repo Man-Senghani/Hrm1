@@ -529,9 +529,15 @@ async function pauseSession() {
       headers: { Authorization: `Bearer ${authToken}` }
     });
     if (!res.ok) {
-      const err = await res.json();
-      if (!err.message?.toLowerCase().includes('already')) alert(err.message || 'Unable to pause.');
+      const err = await res.json().catch(() => ({}));
+      if (err.message && !err.message.toLowerCase().includes('already') && !err.message.toLowerCase().includes('paused')) {
+        alert(err.message || 'Unable to pause.');
+        return;
+      }
     }
+    status = 'PAUSED';
+    isSessionRunning = false;
+    updateUI();
     stopScreenshotLoop();
     takeScreenshot(true); // 📸 Capture immediately on pause
     await pollSessionStatus();
@@ -539,7 +545,7 @@ async function pauseSession() {
     startIdleReminderLoop();
   } catch (err) {
     console.error('[PAUSE ERROR]', err);
-    alert('Unable to pause session.');
+    alert('Unable to pause session. Please check your network connection.');
   }
 }
 
@@ -616,8 +622,10 @@ async function confirmStopSession() {
       headers: { Authorization: `Bearer ${authToken}` }
     });
     if (!res.ok) {
-      const err = await res.json();
-      return alert(err.message || 'Unable to stop session.');
+      const err = await res.json().catch(() => ({}));
+      if (err.message && !err.message.toLowerCase().includes('already') && !err.message.toLowerCase().includes('completed') && !err.message.toLowerCase().includes('stopped')) {
+        return alert(err.message || 'Unable to stop session.');
+      }
     }
     stopPolling();
     stopHeartbeat();
@@ -635,7 +643,7 @@ async function confirmStopSession() {
     await notifyDesktop('Workday Ended', 'You have successfully checked out for today.');
   } catch (err) {
     console.error('[STOP ERROR]', err);
-    alert('Unable to stop session.');
+    alert('Unable to stop session. Please check your network connection.');
   }
 }
 
