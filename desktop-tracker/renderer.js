@@ -76,6 +76,7 @@ const PRODUCTION_FRONTEND_URL = 'https://hrm.aupanishad.tech';
 const STAGING_BACKEND_URL = 'https://hrm-staging.aupanishad.tech';
 const STAGING_FRONTEND_URL = 'https://hrm-staging.aupanishad.tech';
 
+let isStagingApp = false;
 let BACKEND_HOST = PRODUCTION_BACKEND_URL;
 let FRONTEND_HOST = PRODUCTION_FRONTEND_URL;
 let API_BASE = `${BACKEND_HOST}/api/time`;
@@ -159,7 +160,7 @@ let lastSystemIdleSeconds = 0;
 let currentAppVersion = '1.4.2';
 
 function updateEnvironmentBadge() {
-  const isStaging = BACKEND_HOST.includes('staging');
+  const isStaging = isStagingApp || BACKEND_HOST.includes('staging');
   const stagingBadge = document.getElementById('staging-badge');
   if (stagingBadge) {
     stagingBadge.style.display = isStaging ? 'inline-block' : 'none';
@@ -180,46 +181,41 @@ async function loadSession() {
   try {
     const version = await window.electronAPI.getAppVersion();
     if (version) currentAppVersion = version;
-    updateEnvironmentBadge();
   } catch (err) {
     console.error('Failed to get app version:', err);
   }
 
-  // 1. Immediately read stored authToken & serverHost
+  try {
+    const appConfig = await window.electronAPI.getAppConfig();
+    if (appConfig) {
+      isStagingApp = (appConfig.isStaging === true);
+    }
+  } catch (err) {
+    console.error('Failed to get app config:', err);
+  }
+
+  // Strictly enforce environment targets
+  if (isStagingApp) {
+    BACKEND_HOST = STAGING_BACKEND_URL;
+    FRONTEND_HOST = STAGING_FRONTEND_URL;
+  } else {
+    BACKEND_HOST = PRODUCTION_BACKEND_URL;
+    FRONTEND_HOST = PRODUCTION_FRONTEND_URL;
+  }
+  API_BASE = `${BACKEND_HOST}/api/time`;
+  if (window.electronAPI?.setStoreValue) {
+    await window.electronAPI.setStoreValue('serverHost', BACKEND_HOST);
+  }
+
+  // Read stored authToken
   const savedToken = await window.electronAPI.getStoreValue('authToken');
   if (savedToken) {
     authToken = savedToken;
     hideAuthSection();
   }
 
-  const savedServer = await window.electronAPI.getStoreValue('serverHost');
-  if (savedServer && typeof savedServer === 'string' && savedServer.trim() !== '') {
-    let cleanSaved = savedServer.replace(/\/+$/, '');
-    if (cleanSaved.includes('onrender.com') || cleanSaved.startsWith('http://hrm.')) {
-      cleanSaved = PRODUCTION_BACKEND_URL;
-      if (window.electronAPI?.setStoreValue) {
-        await window.electronAPI.setStoreValue('serverHost', PRODUCTION_BACKEND_URL);
-      }
-    }
-    BACKEND_HOST = cleanSaved;
-    if (BACKEND_HOST.includes('staging')) {
-      FRONTEND_HOST = STAGING_FRONTEND_URL;
-    } else if (BACKEND_HOST.includes('localhost') || BACKEND_HOST.includes('127.0.0.1')) {
-      FRONTEND_HOST = BACKEND_HOST;
-    } else {
-      FRONTEND_HOST = PRODUCTION_FRONTEND_URL;
-    }
-  } else {
-    // Standalone direct application defaults to Live Production
-    BACKEND_HOST = PRODUCTION_BACKEND_URL;
-    FRONTEND_HOST = PRODUCTION_FRONTEND_URL;
-    if (window.electronAPI?.setStoreValue) {
-      await window.electronAPI.setStoreValue('serverHost', PRODUCTION_BACKEND_URL);
-    }
-  }
-  API_BASE = `${BACKEND_HOST}/api/time`;
   updateEnvironmentBadge();
-  console.log('🚀 Desktop Tracker Initialized with BACKEND_HOST:', BACKEND_HOST, 'FRONTEND_HOST:', FRONTEND_HOST);
+  console.log('🚀 Desktop Tracker Initialized with BACKEND_HOST:', BACKEND_HOST, 'FRONTEND_HOST:', FRONTEND_HOST, 'isStaging:', isStagingApp);
 
   if (!authToken) {
     showAuthSection();
@@ -897,9 +893,7 @@ function redirectToWebMeetingRequest() {
     }
   } catch (_) {}
 
-  const targetFrontend = (BACKEND_HOST && BACKEND_HOST.includes('staging'))
-    ? STAGING_FRONTEND_URL
-    : (FRONTEND_HOST || PRODUCTION_FRONTEND_URL);
+  const targetFrontend = isStagingApp ? STAGING_FRONTEND_URL : PRODUCTION_FRONTEND_URL;
 
   const requestUrl = `${targetFrontend}/${role}/attendance?action=new-offline-request`;
   console.log('🔗 Redirecting to Web Attendance Request Drawer:', requestUrl);
@@ -1067,9 +1061,7 @@ function hideAuthSection() {
 }
 
 function redirectToWebLogin() {
-  const targetFrontend = (BACKEND_HOST && BACKEND_HOST.includes('staging'))
-    ? STAGING_FRONTEND_URL
-    : (FRONTEND_HOST || PRODUCTION_FRONTEND_URL);
+  const targetFrontend = isStagingApp ? STAGING_FRONTEND_URL : PRODUCTION_FRONTEND_URL;
   const loginUrl = `${targetFrontend}/login?desktop=true`;
   console.log('🔗 Redirecting to Web Login:', loginUrl);
   if (window.electronAPI?.openExternal) {
@@ -1081,26 +1073,18 @@ function redirectToWebLogin() {
 
 if (window.electronAPI?.onDeepLinkServer) {
   window.electronAPI.onDeepLinkServer(async (serverUrl) => {
-    if (serverUrl && typeof serverUrl === 'string') {
-      let cleanUrl = serverUrl.replace(/\/+$/, '');
-      if (cleanUrl.includes('staging')) {
-        cleanUrl = STAGING_BACKEND_URL;
-        FRONTEND_HOST = STAGING_FRONTEND_URL;
-      } else if (cleanUrl.includes('aupanishad.tech') || cleanUrl.includes(':3000')) {
-        cleanUrl = PRODUCTION_BACKEND_URL;
-        FRONTEND_HOST = PRODUCTION_FRONTEND_URL;
-      } else if (cleanUrl.includes('localhost') || cleanUrl.includes('127.0.0.1')) {
-        FRONTEND_HOST = cleanUrl;
-      } else {
-        FRONTEND_HOST = cleanUrl;
-      }
-      console.log('Server URL received via deep link:', cleanUrl);
-      BACKEND_HOST = cleanUrl;
-      API_BASE = `${BACKEND_HOST}/api/time`;
-      await window.electronAPI.setStoreValue('serverHost', cleanUrl);
-      updateEnvironmentBadge();
-      initSocket();
+    // Strictly isolate server host per application environment
+    if (isStagingApp) {
+      BACKEND_HOST = STAGING_BACKEND_URL;
+      FRONTEND_HOST = STAGING_FRONTEND_URL;
+    } else {
+      BACKEND_HOST = PRODUCTION_BACKEND_URL;
+      FRONTEND_HOST = PRODUCTION_FRONTEND_URL;
     }
+    API_BASE = `${BACKEND_HOST}/api/time`;
+    await window.electronAPI.setStoreValue('serverHost', BACKEND_HOST);
+    updateEnvironmentBadge();
+    initSocket();
   });
 }
 
@@ -1113,12 +1097,15 @@ if (window.electronAPI?.onDeepLinkToken) {
     authToken = token;
     await window.electronAPI.setStoreValue('authToken', authToken);
 
-    if (!BACKEND_HOST || (!BACKEND_HOST.includes('staging') && (BACKEND_HOST.includes('aupanishad.tech') || BACKEND_HOST.includes(':3000')))) {
+    if (isStagingApp) {
+      BACKEND_HOST = STAGING_BACKEND_URL;
+      FRONTEND_HOST = STAGING_FRONTEND_URL;
+    } else {
       BACKEND_HOST = PRODUCTION_BACKEND_URL;
       FRONTEND_HOST = PRODUCTION_FRONTEND_URL;
-      API_BASE = `${BACKEND_HOST}/api/time`;
-      await window.electronAPI.setStoreValue('serverHost', BACKEND_HOST);
     }
+    API_BASE = `${BACKEND_HOST}/api/time`;
+    await window.electronAPI.setStoreValue('serverHost', BACKEND_HOST);
     updateEnvironmentBadge();
 
     hideAuthSection();
@@ -1260,9 +1247,13 @@ async function logout() {
 
   authToken = '';
   await window.electronAPI.setStoreValue('authToken', '');
-  await window.electronAPI.setStoreValue('serverHost', PRODUCTION_BACKEND_URL);
-  BACKEND_HOST = PRODUCTION_BACKEND_URL;
+  const defaultBackend = isStagingApp ? STAGING_BACKEND_URL : PRODUCTION_BACKEND_URL;
+  const defaultFrontend = isStagingApp ? STAGING_FRONTEND_URL : PRODUCTION_FRONTEND_URL;
+  await window.electronAPI.setStoreValue('serverHost', defaultBackend);
+  BACKEND_HOST = defaultBackend;
+  FRONTEND_HOST = defaultFrontend;
   API_BASE = `${BACKEND_HOST}/api/time`;
+  updateEnvironmentBadge();
   activeSeconds = 0;
   inactiveSeconds = 0;
   status = 'OFFLINE';

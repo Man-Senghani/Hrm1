@@ -11,17 +11,13 @@ if (process.platform === 'win32') {
   app.setAppUserModelId(isStagingApp ? 'com.fluidhr.tracker.staging' : 'com.fluidhr.tracker');
 }
 
-// Register custom protocol client
+// Register custom protocol client (strictly isolated per environment)
 if (process.defaultApp) {
   if (process.argv.length >= 2) {
     app.setAsDefaultProtocolClient(primaryProtocol, process.execPath, [path.resolve(process.argv[1])]);
-    app.setAsDefaultProtocolClient('fluidhr-staging-tracker', process.execPath, [path.resolve(process.argv[1])]);
-    app.setAsDefaultProtocolClient('fluidhr-tracker', process.execPath, [path.resolve(process.argv[1])]);
   }
 } else {
   app.setAsDefaultProtocolClient(primaryProtocol);
-  app.setAsDefaultProtocolClient('fluidhr-staging-tracker');
-  app.setAsDefaultProtocolClient('fluidhr-tracker');
 }
 
 // Window transparency fixes for Windows 11
@@ -38,60 +34,54 @@ let localServer = null;
 function handleDeepLink(urlStr) {
   try {
     const parsedUrl = new URL(urlStr);
-    if (parsedUrl.protocol === 'fluidhr-tracker:' || parsedUrl.protocol === 'fluidhr-staging-tracker:') {
-      const token = parsedUrl.searchParams.get('token');
-      const server = parsedUrl.searchParams.get('server');
-      let action = parsedUrl.searchParams.get('action');
+    const expectedProtocol = isStagingApp ? 'fluidhr-staging-tracker:' : 'fluidhr-tracker:';
+    if (parsedUrl.protocol !== expectedProtocol) {
+      console.warn(`[Deep Link] Ignored protocol ${parsedUrl.protocol} because this instance is ${isStagingApp ? 'Staging' : 'Live'}`);
+      return;
+    }
 
-      if (!action) {
-        if (parsedUrl.hostname === 'stop' || parsedUrl.pathname.includes('stop')) {
-          action = 'stop';
-        } else if (parsedUrl.hostname === 'pause' || parsedUrl.pathname.includes('pause')) {
-          action = 'pause';
-        } else if (parsedUrl.hostname === 'auth' || parsedUrl.pathname.includes('auth')) {
-          action = 'auth';
-        } else {
-          action = 'start';
-        }
-      }
+    const token = parsedUrl.searchParams.get('token');
+    let action = parsedUrl.searchParams.get('action');
 
-      // 💾 Immediately persist token and serverHost to store
-      if (token) {
-        store.set('authToken', token);
-      }
-      if (server) {
-        let cleanServer = server.replace(/\/+$/, '');
-        if (cleanServer.includes('staging')) {
-          cleanServer = 'https://hrm-staging.aupanishad.tech';
-        } else if (cleanServer.includes('aupanishad.tech') || cleanServer.includes(':3000')) {
-          cleanServer = 'https://hrm.aupanishad.tech';
-        }
-        store.set('serverHost', cleanServer);
-      }
-      
-      if (mainWindow) {
-        if (mainWindow.isMinimized()) mainWindow.restore();
-        mainWindow.show();
-        mainWindow.focus();
-        mainWindow.setAlwaysOnTop(true);
-        setTimeout(() => {
-          if (mainWindow && !mainWindow.isDestroyed()) {
-            mainWindow.setAlwaysOnTop(false);
-          }
-        }, 800);
-
-        if (server) {
-          mainWindow.webContents.send('deep-link-server', server);
-        }
-        if (token) {
-          mainWindow.webContents.send('deep-link-token', token);
-        }
-        if (action) {
-          mainWindow.webContents.send('deep-link-action', action);
-        }
+    if (!action) {
+      if (parsedUrl.hostname === 'stop' || parsedUrl.pathname.includes('stop')) {
+        action = 'stop';
+      } else if (parsedUrl.hostname === 'pause' || parsedUrl.pathname.includes('pause')) {
+        action = 'pause';
+      } else if (parsedUrl.hostname === 'auth' || parsedUrl.pathname.includes('auth')) {
+        action = 'auth';
       } else {
-        app.readyUrl = urlStr;
+        action = 'start';
       }
+    }
+
+    // 💾 Immediately persist token and serverHost strictly locked to environment
+    if (token) {
+      store.set('authToken', token);
+    }
+    const cleanServer = isStagingApp ? 'https://hrm-staging.aupanishad.tech' : 'https://hrm.aupanishad.tech';
+    store.set('serverHost', cleanServer);
+    
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.show();
+      mainWindow.focus();
+      mainWindow.setAlwaysOnTop(true);
+      setTimeout(() => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.setAlwaysOnTop(false);
+        }
+      }, 800);
+
+      mainWindow.webContents.send('deep-link-server', cleanServer);
+      if (token) {
+        mainWindow.webContents.send('deep-link-token', token);
+      }
+      if (action) {
+        mainWindow.webContents.send('deep-link-action', action);
+      }
+    } else {
+      app.readyUrl = urlStr;
     }
   } catch (err) {
     console.error('Failed to parse deep link:', err);
@@ -129,16 +119,16 @@ function startLocalBridgeServer() {
 
       if (pathname === '/auth') {
         const token = reqUrl.searchParams.get('token');
-        const server = reqUrl.searchParams.get('server');
+        const defaultServer = isStagingApp ? 'https://hrm-staging.aupanishad.tech' : 'https://hrm.aupanishad.tech';
         if (token) store.set('authToken', token);
-        if (server) store.set('serverHost', server);
+        store.set('serverHost', defaultServer);
         if (mainWindow) {
           if (mainWindow.isMinimized()) mainWindow.restore();
           mainWindow.show();
           mainWindow.focus();
           mainWindow.setAlwaysOnTop(true);
           setTimeout(() => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.setAlwaysOnTop(false); }, 800);
-          if (server) mainWindow.webContents.send('deep-link-server', server);
+          mainWindow.webContents.send('deep-link-server', defaultServer);
           if (token) mainWindow.webContents.send('deep-link-token', token);
           mainWindow.webContents.send('deep-link-action', 'auth');
         }
@@ -340,10 +330,7 @@ if (!gotTheLock) {
 async function autoPauseTrackingOnExit() {
   try {
     const token = store.get('authToken');
-    let serverHost = store.get('serverHost') || 'https://hrm.aupanishad.tech';
-    if (serverHost.includes('onrender.com') || serverHost.startsWith('http://')) {
-      serverHost = 'https://hrm.aupanishad.tech';
-    }
+    const serverHost = isStagingApp ? 'https://hrm-staging.aupanishad.tech' : 'https://hrm.aupanishad.tech';
     if (!token) return;
     console.log('[AUTO PAUSE] Sending pause signal before exit/shutdown...');
     const controller = new AbortController();
