@@ -901,6 +901,11 @@ body {
     font-size: 12px !important;
 }
 
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
 .staging-pill {
     font-size: 8.5px;
     font-weight: 900;

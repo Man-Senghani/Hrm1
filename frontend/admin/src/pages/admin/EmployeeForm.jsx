@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import axios from 'axios';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -33,13 +33,14 @@ import CustomDatePicker from '../../components/CustomDatePicker';
 import { getImageUrl } from '@shared/services/api';
 import { compressImageAndConvertToBase64 } from '@shared/utils/imageCompressor';
 import EditableSelect from '@shared/components/EditableSelect';
-import { resolveRoleFromDesignation, getRoleAccessMetadata } from '@shared/utils/roleResolver';
+import { resolveRole, resolveRoleFromDesignation, getRoleAccessMetadata, getDesignationsForDepartment } from '@shared/utils/roleResolver';
 
 // ─── Premium Custom Dropdown ──────────────────────────────────────────────────
 const StyledSelect = ({ name, value, onChange, options, placeholder, required, error, disabled }) => {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
-  const selectedLabel = options.find(o => o.value === value)?.label || '';
+  const selectedOption = options.find(o => !o.isHeader && o.value === value);
+  const selectedLabel = selectedOption?.label || selectedOption?.displayName || '';
 
   useEffect(() => {
     const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
@@ -80,23 +81,44 @@ const StyledSelect = ({ name, value, onChange, options, placeholder, required, e
 
       {open && (
         <div className="absolute z-[9999] left-0 right-0 mt-1.5 bg-white dark:bg-[#1e1b16] border border-slate-200 dark:border-[#38352e] rounded-xl shadow-xl overflow-hidden animate-in fade-in slide-in-from-top-1 duration-150">
-          <div className="max-h-52 overflow-y-auto py-1 scrollbar-thin scrollbar-thumb-slate-200 dark:scrollbar-thumb-[#38352e]">
-            {options.map((opt, idx) => (
-              <div
-                key={`${opt.value}-${idx}`}
-                onClick={() => handleSelect(opt.value)}
-                className={`px-3.5 py-2.5 flex items-center gap-2.5 text-xs font-semibold cursor-pointer transition-all
-                  ${value === opt.value
-                    ? 'bg-[#00a76b]/10 text-[#00a76b] dark:bg-[#00a76b]/15 font-bold'
-                    : 'text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-[#2a261f]'}`}
-              >
-                {value === opt.value && (
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#00a76b] flex-shrink-0" />
-                )}
-                {value !== opt.value && <span className="w-1.5 h-1.5 flex-shrink-0" />}
-                <span className="truncate">{opt.label}</span>
-              </div>
-            ))}
+          <div className="max-h-60 overflow-y-auto py-1 scrollbar-thin scrollbar-thumb-slate-200 dark:scrollbar-thumb-[#38352e]">
+            {options.map((opt, idx) => {
+              if (opt.isHeader) {
+                return (
+                  <div
+                    key={`header-${idx}-${opt.label}`}
+                    className="px-3.5 py-2 text-[11px] font-black uppercase text-slate-800 dark:text-slate-200 tracking-wider bg-slate-100/90 dark:bg-[#25211b] select-none border-y border-slate-200/50 dark:border-white/5 sticky top-0 z-10"
+                  >
+                    {opt.label}
+                  </div>
+                );
+              }
+              const isSelected = value === opt.value;
+              return (
+                <div
+                  key={`${opt.value}-${idx}`}
+                  onClick={() => handleSelect(opt.value)}
+                  className={`px-3.5 py-2.5 flex items-center justify-between text-xs font-semibold cursor-pointer transition-all
+                    ${isSelected
+                      ? 'bg-[#00a76b]/10 text-[#00a76b] dark:bg-[#00a76b]/15 font-bold'
+                      : 'text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-[#2a261f]'}`}
+                >
+                  <div className="flex items-center gap-2.5 truncate">
+                    {isSelected ? (
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#00a76b] flex-shrink-0" />
+                    ) : (
+                      <span className="w-1.5 h-1.5 flex-shrink-0" />
+                    )}
+                    <span className="truncate">{opt.displayName || opt.label}</span>
+                  </div>
+                  {opt.sublabel && (
+                    <span className="text-[10px] text-slate-400 font-normal ml-2 flex-shrink-0">
+                      {opt.sublabel}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
@@ -143,6 +165,7 @@ const EmployeeForm = () => {
     personalEmail: '',
     password: '',
     phone: '',
+    familyContact: '',
     gender: 'Male',
     dob: '',
     address: '',
@@ -166,6 +189,9 @@ const EmployeeForm = () => {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '', employeeId: '', status: '' });
   const [errors, setErrors] = useState({});
+  const [isManagerChecked, setIsManagerChecked] = useState(false);
+  const [employeeData, setEmployeeData] = useState(null);
+  const [sameAsLocal, setSameAsLocal] = useState(false);
 
   // Image State
   const [selectedFile, setSelectedFile] = useState(null);
@@ -243,35 +269,109 @@ const EmployeeForm = () => {
 
   const defaultDepartments = [
     'Admin',
-    'Engineering',
-    'Sales',
-    'Marketing',
-    'Finance',
-    'HR',
+    'Developer',
+    'QA',
     'Design',
-    'Operations'
+    'BDE',
+    'HR',
+    'Marketing',
+    'Finance'
   ];
 
-  const departmentList = departments.length > 0
-    ? departments.map(d => typeof d === 'string' ? d : d.name).filter(Boolean)
-    : defaultDepartments;
+  const departmentList = useMemo(() => {
+    const fetched = departments.length > 0
+      ? departments.map(d => typeof d === 'string' ? d : d.name).filter(Boolean)
+      : [];
+    const combined = [...defaultDepartments];
+    fetched.forEach(name => {
+      if (!combined.some(d => d.toLowerCase() === name.toLowerCase())) {
+        combined.push(name);
+      }
+    });
+    return combined;
+  }, [departments]);
 
-  const defaultDesignations = [
-    'Admin',
-    'Software Engineer',
-    'Senior Software Engineer',
-    'Frontend Developer',
-    'Backend Developer',
-    'Full Stack Developer',
-    'UI/UX Designer',
-    'QA Tester',
-    'Product Manager',
-    'HR Executive',
-    'Support Staff',
-    'Operations Lead'
-  ];
+  const [customDesignations, setCustomDesignations] = useState([]);
 
-  const [designationList, setDesignationList] = useState(defaultDesignations);
+  const availableDesignations = useMemo(() => {
+    if (!formData.department) return [];
+    const list = getDesignationsForDepartment(formData.department, customDesignations);
+    if (formData.designation && !list.some(d => d.toLowerCase() === formData.designation.toLowerCase())) {
+      return [...list, formData.designation];
+    }
+    return list;
+  }, [formData.department, formData.designation, customDesignations]);
+
+  const isDeptAdmin = (formData.department || '').trim().toLowerCase() === 'admin' || (formData.role || '').trim().toLowerCase() === 'admin';
+
+  const filteredManagerOptions = useMemo(() => {
+    const editUserId = employeeData?.userId?._id || employeeData?.userId || employeeData?._id;
+    const validList = Array.isArray(managers) ? managers.filter(m => m && (m.name || m.fullName)) : [];
+
+    const managerList = validList.filter(m => (m.role || '').toLowerCase() === 'manager' && (!editUserId || m._id !== editUserId));
+    const hrList = validList.filter(m => (m.role || '').toLowerCase() === 'hr' && (!editUserId || m._id !== editUserId));
+    const adminList = validList.filter(m => (m.role || '').toLowerCase() === 'admin' && (!editUserId || m._id !== editUserId));
+
+    const options = [];
+
+    // 1. Managers
+    if (managerList.length > 0) {
+      options.push({ isHeader: true, label: 'Managers' });
+      managerList.forEach(m => {
+        const name = m.name || m.fullName || 'Manager';
+        options.push({
+          value: m._id,
+          label: `${name} (Manager)`,
+          displayName: name,
+          role: 'Manager'
+        });
+      });
+    }
+
+    // 2. HR
+    if (hrList.length > 0) {
+      options.push({ isHeader: true, label: 'HR' });
+      hrList.forEach(m => {
+        const name = m.name || m.fullName || 'HR';
+        options.push({
+          value: m._id,
+          label: `${name} (HR)`,
+          displayName: name,
+          role: 'HR'
+        });
+      });
+    }
+
+    // 3. Admin
+    if (adminList.length > 0) {
+      options.push({ isHeader: true, label: 'Admin' });
+      adminList.forEach(m => {
+        const name = m.name || m.fullName || 'Admin';
+        options.push({
+          value: m._id,
+          label: `${name} (Admin)`,
+          displayName: name,
+          role: 'Admin'
+        });
+      });
+    }
+
+    return options;
+  }, [managers, employeeData]);
+
+  const handleManagerToggle = (checked) => {
+    setIsManagerChecked(checked);
+    const newRole = resolveRole({
+      department: formData.department,
+      isManager: checked,
+      designation: formData.designation
+    });
+    setFormData(prev => ({
+      ...prev,
+      role: newRole,
+      managerId: prev.managerId
+    }));
+  };
 
   const handleAddDepartment = async (name) => {
     try {
@@ -325,17 +425,17 @@ const EmployeeForm = () => {
   };
 
   const handleAddDesignation = async (name) => {
-    setDesignationList(prev => prev.includes(name) ? prev : [...prev, name]);
+    setCustomDesignations(prev => prev.includes(name) ? prev : [...prev, name]);
     toast.success(`Designation "${name}" added`);
   };
 
   const handleEditDesignation = async (oldName, newName) => {
-    setDesignationList(prev => prev.map(d => d === oldName ? newName : d));
+    setCustomDesignations(prev => prev.map(d => d === oldName ? newName : d));
     toast.success(`Designation updated to "${newName}"`);
   };
 
   const handleDeleteDesignation = async (nameToDelete) => {
-    setDesignationList(prev => prev.filter(d => d !== nameToDelete));
+    setCustomDesignations(prev => prev.filter(d => d !== nameToDelete));
     toast.success(`Designation "${nameToDelete}" deleted`);
   };
 
@@ -351,7 +451,7 @@ const EmployeeForm = () => {
   };
 
   const handleReorderDesignations = (newDesigNames) => {
-    setDesignationList(newDesigNames);
+    setCustomDesignations(newDesigNames);
   };
 
   const token = sessionStorage.getItem('token');
@@ -404,12 +504,14 @@ const EmployeeForm = () => {
             headers: { Authorization: `Bearer ${token}` }
           });
           const emp = empRes.data;
+          setEmployeeData(emp);
           const nameParts = (emp.fullName || emp.name || '').split(' ');
           const firstName = nameParts[0] || '';
           const lastName = nameParts.length > 1 ? nameParts[nameParts.length - 1] : '';
           const middleName = nameParts.length > 2 ? nameParts.slice(1, -1).join(' ') : '';
 
           const fetchedRole = emp.userId?.role || emp.role || 'employee';
+          setIsManagerChecked((fetchedRole || '').toLowerCase() === 'manager' || (fetchedRole || '').toLowerCase() === 'hr');
           let fetchedDesignation = emp.designation || emp.position || '';
           if (['Employee', 'Associate', 'Staff Member', 'Admin', 'HR', 'Manager', 'N/A'].includes(fetchedDesignation)) {
             fetchedDesignation = '';
@@ -424,6 +526,7 @@ const EmployeeForm = () => {
             personalEmail: emp.personalEmail || '',
             password: '',
             phone: emp.phone || '',
+            familyContact: emp.familyContact || '',
             gender: emp.gender || 'Male',
             dob: emp.dob ? emp.dob.split('T')[0] : '',
             address: emp.address || '',
@@ -431,7 +534,7 @@ const EmployeeForm = () => {
             role: fetchedRole,
             department: emp.department || '',
             designation: fetchedDesignation,
-            managerId: emp.managerId?._id || emp.managerId || '',
+            managerId: emp.managerId?._id || emp.managerId || emp.reportingManager?._id || emp.reportingManager || '',
             joinDate: emp.joinDate ? emp.joinDate.split('T')[0] : new Date().toISOString().split('T')[0],
             employmentType: emp.employmentType || 'Full-time',
             profileImage: emp.profileImage || '',
@@ -439,6 +542,9 @@ const EmployeeForm = () => {
             bankDetails: emp.bankDetails || '',
             panCard: emp.panCard || ''
           });
+
+          const isSame = !!(emp.address && emp.permanentAddress && emp.address.trim() === emp.permanentAddress.trim());
+          setSameAsLocal(isSame);
 
           if (emp.profileImage) {
             setPreviewUrl(getImageUrl(emp.profileImage));
@@ -484,9 +590,9 @@ const EmployeeForm = () => {
       }
     }
 
-    if (name === 'phone') {
+    if (name === 'phone' || name === 'familyContact') {
       if (value && !/^[0-9]*$/.test(value)) {
-        newErrors.phone = 'Only numbers (0-9) are allowed.';
+        newErrors[name] = 'Only numbers (0-9) are allowed.';
         value = value.replace(/[^0-9]/g, '');
       }
       if (value.length > 10) {
@@ -512,9 +618,24 @@ const EmployeeForm = () => {
 
     if (name === 'department') {
       const isDeptAdmin = value?.trim().toLowerCase() === 'admin';
-      const newDesignation = isDeptAdmin ? 'Admin' : formData.designation;
-      const autoRole = isDeptAdmin ? 'admin' : (newDesignation ? resolveRoleFromDesignation(newDesignation, formData.role) : formData.role);
-      if (isDeptAdmin && newErrors.designation) {
+      const isDeptHr = value?.trim().toLowerCase() === 'hr';
+      const validDesigs = getDesignationsForDepartment(value, customDesignations);
+      const isStillValid = validDesigs.some(d => d.toLowerCase() === (formData.designation || '').toLowerCase().trim());
+      const newDesignation = isDeptAdmin ? 'Head of Admin' : (isStillValid ? formData.designation : '');
+      const isIntern = newDesignation.toLowerCase().includes('intern');
+      let nextManagerChecked = isManagerChecked;
+      if (isDeptAdmin || isIntern) {
+        nextManagerChecked = false;
+        setIsManagerChecked(false);
+      } else if (isDeptHr && newDesignation.toLowerCase() === 'senior hr') {
+        nextManagerChecked = true;
+        setIsManagerChecked(true);
+      }
+      const autoRole = resolveRole({ department: value, isManager: nextManagerChecked, designation: newDesignation });
+      if (value && newErrors.department) {
+        delete newErrors.department;
+      }
+      if (newDesignation && newErrors.designation) {
         delete newErrors.designation;
       }
       setErrors(newErrors);
@@ -522,10 +643,25 @@ const EmployeeForm = () => {
         ...prev,
         department: value,
         designation: newDesignation,
-        role: autoRole
+        role: autoRole,
+        managerId: prev.managerId
       }));
     } else if (name === 'designation') {
-      const autoRole = resolveRoleFromDesignation(value, formData.role);
+      const isDeptAdmin = (formData.department || '').trim().toLowerCase() === 'admin';
+      const isDeptHr = (formData.department || '').trim().toLowerCase() === 'hr';
+      const isIntern = (value || '').toLowerCase().includes('intern');
+      let nextManagerChecked = isManagerChecked;
+      if (isDeptAdmin || isIntern) {
+        nextManagerChecked = false;
+        setIsManagerChecked(false);
+      } else if (isDeptHr && (value || '').toLowerCase() === 'senior hr') {
+        nextManagerChecked = true;
+        setIsManagerChecked(true);
+      }
+      const autoRole = resolveRole({ department: formData.department, isManager: nextManagerChecked, designation: value });
+      if (value && newErrors.designation) {
+        delete newErrors.designation;
+      }
       setErrors(newErrors);
       setFormData(prev => ({
         ...prev,
@@ -539,8 +675,34 @@ const EmployeeForm = () => {
         role: value
       }));
     } else {
+      if (name === 'address' && sameAsLocal) {
+        setErrors(newErrors);
+        setFormData({ ...formData, address: value, permanentAddress: value });
+        return;
+      }
+
+      if (name === 'permanentAddress' && sameAsLocal) {
+        setSameAsLocal(false);
+      }
+
       setErrors(newErrors);
       setFormData({ ...formData, [name]: value });
+    }
+  };
+
+  const handleSameAsLocalToggle = (e) => {
+    const checked = e.target.checked;
+    setSameAsLocal(checked);
+    if (checked) {
+      const localVal = formData.address || '';
+      setFormData(prev => ({ ...prev, permanentAddress: localVal }));
+      if (localVal) {
+        setErrors(prev => {
+          const updated = { ...prev };
+          delete updated.permanentAddress;
+          return updated;
+        });
+      }
     }
   };
 
@@ -609,6 +771,12 @@ const EmployeeForm = () => {
       newErrors.phone = 'Phone Number must be exactly 10 digits.';
     }
 
+    if (!formData.familyContact) {
+      newErrors.familyContact = 'Family Contact is required.';
+    } else if (formData.familyContact.length !== 10) {
+      newErrors.familyContact = 'Family Contact must be exactly 10 digits.';
+    }
+
     if (!isEdit && !formData.password) {
       newErrors.password = 'Password is required.';
     } else if (formData.password) {
@@ -637,8 +805,11 @@ const EmployeeForm = () => {
       }
     }
 
-    if (formData.role?.toLowerCase() !== 'admin' && !formData.managerId) {
-      newErrors.managerId = 'Reporting Manager is required.';
+    if (!formData.managerId) {
+      const hasSelectableManagers = filteredManagerOptions.some(o => !o.isHeader);
+      if (hasSelectableManagers) {
+        newErrors.managerId = 'Reporting Manager is required.';
+      }
     }
     if (!formData.address) newErrors.address = 'Physical Address is required.';
 
@@ -660,12 +831,14 @@ const EmployeeForm = () => {
         department: formData.department,
         designation: formData.designation,
         phone: formData.phone,
+        familyContact: formData.familyContact,
         gender: formData.gender,
         address: formData.address,
         dob: formData.dob,
         joinDate: formData.joinDate,
         employmentType: formData.employmentType || 'Full-time',
-        managerId: formData.role?.toLowerCase() !== 'admin' ? formData.managerId : null
+        managerId: formData.managerId || null,
+        reportingManager: formData.managerId || null
       };
 
       if (formData.password) {
@@ -833,14 +1006,6 @@ const EmployeeForm = () => {
             >
               ← Back
             </button>
-            <button
-              type="submit"
-              disabled={loading}
-              className="px-5 py-2.5 bg-[#00a76b] hover:bg-[#00915c] text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer uppercase tracking-wider shrink-0"
-            >
-              {loading ? <RefreshCw className="animate-spin" size={15} /> : <Save size={15} />}
-              <span>{loading ? 'Saving...' : (isEdit ? 'SAVE EMPLOYEE' : 'Save Employee')}</span>
-            </button>
           </div>
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -930,6 +1095,13 @@ const EmployeeForm = () => {
                 </div>
 
                 <div className="flex justify-between items-center text-xs">
+                  <span className="font-semibold text-slate-500 dark:text-slate-400">Family Contact</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-200">
+                    {formData.familyContact || 'Not specified'}
+                  </span>
+                </div>
+
+                <div className="flex justify-between items-center text-xs">
                   <span className="font-semibold text-slate-500 dark:text-slate-400">Gender</span>
                   <span className="font-bold text-slate-800 dark:text-slate-200">{formData.gender}</span>
                 </div>
@@ -944,15 +1116,15 @@ const EmployeeForm = () => {
                   <span className="font-bold text-slate-800 dark:text-slate-200">{formatDDMMYYYY(formData.dob) || 'Not selected'}</span>
                 </div>
 
-                {!['hr', 'manager', 'admin'].includes(formData.role?.toLowerCase()) && (
-                  <div className="flex justify-between items-center text-xs">
-                    <span className="font-semibold text-slate-500 dark:text-slate-400">Manager</span>
-                    <span className="font-bold text-slate-800 dark:text-slate-200 truncate max-w-[160px]">
-                      {managers.find(m => m._id === formData.managerId)?.name ||
-                       managers.find(m => m._id === formData.managerId)?.fullName || 'Not assigned'}
-                    </span>
-                  </div>
-                )}
+                <div className="flex justify-between items-center text-xs">
+                  <span className="font-semibold text-slate-500 dark:text-slate-400">
+                    Reporting Manager
+                  </span>
+                  <span className="font-bold text-slate-800 dark:text-slate-200 truncate max-w-[160px]">
+                    {managers.find(m => m._id === formData.managerId)?.name ||
+                     managers.find(m => m._id === formData.managerId)?.fullName || 'Not assigned'}
+                  </span>
+                </div>
 
                 <div className="flex flex-col text-xs pt-1 space-y-2">
                   <div>
@@ -1100,6 +1272,20 @@ const EmployeeForm = () => {
                   {errors.phone && <p className="text-red-500 text-[10px] font-semibold">{errors.phone}</p>}
                 </div>
 
+                {/* Family Contact */}
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-extrabold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Family Contact <span className="text-red-500">*</span></label>
+                  <div className="relative">
+                    <Phone size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      required name="familyContact" value={formData.familyContact} onChange={handleChange}
+                      className="w-full h-11 pl-10 pr-3.5 bg-white dark:bg-[#1a1714] border border-slate-200 dark:border-[#38352e] rounded-xl text-xs font-semibold text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-[#00a76b] focus:ring-1 focus:ring-[#00a76b] transition-all"
+                      placeholder="10-digit family contact" maxLength="10"
+                    />
+                  </div>
+                  {errors.familyContact && <p className="text-red-500 text-[10px] font-semibold">{errors.familyContact}</p>}
+                </div>
+
                 {/* Password */}
                 <div className="space-y-1.5">
                   <label className="text-[11px] font-extrabold text-slate-600 dark:text-slate-300 uppercase tracking-wider">
@@ -1159,10 +1345,11 @@ const EmployeeForm = () => {
                     name="designation"
                     value={formData.designation}
                     onChange={handleChange}
-                    placeholder="Select or add Designation"
+                    placeholder={!formData.department ? "Select Department first" : "Select or add Designation"}
+                    disabled={!formData.department}
                     label="Designation"
                     error={errors.designation}
-                    options={designationList}
+                    options={availableDesignations}
                     onAddOption={handleAddDesignation}
                     onEditOption={handleEditDesignation}
                     onDeleteOption={handleDeleteDesignation}
@@ -1171,6 +1358,37 @@ const EmployeeForm = () => {
                   {errors.designation && <p className="text-red-500 text-[10px] font-semibold">{errors.designation}</p>}
                 </div>
               </div>
+
+              {/* Access Checkbox (Shown for non-admin departments, but NOT for interns) */}
+              {(() => {
+                const isIntern = (formData.designation || '').toLowerCase().includes('intern');
+                const isDeptAdmin = (formData.department || '').toLowerCase() === 'admin';
+                const isDeptHr = (formData.department || '').toLowerCase() === 'hr';
+                const showAccessCheckbox = formData.department && !isDeptAdmin && !isIntern;
+
+                if (!showAccessCheckbox) return null;
+
+                return (
+                  <label className="flex items-center gap-3 p-3.5 rounded-xl border border-slate-200 dark:border-[#38352e] bg-slate-50/60 dark:bg-[#1a1714] cursor-pointer hover:border-[#00a76b]/50 transition-all select-none">
+                    <input
+                      type="checkbox"
+                      checked={isManagerChecked}
+                      onChange={(e) => handleManagerToggle(e.target.checked)}
+                      className="w-4 h-4 text-[#00a76b] rounded border-slate-300 focus:ring-[#00a76b] cursor-pointer"
+                    />
+                    <div className="space-y-0.5">
+                      <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block">
+                        {isDeptHr ? 'Grant Full HR Portal Access' : 'Designate as Manager / Team Lead'}
+                      </span>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                        {isDeptHr
+                          ? 'Grants access to HR Portal to manage personnel, leaves, and attendance. User will report directly to Admin.'
+                          : 'Grants Manager Portal access; manager will report directly to an Admin.'}
+                      </p>
+                    </div>
+                  </label>
+                );
+              })()}
 
               {/* Portal Access Auto-Resolution Indicator */}
               {formData.designation && (
@@ -1238,25 +1456,20 @@ const EmployeeForm = () => {
               </div>
 
               {/* Reporting Manager */}
-              {formData.role?.toLowerCase() !== 'admin' && (
-                <div className="space-y-1.5 max-w-md">
-                  <label className="text-[11px] font-extrabold text-slate-600 dark:text-slate-300 uppercase tracking-wider">
-                    Reporting Manager <span className="text-red-500">*</span>
-                  </label>
-                  <StyledSelect
-                    name="managerId"
-                    value={formData.managerId}
-                    onChange={handleChange}
-                    placeholder="Select Manager"
-                    error={errors.managerId}
-                    options={managers.map(m => ({
-                      value: m._id,
-                      label: `${m.name || m.fullName} (${m.employeeId || 'Manager'})`
-                    }))}
-                  />
-                  {errors.managerId && <p className="text-red-500 text-[10px] font-semibold">{errors.managerId}</p>}
-                </div>
-              )}
+              <div className="space-y-1.5 max-w-md">
+                <label className="text-[11px] font-extrabold text-slate-600 dark:text-slate-300 uppercase tracking-wider">
+                  Reporting Manager <span className="text-red-500">*</span>
+                </label>
+                <StyledSelect
+                  name="managerId"
+                  value={formData.managerId}
+                  onChange={handleChange}
+                  placeholder="Select Reporting Manager"
+                  error={errors.managerId}
+                  options={filteredManagerOptions}
+                />
+                {errors.managerId && <p className="text-red-500 text-[10px] font-semibold">{errors.managerId}</p>}
+              </div>
 
               {/* Residential Addresses */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1277,14 +1490,36 @@ const EmployeeForm = () => {
                 {/* 2. Permanent Address */}
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
-                    <label className="text-[11px] font-extrabold text-slate-600 dark:text-slate-300 uppercase tracking-wider">2. Permanent Address <span className="text-red-500">*</span></label>
+                    <label className="text-[11px] font-extrabold text-slate-600 dark:text-slate-300 uppercase tracking-wider">
+                      2. Permanent Address <span className="text-red-500">*</span>
+                    </label>
                     <span className="text-[10px] font-bold text-slate-400 font-mono">{(formData.permanentAddress || '').length}/250</span>
                   </div>
                   <textarea
-                    required name="permanentAddress" value={formData.permanentAddress} onChange={handleChange} maxLength="250" rows="3"
-                    className="w-full p-3 bg-white dark:bg-[#1a1714] border border-slate-200 dark:border-[#38352e] rounded-xl text-xs font-semibold text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-[#00a76b] focus:ring-1 focus:ring-[#00a76b] transition-all resize-none"
-                    placeholder="Permanent home address..."
+                    required
+                    name="permanentAddress"
+                    value={formData.permanentAddress}
+                    onChange={(e) => {
+                      if (sameAsLocal) setSameAsLocal(false);
+                      handleChange(e);
+                    }}
+                    readOnly={sameAsLocal}
+                    maxLength="250"
+                    rows="3"
+                    className={`w-full p-3 border border-slate-200 dark:border-[#38352e] rounded-xl text-xs font-semibold text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-[#00a76b] focus:ring-1 focus:ring-[#00a76b] transition-all resize-none ${sameAsLocal ? 'bg-slate-100/70 dark:bg-[#151310] cursor-not-allowed opacity-80' : 'bg-white dark:bg-[#1a1714]'}`}
+                    placeholder={sameAsLocal ? "Same as local residential address" : "Permanent home address..."}
                   />
+                  <div className="flex items-center justify-between pt-0.5">
+                    <label className="inline-flex items-center gap-1.5 text-[11px] font-bold text-slate-500 dark:text-slate-400 cursor-pointer select-none hover:text-[#00a76b] transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={sameAsLocal}
+                        onChange={handleSameAsLocalToggle}
+                        className="w-3.5 h-3.5 rounded border-slate-300 text-[#00a76b] focus:ring-[#00a76b] accent-[#00a76b] cursor-pointer"
+                      />
+                      <span>Same as Local</span>
+                    </label>
+                  </div>
                   {errors.permanentAddress && <p className="text-red-500 text-[10px] font-semibold">{errors.permanentAddress}</p>}
                 </div>
               </div>

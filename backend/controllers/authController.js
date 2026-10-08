@@ -176,28 +176,108 @@ exports.createUser = async (req, res) => {
 
 exports.getMe = async (req, res) => {
   try {
-    let user = await User.findById(req.user.id).select('-password').populate('reportingManager', 'name email').lean();
+    let user = await User.findById(req.user.id).select('-password').populate('reportingManager', 'name fullName email role').lean();
     if (!user && req.user?.name) {
-      user = await User.findOne({ name: req.user.name, role: req.user.role }).select('-password').populate('reportingManager', 'name email').lean();
+      user = await User.findOne({ name: req.user.name, role: req.user.role }).select('-password').populate('reportingManager', 'name fullName email role').lean();
     }
     if (!user && req.user?.role) {
-      user = await User.findOne({ role: req.user.role }).select('-password').populate('reportingManager', 'name email').lean();
+      user = await User.findOne({ role: req.user.role }).select('-password').populate('reportingManager', 'name fullName email role').lean();
     }
     if (!user) return res.status(404).json({ message: 'User not found' });
 
     // 👤 MASTER REGISTRY BRIDGE: Always fetch from the Employee model for personnel details using verified user._id
-    const employeeData = await Employee.findOne({ userId: user._id }).populate('reportingManager', 'name email').lean();
+    const employeeData = await Employee.findOne({ userId: user._id })
+      .populate('reportingManager', 'name fullName email role')
+      .populate('managerId', 'name fullName email role')
+      .lean();
 
     console.log(`[PROFILE TRACE] User: ${user.name || user.email} | Role: ${user.role} | Master Registry: ${!!employeeData}`);
+
+    const rawDesignation = employeeData?.designation || employeeData?.position || '';
+    const resolvedDesignation = (rawDesignation && rawDesignation.toLowerCase() !== 'admin')
+      ? rawDesignation
+      : (user.role === 'admin' ? 'Head of Admin' : (rawDesignation || ''));
+
+    const rawDepartment = employeeData?.department || '';
+    const resolvedDepartment = rawDepartment || (user.role === 'admin' ? 'Admin' : '');
+
+    // Auto-sync legacy admin employee record if designation was 'Admin' or missing
+    if (employeeData && user.role === 'admin' && (!employeeData.designation || employeeData.designation.toLowerCase() === 'admin')) {
+      Employee.updateOne(
+        { _id: employeeData._id },
+        { $set: { designation: 'Head of Admin', position: 'Head of Admin', department: 'Admin' } }
+      ).catch(err => console.error('Failed to sync admin designation:', err));
+    }
+
+    // 🎯 ROBUST MANAGER RESOLUTION: Ensure human-readable object or null, never raw unpopulated hex ObjectIds
+    let resolvedManager = null;
+    const candidates = [
+      employeeData?.reportingManager,
+      employeeData?.managerId,
+      user?.reportingManager
+    ];
+
+    for (const cand of candidates) {
+      if (cand && typeof cand === 'object' && (cand.name || cand.fullName)) {
+        resolvedManager = {
+          _id: cand._id,
+          name: cand.name || cand.fullName,
+          fullName: cand.fullName || cand.name,
+          email: cand.email,
+          role: cand.role
+        };
+        break;
+      }
+    }
+
+    if (!resolvedManager) {
+      for (const cand of candidates) {
+        if (cand) {
+          const rawId = (typeof cand === 'object' && cand._id) ? cand._id.toString() : cand.toString();
+          if (rawId && mongoose.isValidObjectId(rawId)) {
+            // First check User collection
+            const targetUser = await User.findById(rawId).select('name fullName email role').lean();
+            if (targetUser) {
+              resolvedManager = {
+                _id: targetUser._id,
+                name: targetUser.name || targetUser.fullName,
+                fullName: targetUser.fullName || targetUser.name,
+                email: targetUser.email,
+                role: targetUser.role
+              };
+              break;
+            }
+            // Fallback: check Employee collection
+            const targetEmp = await Employee.findById(rawId).select('fullName name email role userId').populate('userId', 'name email role').lean();
+            if (targetEmp) {
+              resolvedManager = {
+                _id: targetEmp._id,
+                name: targetEmp.fullName || targetEmp.name || targetEmp.userId?.name || '',
+                fullName: targetEmp.fullName || targetEmp.name || '',
+                email: targetEmp.email || targetEmp.userId?.email || '',
+                role: targetEmp.role || targetEmp.userId?.role || ''
+              };
+              break;
+            }
+          }
+        }
+      }
+    }
 
     // Merge data - preserve the master User role and use registry data only for identity fields.
     const profile = {
       ...employeeData,
       ...user,
+      familyContact: employeeData?.familyContact || '',
       role: user.role,
       fullName: employeeData?.fullName || user.fullName || user.name || '',
       name: user.name || employeeData?.fullName || '',
       employeeId: employeeData?.employeeId || user.employeeId || '',
+      designation: resolvedDesignation,
+      position: resolvedDesignation,
+      department: resolvedDepartment,
+      reportingManager: resolvedManager,
+      managerId: resolvedManager,
       employeeRecordId: employeeData?._id,
       _id: user._id
     };
@@ -235,7 +315,7 @@ exports.updatePassword = async (req, res) => {
 // 📝 PROFILE: Update Details
 exports.updateProfile = async (req, res) => {
   try {
-    const { fullName, personalEmail, phone, address, localAddress, permanentAddress, profileImage, adharCard, bankDetails, panCard } = req.body;
+    const { fullName, personalEmail, phone, familyContact, address, localAddress, permanentAddress, profileImage, adharCard, bankDetails, panCard } = req.body;
     let user = await User.findById(req.user.id);
     if (!user && req.user?.name) {
       user = await User.findOne({ name: req.user.name, role: req.user.role });
@@ -285,6 +365,7 @@ exports.updateProfile = async (req, res) => {
     if (fullName) updateData.fullName = fullName;
     if (personalEmail !== undefined) updateData.personalEmail = personalEmail;
     if (phone !== undefined) updateData.phone = phone;
+    if (familyContact !== undefined) updateData.familyContact = familyContact;
     
     const resolvedLocalAddress = localAddress !== undefined ? localAddress : address;
     if (resolvedLocalAddress !== undefined) {

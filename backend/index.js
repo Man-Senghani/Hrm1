@@ -317,7 +317,11 @@ frontends.forEach(({ prefix, dir }) => {
     app.use(prefix, (req, res, next) => {
       if (req.method === 'GET') {
         res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-        return res.sendFile(indexPath);
+        return res.sendFile(indexPath, (err) => {
+          if (err && !res.headersSent) {
+            next();
+          }
+        });
       }
       next();
     });
@@ -342,17 +346,17 @@ app.use((req, res, next) => {
     if (req.path.startsWith('/reset-password') || req.path.startsWith('/forgot-password') || req.path.startsWith('/login')) {
       if (fs.existsSync(LOGIN_INDEX)) {
         res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-        return res.sendFile(LOGIN_INDEX);
+        return res.sendFile(LOGIN_INDEX, (err) => { if (err && !res.headersSent) next(); });
       }
     }
     const employeeIndex = path.join(__dirname, '../frontend/employee/dist/index.html');
     if (fs.existsSync(employeeIndex)) {
       res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-      return res.sendFile(employeeIndex);
+      return res.sendFile(employeeIndex, (err) => { if (err && !res.headersSent) next(); });
     }
     if (fs.existsSync(LOGIN_INDEX)) {
       res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-      return res.sendFile(LOGIN_INDEX);
+      return res.sendFile(LOGIN_INDEX, (err) => { if (err && !res.headersSent) next(); });
     }
   }
   next();
@@ -373,18 +377,87 @@ mongoose.connect(MONGO_URI)
   .then(() => console.log('✅ MongoDB Connected Successfully'))
   .catch((err) => console.error('❌ DB Connection Error:', err.message));
 
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`\n❌ [PORT CONFLICT] Port ${PORT} is already occupied by another process!`);
+    console.error(`   To free up port ${PORT}:`);
+    console.error(`   - PowerShell: Stop-Process -Id (Get-NetTCPConnection -LocalPort ${PORT}).OwningProcess -Force`);
+    console.error(`   - Command Prompt: for /f "tokens=5" %a in ('netstat -aon ^| findstr :${PORT}') do taskkill /f /pid %a\n`);
+    process.exit(1);
+  } else {
+    console.error('❌ Server startup error:', err);
+  }
+});
+
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(`✅ Server running on port ${PORT}`);
+  console.log(`\n======================================================`);
+  console.log(`🚀 FluidHR Unified Platform running strictly on PORT ${PORT}`);
+  console.log(`======================================================`);
+  console.log(`  🔑 Login Portal:     http://localhost:${PORT}/`);
+  console.log(`  🛡️ Admin Portal:     http://localhost:${PORT}/admin/`);
+  console.log(`  👥 HR Portal:        http://localhost:${PORT}/hr/`);
+  console.log(`  💼 Manager Portal:   http://localhost:${PORT}/manager/`);
+  console.log(`  🧑‍💻 Employee Portal:  http://localhost:${PORT}/employee/`);
+  console.log(`  ⚡ API Endpoint:     http://localhost:${PORT}/api/`);
+  console.log(`======================================================`);
+  console.log(`  (All frontends and backend run unified on port ${PORT})\n`);
 
   // Initialize Cron Jobs
   initCronJobs();
+
+  // 💓 Background Dead-Man's Switch: Auto-pause active sessions if laptop stops sending heartbeats for > 25 seconds
+  setInterval(async () => {
+    try {
+      const staleThreshold = new Date(Date.now() - 25000);
+      const TimeTrack = require('./models/TimeTrack');
+      const staleSessions = await TimeTrack.find({
+        status: 'active',
+        lastHeartbeat: { $lt: staleThreshold, $ne: null }
+      });
+
+      for (const session of staleSessions) {
+        const pauseTime = new Date(session.lastHeartbeat);
+        if (session.segmentStart) {
+          const segSecs = Math.max(0, Math.floor((pauseTime - new Date(session.segmentStart)) / 1000));
+          session.activeTime = (session.activeTime || 0) + segSecs;
+        }
+        session.segmentStart = null;
+        session.idleStart = pauseTime;
+        session.status = 'paused';
+        session.isRunning = false;
+
+        const lastIdx = (session.sessions || []).length - 1;
+        if (lastIdx >= 0 && !session.sessions[lastIdx].pause && !session.sessions[lastIdx].end) {
+          session.sessions[lastIdx].pause = pauseTime;
+        }
+
+        await session.save();
+        console.log(`[DEAD-MAN SWITCH] Auto-paused stale session for employee ${session.employeeId}`);
+
+        io.to(`user_${session.employeeId}`).emit('timer_paused', {
+          reason: 'stale_heartbeat',
+          employeeId: session.employeeId,
+          hasActiveSession: true,
+          status: 'paused',
+          isRunning: false,
+          activeTime: session.activeTime,
+          idleTime: session.idleTime,
+          idleStart: pauseTime,
+          startTime: session.startTime,
+          lastHeartbeat: session.lastHeartbeat
+        });
+      }
+    } catch (err) {
+      console.error('[DEAD-MAN SWITCH ERROR]', err.message);
+    }
+  }, 10000); // Sweep every 10 seconds
 
   // 🔄 Keep-Alive Auto-Pinger (Prevents cloud hosts like Render free tier from sleeping)
   const isCloudHost = process.env.RENDER || process.env.RENDER_EXTERNAL_URL || process.env.NODE_ENV === 'production';
   if (isCloudHost) {
     const keepAliveUrl = process.env.RENDER_EXTERNAL_URL
       ? `${process.env.RENDER_EXTERNAL_URL}/api/health`
-      : 'https://hrm1-1-zli1.onrender.com/api/health';
+      : 'https://hrm.aupanishad.tech/api/health';
     const https = require('https');
     console.log(`[KEEP-ALIVE] Cloud keep-alive pinger initialized for ${keepAliveUrl}`);
     setInterval(() => {

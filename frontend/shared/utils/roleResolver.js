@@ -1,40 +1,148 @@
 /**
- * Resolves system access role ('admin' | 'hr' | 'manager' | 'employee')
- * based on the employee's designation, preserving administrative roles.
+ * Shared Role and Designation Resolution Utility
+ * 
+ * Maps departments to designations and manages system portal access roles.
  */
-export const resolveRoleFromDesignation = (designation = '', currentRole = 'employee') => {
-  const normCurrent = (currentRole || '').toLowerCase().trim();
 
-  // Rule 1: Never change or downgrade Admin or HR roles
-  if (normCurrent === 'admin' || normCurrent === 'hr') {
-    return normCurrent;
+export const DEPARTMENT_DESIGNATIONS_MAP = {
+  'Admin': [
+    'Head of Admin'
+  ],
+  'Developer': [
+    'Senior Developer',
+    'Junior Developer',
+    'Intern Developer'
+  ],
+  'QA': [
+    'Senior QA',
+    'Junior QA',
+    'Intern QA'
+  ],
+  'Design': [
+    'Senior Designer',
+    'Junior Designer',
+    'Intern Designer'
+  ],
+  'BDE': [
+    'Senior BDE',
+    'Junior BDE',
+    'Intern BDE'
+  ],
+  'HR': [
+    'Senior HR',
+    'Junior HR',
+    'Intern HR'
+  ],
+  'Marketing': [
+    'Senior Marketing',
+    'Junior Marketing',
+    'Intern Marketing'
+  ],
+  'Finance': [
+    'Senior Finance',
+    'Junior Finance',
+    'Intern Finance'
+  ]
+};
+
+// Aliases for flexible matching
+const DEPARTMENT_ALIASES = {
+  'administration': 'Admin',
+  'human resources': 'HR',
+  'human resource': 'HR',
+  'engineering': 'Developer',
+  'development': 'Developer',
+  'developers': 'Developer',
+  'software': 'Developer',
+  'quality assurance': 'QA',
+  'testing': 'QA',
+  'business development': 'BDE',
+  'business development executive': 'BDE',
+  'bd': 'BDE',
+  'ui/ux': 'Design',
+  'designer': 'Design'
+};
+
+/**
+ * Returns available designations for a given department
+ */
+export const getDesignationsForDepartment = (departmentName = '', customDesignations = []) => {
+  if (!departmentName || !departmentName.trim()) {
+    return [];
   }
 
+  const rawDept = departmentName.trim().toLowerCase();
+
+  // 1. Direct match in DEPARTMENT_DESIGNATIONS_MAP
+  const matchedKey = Object.keys(DEPARTMENT_DESIGNATIONS_MAP).find(
+    (k) => k.toLowerCase() === rawDept
+  );
+  if (matchedKey) {
+    const defaultList = DEPARTMENT_DESIGNATIONS_MAP[matchedKey];
+    const extras = (customDesignations || []).filter(
+      (c) => !defaultList.some((d) => d.toLowerCase() === (c || '').toLowerCase().trim())
+    );
+    return [...defaultList, ...extras];
+  }
+
+  // 2. Alias match
+  if (DEPARTMENT_ALIASES[rawDept]) {
+    const canonical = DEPARTMENT_ALIASES[rawDept];
+    const defaultList = DEPARTMENT_DESIGNATIONS_MAP[canonical] || [];
+    const extras = (customDesignations || []).filter(
+      (c) => !defaultList.some((d) => d.toLowerCase() === (c || '').toLowerCase().trim())
+    );
+    return [...defaultList, ...extras];
+  }
+
+  // 3. Fallback for custom user-created departments
+  return (customDesignations && customDesignations.length > 0) ? customDesignations : [];
+};
+
+/**
+ * Resolves system access role ('admin' | 'manager' | 'employee')
+ * based on department, manager checkbox, or designation.
+ */
+export const resolveRole = ({ department = '', isManager = false, designation = '', currentRole = 'employee' }) => {
+  const normDept = (department || '').trim().toLowerCase();
+  const normDesig = (designation || '').trim().toLowerCase();
+
+  // 1. Any Intern in any department is ALWAYS strictly an employee
+  if (normDesig.includes('intern')) {
+    return 'employee';
+  }
+
+  // 2. Admin department or Head of Admin always gets admin role
+  if (normDept === 'admin' || normDesig === 'head of admin') {
+    return 'admin';
+  }
+
+  // 3. HR department: elevated access checkbox grants 'hr' role, otherwise 'employee'
+  if (normDept === 'hr') {
+    return isManager ? 'hr' : 'employee';
+  }
+
+  // 4. Other departments: manager checkbox grants 'manager' role
+  if (isManager) {
+    return 'manager';
+  }
+
+  // 5. Fallback to employee
+  return 'employee';
+};
+
+/**
+ * Resolves role from designation for backward compatibility
+ */
+export const resolveRoleFromDesignation = (designation = '', currentRole = 'employee') => {
   const d = (designation || '').toLowerCase().trim();
-  if (!d) return 'employee';
+  if (!d) return currentRole || 'employee';
 
-  // Rule 2: Explicit Admin or HR designation
-  if (d === 'admin' || d.includes('administrator')) return 'admin';
-  if (d === 'hr' || d.includes('human resource')) return 'hr';
-
-  // Rule 2: Manager / Leadership keywords
-  const managerPatterns = [
-    /\bsenior\b/i,
-    /\bsr\.?\b/i,
-    /\bmanager\b/i,
-    /\blead\b/i,
-    /\bleader\b/i,
-    /\bhead\b/i,
-    /\bdirector\b/i,
-    /\bchief\b/i,
-    /\bprincipal\b/i,
-    /\bsupervisor\b/i,
-    /\bvp\b/i,
-    /\bpresident\b/i
-  ];
-
-  const isManager = managerPatterns.some((pattern) => pattern.test(d));
-  return isManager ? 'manager' : 'employee';
+  if (d === 'head of admin' || d === 'admin') return 'admin';
+  if (d.includes('intern')) return 'employee';
+  if (/\bhr\b/i.test(d)) return currentRole === 'hr' ? 'hr' : 'employee';
+  if (/\b(manager|lead|leader|supervisor)\b/i.test(d)) return 'manager';
+  return 'employee';
 };
 
 /**
@@ -66,7 +174,7 @@ export const getRoleAccessMetadata = (role = 'employee') => {
       return {
         label: 'Manager Portal Access',
         role: 'manager',
-        subtext: 'Team Leadership & Approvals (Senior / Lead / Manager)',
+        subtext: 'Team Leadership & Approvals (Reports directly to Admin)',
         badgeBg: 'bg-emerald-50 dark:bg-emerald-950/40',
         badgeText: 'text-emerald-700 dark:text-emerald-400',
         border: 'border-emerald-200 dark:border-emerald-800'
@@ -76,10 +184,12 @@ export const getRoleAccessMetadata = (role = 'employee') => {
       return {
         label: 'Employee Portal Access',
         role: 'employee',
-        subtext: 'Standard Employee Portal (Staff / Junior / Intern)',
+        subtext: 'Standard Employee Portal (Staff / Junior / Senior / Intern)',
         badgeBg: 'bg-blue-50 dark:bg-blue-950/40',
         badgeText: 'text-blue-700 dark:text-blue-400',
         border: 'border-blue-200 dark:border-blue-800'
       };
   }
 };
+
+

@@ -12,8 +12,10 @@ export const isStagingEnvironment = () => {
   if (typeof window === 'undefined') return false;
   const host = window.location.hostname.toLowerCase();
   const port = window.location.port;
-  return host.includes('staging') || port === '5174';
+  return host.includes('staging') || port === '5174' || (API_BASE_URL && API_BASE_URL.includes('staging'));
 };
+
+export const isStagingEnv = isStagingEnvironment;
 
 /**
  * Returns configuration tailored to the active environment (Staging vs Production).
@@ -29,6 +31,9 @@ export const getDesktopTrackerConfig = () => {
     infoUrl: isStaging ? '/api/desktop-app/info?env=staging' : '/api/desktop-app/info'
   };
 };
+
+export const getLocalBridgeUrl = () => getDesktopTrackerConfig().bridgeUrl;
+export const getTrackerProtocol = () => getDesktopTrackerConfig().protocol;
 
 /**
  * Pings the local desktop tracker application to see if it's currently running.

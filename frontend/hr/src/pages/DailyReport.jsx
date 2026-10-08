@@ -1138,7 +1138,6 @@ const DailyReportHR = () => {
                 <div className="py-12 text-center text-slate-400 dark:text-slate-500 bg-slate-50/50 dark:bg-[#111c18]/50 rounded-2xl border border-dashed border-slate-200 dark:border-[#1a2d29]">
                   <FileText className="mx-auto mb-2 opacity-50 text-slate-400" size={32} />
                   <p className="text-sm font-bold text-slate-700 dark:text-slate-300">No daily reports matching criteria</p>
-                  <p className="text-xs mt-1">Try adjusting your filters.</p>
                 </div>
               ) : (
                 <table className="w-full min-w-[750px] text-left border-collapse">
@@ -1361,7 +1360,7 @@ const DailyReportHR = () => {
             {myTotalPages > 1 && (
               <div className="flex flex-col sm:flex-row justify-between items-center px-4 sm:px-6 py-4 mt-4 bg-white dark:bg-[#111c18] border-t border-slate-100 dark:border-[#1a2d29] rounded-b-2xl gap-4">
                 <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
-                  Showing {filteredMyReports.length === 0 ? 0 : (myPage - 1) * PAGE_SIZE + 1}–{Math.min(myPage * PAGE_SIZE, filteredMyReports.length)} of {filteredMyReports.length} reports
+                  Showing {filteredMyReports.length === 0 ? 0 : (myPage - 1) * PAGE_SIZE + 1} - {Math.min(myPage * PAGE_SIZE, filteredMyReports.length)} of {filteredMyReports.length} reports
                 </span>
                 <div className="flex items-center gap-1.5 flex-wrap">
                   <button
@@ -1731,7 +1730,6 @@ const DailyReportHR = () => {
                 <div className="py-16 text-center text-slate-400 dark:text-slate-500 bg-slate-50/50 dark:bg-[#111c18]/50 rounded-2xl border border-dashed border-slate-200 dark:border-[#1a2d29]">
                   <FileText className="mx-auto mb-2 opacity-50 text-slate-400" size={36} />
                   <p className="text-sm font-bold text-slate-700 dark:text-slate-300">No daily reports matching criteria</p>
-                  <p className="text-xs mt-1">Try adjusting your filters or search term.</p>
                 </div>
               ) : (
                 <table className="w-full min-w-[850px] text-left border-collapse">
@@ -1948,7 +1946,7 @@ const DailyReportHR = () => {
             {totalPages > 1 && (
               <div className="flex flex-col sm:flex-row justify-between items-center px-4 sm:px-6 py-4 mt-4 bg-white dark:bg-[#111c18] border-t border-slate-100 dark:border-[#1a2d29] rounded-b-2xl gap-4">
                 <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
-                  Showing {summary.totalReports === 0 ? 0 : (page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, summary.totalReports || (page * PAGE_SIZE))} of {summary.totalReports || reports.length} reports
+                  Showing {summary.totalReports === 0 ? 0 : (page - 1) * PAGE_SIZE + 1} - {Math.min(page * PAGE_SIZE, summary.totalReports || (page * PAGE_SIZE))} of {summary.totalReports || reports.length} reports
                 </span>
                 <div className="flex items-center gap-1.5 flex-wrap">
                   <button

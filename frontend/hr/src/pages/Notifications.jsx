@@ -136,8 +136,8 @@ const Notifications = () => {
   const [employees, setEmployees]         = useState([]);
   const [selectedNotif, setSelectedNotif] = useState(null);
 
-  const token         = sessionStorage.getItem('token');
-  const role          = sessionStorage.getItem('role') || 'hr';
+  const token         = sessionStorage.getItem('token') || localStorage.getItem('token');
+  const role          = sessionStorage.getItem('role') || localStorage.getItem('role') || 'hr';
   const headers       = { Authorization: `Bearer ${token}` };
   const currentUserId = (() => { try { return JSON.parse(atob(token.split('.')[1]))?.id; } catch { return null; } })();
 
@@ -448,9 +448,94 @@ const Notifications = () => {
     finally { setSending(false); }
   };
 
+  /* ── TARGET ROUTE RESOLVER ── */
+  const getNotificationTargetPath = (notif) => {
+    if (!notif) return null;
+    const type = String(notif.type || '').toLowerCase();
+    const text = String(notif.message || notif.text || '').toLowerCase();
+    const title = String(notif.title || '').toLowerCase();
+    const prefix = role ? `/${role}` : '';
+
+    // Meeting & Offline Requests
+    if (
+      type.includes('meeting') ||
+      type.includes('offline') ||
+      text.includes('meeting request') ||
+      text.includes('meeting') ||
+      text.includes('offline request') ||
+      text.includes('offline time') ||
+      title.includes('meeting') ||
+      title.includes('offline')
+    ) {
+      return `${prefix}/attendance?tab=meetingRequests`;
+    }
+
+    // Attendance / Timer
+    if (
+      type.includes('attendance') ||
+      type.includes('timer') ||
+      text.includes('attendance') ||
+      text.includes('clock') ||
+      text.includes('check-in') ||
+      text.includes('check-out') ||
+      text.includes('overtime')
+    ) {
+      return `${prefix}/attendance`;
+    }
+
+    // Leave
+    if (
+      type.includes('leave') ||
+      text.includes('leave') ||
+      text.includes('vacation') ||
+      text.includes('time off')
+    ) {
+      return `${prefix}/leave`;
+    }
+
+    // Daily Report
+    if (
+      type.includes('daily_report') ||
+      type.includes('report') ||
+      text.includes('daily report') ||
+      text.includes('edit access')
+    ) {
+      return `${prefix}/daily-report`;
+    }
+
+    // Screenshots
+    if (type.includes('screenshot') || text.includes('screenshot')) {
+      return `${prefix}/screenshots`;
+    }
+
+    // Employees
+    if (type.includes('employee') || text.includes('new employee')) {
+      return `${prefix}/employees`;
+    }
+
+    // Tasks (only if role has tasks)
+    if (type.includes('task') || text.includes('task') || text.includes('assigned to you')) {
+      if (['manager', 'admin'].includes(role)) {
+        return `${prefix}/tasks`;
+      }
+    }
+
+    // Profile
+    if (type.includes('profile') || text.includes('profile')) {
+      return `${prefix}/profile`;
+    }
+
+    return null;
+  };
+
   /* ── NOTIFICATION CLICK ── */
   const handleNotificationClick = (notif) => {
-    setSelectedNotif(notif);
+    const target = getNotificationTargetPath(notif);
+    if (target) {
+      navigate(target);
+    } else {
+      setSelectedNotif(notif);
+    }
   };
 
   /* ══ RENDER ══════════════════════════════════════════════ */
@@ -582,8 +667,18 @@ const Notifications = () => {
 
                     {/* Trigger */}
                     <div
-                      onClick={() => { setActiveColorPickerIdx(null); setIsTypeEditMode(false); setForm(f=>({...f,_typeOpen:!f._typeOpen,_targetRoleOpen:false,_roleFilterOpen:false,_empSelectOpen:false})); }}
-                      className={`w-full bg-white dark:bg-[#162722] border ${form._typeOpen?'border-[#00a76b]':'border-[#eceae3] dark:border-[#1a2d29]'} rounded-[12px] px-4 py-3 text-[13px] font-bold text-[#201515] dark:text-white cursor-pointer flex justify-between items-center transition-colors`}
+                      onClick={() => {
+                        setForm(f => {
+                          const isOpening = !f._typeOpen;
+                          if (isOpening) {
+                            // Only reset color picker/edit mode when OPENING the dropdown
+                            setActiveColorPickerIdx(null);
+                            setIsTypeEditMode(false);
+                          }
+                          return { ...f, _typeOpen: !f._typeOpen, _targetRoleOpen: false, _roleFilterOpen: false, _empSelectOpen: false };
+                        });
+                      }}
+                      className={`w-full bg-white dark:bg-[#162722] border ${form._typeOpen ? 'border-[#00a76b]' : 'border-[#eceae3] dark:border-[#1a2d29]'} rounded-[12px] px-4 py-3 text-[13px] font-bold text-[#201515] dark:text-white cursor-pointer flex justify-between items-center transition-colors`}
                     >
                       <div className="flex items-center gap-2">
                         <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: getTypeColor(form.type) }} />
@@ -846,12 +941,14 @@ const Notifications = () => {
           {loading ? (
             <div className="flex items-center justify-center py-20"><Loader2 size={36} className="animate-spin text-[#00a76b]"/></div>
           ) : (() => {
-            const displayNotifications = role==='manager' ? notifications.filter(n=>n.senderId===currentUserId) : notifications;
+            const displayNotifications = notifications;
             if (displayNotifications.length === 0) return (
               <div className="flex flex-col items-center justify-center py-20 text-center px-6">
                 <div className="w-16 h-16 rounded-full bg-emerald-50 dark:bg-emerald-950/20 flex items-center justify-center mb-4"><Bell size={28} className="text-[#00a76b]"/></div>
                 <h3 className="text-[16px] font-bold text-slate-800 dark:text-white mb-2">No notifications found</h3>
-                <p className="text-[13px] font-medium text-slate-500 dark:text-[#829e92]">Send a notification using the button above</p>
+                <p className="text-[13px] font-medium text-slate-500 dark:text-[#829e92]">
+                  {role === 'employee' ? 'You have no notifications yet' : 'Send a notification using the button above'}
+                </p>
               </div>
             );
 
@@ -1062,6 +1159,33 @@ const Notifications = () => {
                   </div>
                 </div>
               </div>
+
+              {/* Direct Link to target page if available */}
+              {getNotificationTargetPath(selectedNotif) && (
+                <div className="pt-2">
+                  <button
+                    onClick={() => {
+                      const target = getNotificationTargetPath(selectedNotif);
+                      setSelectedNotif(null);
+                      navigate(target);
+                    }}
+                    className="w-full py-3 px-4 bg-[#00a76b] hover:bg-[#00915c] text-white rounded-[12px] font-extrabold text-[13px] flex items-center justify-center gap-2 shadow-lg shadow-[#00a76b]/20 transition-all cursor-pointer border-none"
+                  >
+                    <span>
+                      {selectedNotif.type?.toLowerCase().includes('meeting') || selectedNotif.message?.toLowerCase().includes('meeting')
+                        ? 'Open Meeting & Offline Requests'
+                        : selectedNotif.type?.toLowerCase().includes('task')
+                          ? 'Open in Tasks'
+                          : selectedNotif.type?.toLowerCase().includes('leave')
+                            ? 'Open in Leave Management'
+                            : selectedNotif.type?.toLowerCase().includes('report')
+                              ? 'Open in Daily Report'
+                              : 'Open in Attendance'}
+                    </span>
+                    <ExternalLink size={15} />
+                  </button>
+                </div>
+              )}
             </div>
 
 

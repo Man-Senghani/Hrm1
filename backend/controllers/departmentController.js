@@ -1,13 +1,16 @@
 const Department = require('../models/Department');
 
 const DEFAULT_DEPARTMENTS = [
-  { name: 'Engineering', description: 'Product engineering, software development, and technical operations', order: 0 },
-  { name: 'Sales', description: 'Direct sales, client acquisition, and account management', order: 1 },
-  { name: 'Marketing', description: 'Brand strategy, growth campaigns, and public relations', order: 2 },
-  { name: 'Finance', description: 'Treasury, accounting, budgeting, and payroll operations', order: 3 },
-  { name: 'HR', description: 'People operations, talent recruitment, and workplace policies', order: 4 },
-  { name: 'Design', description: 'UI/UX design, visual identity, and brand creative assets', order: 5 },
-  { name: 'Operations', description: 'Business administration, office logistics, and internal processes', order: 6 }
+  { name: 'Admin', description: 'Administrative operations, office management, and executive support', order: 0 },
+  { name: 'HR', description: 'People operations, talent recruitment, and workplace policies', order: 1 },
+  { name: 'Sales', description: 'Direct sales, client acquisition, and account management', order: 2 },
+  { name: 'QA', description: 'Quality assurance, test automation, and release quality', order: 3 },
+  { name: 'Developer', description: 'Software engineering, architecture, and technical development', order: 4 },
+  { name: 'BDE', description: 'Business development and client relationships', order: 5 },
+  { name: 'Marketing', description: 'Brand strategy, growth campaigns, and public relations', order: 6 },
+  { name: 'Finance', description: 'Treasury, accounting, budgeting, and payroll operations', order: 7 },
+  { name: 'Design', description: 'UI/UX design, visual identity, and brand creative assets', order: 8 },
+  { name: 'Operations', description: 'Business administration, office logistics, and internal processes', order: 9 }
 ];
 
 exports.getDepartments = async (req, res) => {

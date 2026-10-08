@@ -76,6 +76,7 @@ const PRODUCTION_FRONTEND_URL = 'https://hrm.aupanishad.tech';
 const STAGING_BACKEND_URL = 'https://hrm-staging.aupanishad.tech';
 const STAGING_FRONTEND_URL = 'https://hrm-staging.aupanishad.tech';
 
+let isStagingApp = false;
 let BACKEND_HOST = PRODUCTION_BACKEND_URL;
 let FRONTEND_HOST = PRODUCTION_FRONTEND_URL;
 let API_BASE = `${BACKEND_HOST}/api/time`;
@@ -153,6 +154,21 @@ if (window.electronAPI?.onSystemIdleStatus) {
 // Track last known system idle seconds (for heartbeat type decision)
 let lastSystemIdleSeconds = 0;
 
+let currentAppVersion = '1.4.4';
+
+function updateEnvironmentBadge() {
+  const isStaging = isStagingApp || BACKEND_HOST.includes('staging');
+  const stagingBadge = document.getElementById('staging-badge');
+  if (stagingBadge) {
+    stagingBadge.style.display = isStaging ? 'inline-block' : 'none';
+  }
+  document.title = isStaging ? 'FluidHR Tracker (Staging)' : 'FluidHR Tracker';
+  const versionDisplayEl = document.getElementById('version-display');
+  if (versionDisplayEl && currentAppVersion) {
+    versionDisplayEl.innerText = isStaging ? `V${currentAppVersion} STAGING` : `V${currentAppVersion} PRO`;
+  }
+}
+
 // ============================================================
 // 🔄 STARTUP
 // ============================================================
@@ -178,6 +194,7 @@ async function loadSession() {
 
   try {
     const version = appConfig?.version || (await window.electronAPI?.getAppVersion()) || (isStagingApp ? '1.0.1' : '1.4.1');
+    if (version) currentAppVersion = version;
     const versionDisplayEl = document.getElementById('version-display');
     if (versionDisplayEl && version) {
       versionDisplayEl.innerText = isStagingApp ? `V${version} STAGING` : `V${version} PRO`;
@@ -186,14 +203,27 @@ async function loadSession() {
     console.error('Failed to get app version:', err);
   }
 
-  // 1. Immediately read stored authToken & serverHost
+  // Strictly enforce environment targets
+  if (isStagingApp) {
+    BACKEND_HOST = STAGING_BACKEND_URL;
+    FRONTEND_HOST = STAGING_FRONTEND_URL;
+  } else {
+    BACKEND_HOST = PRODUCTION_BACKEND_URL;
+    FRONTEND_HOST = PRODUCTION_FRONTEND_URL;
+  }
+  API_BASE = `${BACKEND_HOST}/api/time`;
+  if (window.electronAPI?.setStoreValue) {
+    await window.electronAPI.setStoreValue('serverHost', BACKEND_HOST);
+  }
+
+  // Read stored authToken
   const savedToken = await window.electronAPI.getStoreValue('authToken');
   if (savedToken) {
     authToken = savedToken;
     hideAuthSection();
   }
 
-  const savedServer = await window.electronAPI.getStoreValue('serverHost');
+  const savedServer = await window.electronAPI?.getStoreValue('serverHost');
   if (savedServer && typeof savedServer === 'string' && savedServer.trim() !== '') {
     BACKEND_HOST = savedServer.replace(/\/+$/, '');
     if (BACKEND_HOST.includes('staging')) {
@@ -203,24 +233,9 @@ async function loadSession() {
     } else {
       FRONTEND_HOST = PRODUCTION_FRONTEND_URL;
     }
-  } else {
-    // Defaults according to app environment
-    if (isStagingApp) {
-      BACKEND_HOST = STAGING_BACKEND_URL;
-      FRONTEND_HOST = STAGING_FRONTEND_URL;
-      if (window.electronAPI?.setStoreValue) {
-        await window.electronAPI.setStoreValue('serverHost', STAGING_BACKEND_URL);
-      }
-    } else {
-      BACKEND_HOST = PRODUCTION_BACKEND_URL;
-      FRONTEND_HOST = PRODUCTION_FRONTEND_URL;
-      if (window.electronAPI?.setStoreValue) {
-        await window.electronAPI.setStoreValue('serverHost', PRODUCTION_BACKEND_URL);
-      }
-    }
   }
   API_BASE = `${BACKEND_HOST}/api/time`;
-  console.log('🚀 Desktop Tracker Initialized with BACKEND_HOST:', BACKEND_HOST, 'FRONTEND_HOST:', FRONTEND_HOST);
+  console.log('🚀 Desktop Tracker Initialized with BACKEND_HOST:', BACKEND_HOST, 'FRONTEND_HOST:', FRONTEND_HOST, 'isStaging:', isStagingApp);
 
   if (!authToken) {
     showAuthSection();
@@ -453,45 +468,74 @@ async function triggerIdle(idleSeconds = 600) {
 // ============================================================
 async function startSession() {
   if (!authToken) return alert('Please login first.');
-  try {
-    const res = await fetch(`${API_BASE}/start`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${authToken}` }
-    });
-    if (res.status === 401) {
-      logout();
-      alert('Session expired. Please log in again.');
-      return;
-    }
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      if (err.isOnLeave) {
-        applyServerState({ status: 'ON_LEAVE', isOnLeave: true, ...err });
-      }
-      return alert(err.message || 'Unable to start session.');
-    }
-    const data = await res.json();
-    notifyDesktop('Session Started', 'Your tracking session is now active.');
-
-    status = 'ACTIVE';
-    isIdle = false;
-    isSessionRunning = true;
-    idleNotificationSent = false;
-    lastStartOrResumeTime = Date.now();
-
-    if (data?.session) {
-      applyServerState(data.session);
-    }
-
-    stopIdleReminderLoop();
-    startPolling();
-    startHeartbeat();
-    initScreenshotLoop(true);
-    takeScreenshot(true); // 📸 Capture immediately on start
-  } catch (err) {
-    console.error('[START ERROR]', err);
-    alert('Connection error. Is the server running?');
+  const startBtn = document.getElementById('start-btn');
+  const originalHtml = startBtn ? startBtn.innerHTML : '';
+  if (startBtn) {
+    startBtn.disabled = true;
+    startBtn.innerHTML = '<span class="material-symbols-outlined" style="animation: spin 1s linear infinite;">sync</span> CONNECTING...';
   }
+
+  const maxAttempts = 3;
+  let lastError = null;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const res = await fetch(`${API_BASE}/start`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${authToken}` }
+      });
+      if (res.status === 401) {
+        logout();
+        alert('Session expired. Please log in again.');
+        if (startBtn) { startBtn.disabled = false; startBtn.innerHTML = originalHtml; }
+        return;
+      }
+      if (!res.ok) {
+        // If 502/503/504 gateway response, retry automatically
+        if ([502, 503, 504].includes(res.status) && attempt < maxAttempts) {
+          console.warn(`[START] Gateway response (${res.status}), retrying attempt ${attempt + 1}...`);
+          await new Promise(r => setTimeout(r, 2000));
+          continue;
+        }
+        const err = await res.json().catch(() => ({}));
+        if (err.isOnLeave) {
+          applyServerState({ status: 'ON_LEAVE', isOnLeave: true, ...err });
+        }
+        if (startBtn) { startBtn.disabled = false; startBtn.innerHTML = originalHtml; }
+        return alert(err.message || 'Unable to start session.');
+      }
+      const data = await res.json();
+      notifyDesktop('Session Started', 'Your tracking session is now active.');
+
+      status = 'ACTIVE';
+      isIdle = false;
+      isSessionRunning = true;
+      idleNotificationSent = false;
+      lastStartOrResumeTime = Date.now();
+
+      if (data?.session) {
+        applyServerState(data.session);
+      }
+
+      stopIdleReminderLoop();
+      startPolling();
+      startHeartbeat();
+      initScreenshotLoop(true);
+      takeScreenshot(true); // 📸 Capture immediately on start
+      if (startBtn) { startBtn.disabled = false; startBtn.innerHTML = originalHtml; }
+      return;
+    } catch (err) {
+      console.warn(`[START ERROR attempt ${attempt}]`, err);
+      lastError = err;
+      if (attempt < maxAttempts) {
+        await new Promise(r => setTimeout(r, 2000));
+      }
+    }
+  }
+
+  if (startBtn) { startBtn.disabled = false; startBtn.innerHTML = originalHtml; }
+  console.error('[START FAILED]', lastError);
+  alert('Connection error. Please check your internet connection or try again.');
 }
 
 // ============================================================
@@ -505,9 +549,15 @@ async function pauseSession() {
       headers: { Authorization: `Bearer ${authToken}` }
     });
     if (!res.ok) {
-      const err = await res.json();
-      if (!err.message?.toLowerCase().includes('already')) alert(err.message || 'Unable to pause.');
+      const err = await res.json().catch(() => ({}));
+      if (err.message && !err.message.toLowerCase().includes('already') && !err.message.toLowerCase().includes('paused')) {
+        alert(err.message || 'Unable to pause.');
+        return;
+      }
     }
+    status = 'PAUSED';
+    isSessionRunning = false;
+    updateUI();
     stopScreenshotLoop();
     takeScreenshot(true); // 📸 Capture immediately on pause
     await pollSessionStatus();
@@ -515,7 +565,7 @@ async function pauseSession() {
     startIdleReminderLoop();
   } catch (err) {
     console.error('[PAUSE ERROR]', err);
-    alert('Unable to pause session.');
+    alert('Unable to pause session. Please check your network connection.');
   }
 }
 
@@ -592,8 +642,10 @@ async function confirmStopSession() {
       headers: { Authorization: `Bearer ${authToken}` }
     });
     if (!res.ok) {
-      const err = await res.json();
-      return alert(err.message || 'Unable to stop session.');
+      const err = await res.json().catch(() => ({}));
+      if (err.message && !err.message.toLowerCase().includes('already') && !err.message.toLowerCase().includes('completed') && !err.message.toLowerCase().includes('stopped')) {
+        return alert(err.message || 'Unable to stop session.');
+      }
     }
     stopPolling();
     stopHeartbeat();
@@ -611,7 +663,7 @@ async function confirmStopSession() {
     await notifyDesktop('Workday Ended', 'You have successfully checked out for today.');
   } catch (err) {
     console.error('[STOP ERROR]', err);
-    alert('Unable to stop session.');
+    alert('Unable to stop session. Please check your network connection.');
   }
 }
 
@@ -869,9 +921,7 @@ function redirectToWebMeetingRequest() {
     }
   } catch (_) {}
 
-  const targetFrontend = (BACKEND_HOST && BACKEND_HOST.includes('staging'))
-    ? STAGING_FRONTEND_URL
-    : (FRONTEND_HOST || PRODUCTION_FRONTEND_URL);
+  const targetFrontend = isStagingApp ? STAGING_FRONTEND_URL : PRODUCTION_FRONTEND_URL;
 
   const requestUrl = `${targetFrontend}/${role}/attendance?action=new-offline-request`;
   console.log('🔗 Redirecting to Web Attendance Request Drawer:', requestUrl);
@@ -1039,9 +1089,7 @@ function hideAuthSection() {
 }
 
 function redirectToWebLogin() {
-  const targetFrontend = (BACKEND_HOST && BACKEND_HOST.includes('staging'))
-    ? STAGING_FRONTEND_URL
-    : (FRONTEND_HOST || PRODUCTION_FRONTEND_URL);
+  const targetFrontend = isStagingApp ? STAGING_FRONTEND_URL : PRODUCTION_FRONTEND_URL;
   const loginUrl = `${targetFrontend}/login?desktop=true`;
   console.log('🔗 Redirecting to Web Login:', loginUrl);
   if (window.electronAPI?.openExternal) {
@@ -1053,25 +1101,18 @@ function redirectToWebLogin() {
 
 if (window.electronAPI?.onDeepLinkServer) {
   window.electronAPI.onDeepLinkServer(async (serverUrl) => {
-    if (serverUrl && typeof serverUrl === 'string') {
-      let cleanUrl = serverUrl.replace(/\/+$/, '');
-      if (cleanUrl.includes('staging')) {
-        cleanUrl = STAGING_BACKEND_URL;
-        FRONTEND_HOST = STAGING_FRONTEND_URL;
-      } else if (cleanUrl.includes('aupanishad.tech') || cleanUrl.includes(':3000')) {
-        cleanUrl = PRODUCTION_BACKEND_URL;
-        FRONTEND_HOST = PRODUCTION_FRONTEND_URL;
-      } else if (cleanUrl.includes('localhost') || cleanUrl.includes('127.0.0.1')) {
-        FRONTEND_HOST = cleanUrl;
-      } else {
-        FRONTEND_HOST = cleanUrl;
-      }
-      console.log('Server URL received via deep link:', cleanUrl);
-      BACKEND_HOST = cleanUrl;
-      API_BASE = `${BACKEND_HOST}/api/time`;
-      await window.electronAPI.setStoreValue('serverHost', cleanUrl);
-      initSocket();
+    // Strictly isolate server host per application environment
+    if (isStagingApp) {
+      BACKEND_HOST = STAGING_BACKEND_URL;
+      FRONTEND_HOST = STAGING_FRONTEND_URL;
+    } else {
+      BACKEND_HOST = PRODUCTION_BACKEND_URL;
+      FRONTEND_HOST = PRODUCTION_FRONTEND_URL;
     }
+    API_BASE = `${BACKEND_HOST}/api/time`;
+    await window.electronAPI.setStoreValue('serverHost', BACKEND_HOST);
+    updateEnvironmentBadge();
+    initSocket();
   });
 }
 
@@ -1084,12 +1125,16 @@ if (window.electronAPI?.onDeepLinkToken) {
     authToken = token;
     await window.electronAPI.setStoreValue('authToken', authToken);
 
-    if (!BACKEND_HOST || (!BACKEND_HOST.includes('staging') && (BACKEND_HOST.includes('aupanishad.tech') || BACKEND_HOST.includes(':3000')))) {
+    if (isStagingApp) {
+      BACKEND_HOST = STAGING_BACKEND_URL;
+      FRONTEND_HOST = STAGING_FRONTEND_URL;
+    } else {
       BACKEND_HOST = PRODUCTION_BACKEND_URL;
       FRONTEND_HOST = PRODUCTION_FRONTEND_URL;
-      API_BASE = `${BACKEND_HOST}/api/time`;
-      await window.electronAPI.setStoreValue('serverHost', BACKEND_HOST);
     }
+    API_BASE = `${BACKEND_HOST}/api/time`;
+    await window.electronAPI.setStoreValue('serverHost', BACKEND_HOST);
+    updateEnvironmentBadge();
 
     hideAuthSection();
     await fetchUserProfile();
@@ -1230,9 +1275,13 @@ async function logout() {
 
   authToken = '';
   await window.electronAPI.setStoreValue('authToken', '');
-  await window.electronAPI.setStoreValue('serverHost', PRODUCTION_BACKEND_URL);
-  BACKEND_HOST = PRODUCTION_BACKEND_URL;
+  const defaultBackend = isStagingApp ? STAGING_BACKEND_URL : PRODUCTION_BACKEND_URL;
+  const defaultFrontend = isStagingApp ? STAGING_FRONTEND_URL : PRODUCTION_FRONTEND_URL;
+  await window.electronAPI.setStoreValue('serverHost', defaultBackend);
+  BACKEND_HOST = defaultBackend;
+  FRONTEND_HOST = defaultFrontend;
   API_BASE = `${BACKEND_HOST}/api/time`;
+  updateEnvironmentBadge();
   activeSeconds = 0;
   inactiveSeconds = 0;
   status = 'OFFLINE';
@@ -1266,33 +1315,31 @@ document.getElementById('confirm-checkout-btn')?.addEventListener('click', confi
 document.getElementById('cancel-checkout-btn')?.addEventListener('click', hideCheckoutConfirmationModal);
 document.getElementById('device-logout-ok-btn')?.addEventListener('click', handleDismissDeviceLogout);
 document.getElementById('device-logout-section')?.addEventListener('click', handleDismissDeviceLogout);
+const handleCloseApp = async () => {
+  if (authToken && (status === 'ACTIVE' || isSessionRunning)) {
+    try {
+      await fetch(`${API_BASE}/pause`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${authToken}` }
+      });
+    } catch (_) {}
+  }
+  window.electronAPI.closeApp();
+};
+
 document.getElementById('minimize-btn')?.addEventListener('click', () => window.electronAPI.minimizeApp());
-document.getElementById('close-btn')?.addEventListener('click', () => window.electronAPI.closeApp());
+document.getElementById('close-btn')?.addEventListener('click', handleCloseApp);
 document.getElementById('web-auth-btn')?.addEventListener('click', redirectToWebLogin);
 document.getElementById('logout-btn')?.addEventListener('click', logout);
 document.getElementById('completed-logout-btn')?.addEventListener('click', logout);
 document.getElementById('leave-logout-btn')?.addEventListener('click', logout);
 document.getElementById('auth-minimize-btn')?.addEventListener('click', () => window.electronAPI.minimizeApp());
-document.getElementById('auth-close-btn')?.addEventListener('click', () => window.electronAPI.closeApp());
+document.getElementById('auth-close-btn')?.addEventListener('click', handleCloseApp);
 
 // Re-poll when window regains focus (catches state changes while minimized)
 window.addEventListener('focus', () => { if (authToken) pollSessionStatus(); });
 window.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && authToken) pollSessionStatus();
-});
-
-// ── Window Controls ─────────────────────────────────────
-document.getElementById('minimize-btn')?.addEventListener('click', () => {
-  window.electronAPI.minimizeApp();
-});
-document.getElementById('close-btn')?.addEventListener('click', () => {
-  window.electronAPI.closeApp();
-});
-document.getElementById('auth-minimize-btn')?.addEventListener('click', () => {
-  window.electronAPI.minimizeApp();
-});
-document.getElementById('auth-close-btn')?.addEventListener('click', () => {
-  window.electronAPI.closeApp();
 });
 
 // ── Custom Auto-Updater Modal Logic ─────────────────────

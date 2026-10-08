@@ -24,11 +24,14 @@ const Login = () => {
 
     if (isDesktop) {
       setShowThankYou(true);
-      const serverHost = API_BASE_URL || window.location.origin;
+      const isStaging = (serverHost && serverHost.includes('staging')) || (typeof window !== 'undefined' && window.location.hostname.includes('staging')) || trackerConfig.isStaging;
+      const bridgePort = trackerConfig.bridgePort || (isStaging ? 28735 : 28734);
+      const trackerProtocol = trackerConfig.protocol || (isStaging ? 'fluidhr-staging-tracker' : 'fluidhr-tracker');
+
       try {
-        fetch(`${trackerConfig.bridgeUrl}/auth?token=${encodeURIComponent(authToken)}&server=${encodeURIComponent(serverHost)}`, { mode: 'no-cors' }).catch(() => {});
+        fetch(`http://127.0.0.1:${bridgePort}/auth?token=${encodeURIComponent(authToken)}&server=${encodeURIComponent(serverHost)}`, { mode: 'no-cors' }).catch(() => {});
       } catch (_) {}
-      window.location.href = `${trackerConfig.protocol}://auth?token=${encodeURIComponent(authToken)}&server=${encodeURIComponent(serverHost)}`;
+      window.location.href = `${trackerProtocol}://auth?token=${encodeURIComponent(authToken)}&server=${encodeURIComponent(serverHost)}`;
       return;
     }
 
@@ -235,8 +238,10 @@ const Login = () => {
                      href={`${trackerConfig.protocol}://auth?token=${encodeURIComponent(token)}&server=${encodeURIComponent(API_BASE_URL || window.location.origin)}`}
                      onClick={() => {
                        try {
-                         const serverHost = API_BASE_URL || window.location.origin;
-                         fetch(`${trackerConfig.bridgeUrl}/auth?token=${encodeURIComponent(token)}&server=${encodeURIComponent(serverHost)}`, { mode: 'no-cors' }).catch(() => {});
+                         const serverHost = API_BASE_URL || (typeof window !== 'undefined' ? window.location.origin : '');
+                         const isStaging = (serverHost && serverHost.includes('staging')) || (typeof window !== 'undefined' && window.location.hostname.includes('staging')) || trackerConfig.isStaging;
+                         const bridgePort = trackerConfig.bridgePort || (isStaging ? 28735 : 28734);
+                         fetch(`http://127.0.0.1:${bridgePort}/auth?token=${encodeURIComponent(token)}&server=${encodeURIComponent(serverHost)}`, { mode: 'no-cors' }).catch(() => {});
                        } catch (_) {}
                      }}
                      className="h-[48px] w-full text-[15px] font-bold bg-[#00a76b] text-[#fffefb] hover:bg-[#201515] rounded-[4px] flex items-center justify-center gap-2 transition-all shadow-sm"

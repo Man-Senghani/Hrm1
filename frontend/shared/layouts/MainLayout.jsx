@@ -147,13 +147,129 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
   // Helper to normalize navigation paths across standalone sub-apps and unified admin
   const handleNav = (targetPath, options) => {
     if (!targetPath) return;
-    navigate(targetPath, typeof options === 'object' && options !== null ? options : { state: options });
+    let cleanPath = targetPath;
+    const hasRoleInUrl = location.pathname.startsWith(`/${activeRole}/`) || location.pathname === `/${activeRole}`;
+    // Strip redundant leading activeRole prefix if running inside a scoped sub-app basename without role prefix in URL
+    if (!hasRoleInUrl && activeRole && cleanPath.startsWith(`/${activeRole}/`)) {
+      cleanPath = cleanPath.slice(activeRole.length + 1);
+    } else if (!hasRoleInUrl && activeRole && cleanPath === `/${activeRole}`) {
+      cleanPath = '/';
+    }
+    if (cleanPath && !cleanPath.startsWith('/')) {
+      cleanPath = '/' + cleanPath;
+    }
+    navigate(cleanPath, typeof options === 'object' && options !== null ? options : { state: options });
   };
 
   // Helper to determine target navigation path based on notification
   const getNotificationPath = (notif, targetRole) => {
-    const currentRole = targetRole || activeRole || 'employee';
-    return `/${currentRole}/notifications`;
+    if (!notif) return '/notifications';
+    if (notif.path && notif.path !== '/notifications' && notif.path !== `/${targetRole}/notifications`) {
+      return notif.path;
+    }
+
+    const type = String(notif.type || '').toLowerCase();
+    const text = String(notif.message || notif.text || '').toLowerCase();
+    const title = String(notif.title || '').toLowerCase();
+    const prefix = targetRole ? `/${targetRole}` : '';
+
+    // 1. Meeting & Offline Requests
+    if (
+      type.includes('meeting') ||
+      type.includes('offline') ||
+      text.includes('meeting request') ||
+      text.includes('meeting') ||
+      text.includes('offline request') ||
+      text.includes('offline time') ||
+      title.includes('meeting') ||
+      title.includes('offline')
+    ) {
+      return `${prefix}/attendance?tab=meetingRequests`;
+    }
+
+    // 2. Attendance / Timer / Overtime / Clock-in / Check-in
+    if (
+      type.includes('attendance') ||
+      type.includes('timer') ||
+      text.includes('attendance') ||
+      text.includes('check-in') ||
+      text.includes('checked in') ||
+      text.includes('check in') ||
+      text.includes('check-out') ||
+      text.includes('checked out') ||
+      text.includes('check out') ||
+      text.includes('clock in') ||
+      text.includes('clock out') ||
+      text.includes('overtime') ||
+      text.includes('late mark') ||
+      text.includes('half day')
+    ) {
+      return `${prefix}/attendance`;
+    }
+
+    // 3. Leave Management
+    if (
+      type.includes('leave') ||
+      text.includes('leave') ||
+      text.includes('vacation') ||
+      text.includes('time off') ||
+      title.includes('leave')
+    ) {
+      return `${prefix}/leave`;
+    }
+
+    // 4. Daily Report
+    if (
+      type.includes('daily_report') ||
+      type.includes('report') ||
+      text.includes('daily report') ||
+      text.includes('edit access') ||
+      title.includes('daily report') ||
+      title.includes('report')
+    ) {
+      return `${prefix}/daily-report`;
+    }
+
+    // 5. Screenshots
+    if (
+      type.includes('screenshot') ||
+      text.includes('screenshot') ||
+      title.includes('screenshot')
+    ) {
+      return `${prefix}/screenshots`;
+    }
+
+    // 6. Employees
+    if (
+      type.includes('employee') ||
+      text.includes('new employee') ||
+      text.includes('employee registered')
+    ) {
+      return `${prefix}/employees`;
+    }
+
+    // 7. Tasks (Smart check: only if task route is available in sidebar for this user/role)
+    if (
+      type.includes('task') ||
+      text.includes('task') ||
+      text.includes('assigned to you') ||
+      title.includes('task')
+    ) {
+      const candidatePaths = [`${prefix}/tasks`, `${prefix}/task-management`, '/tasks', '/task-management'];
+      const matched = candidatePaths.find(p => isPathInSidebar(p));
+      if (matched) return matched;
+      return `${prefix}/notifications`;
+    }
+
+    // 8. Profile
+    if (
+      type.includes('profile') ||
+      text.includes('profile')
+    ) {
+      return `${prefix}/profile`;
+    }
+
+    return `${prefix}/notifications`;
   };
 
   // 🎨 Helper to determine notification color (from custom color or derived from type/urgency)
@@ -487,6 +603,11 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
 
   const activeRoleTitle = userRealRole;
 
+  const rawHeaderDesignation = userProfile?.designation || userProfile?.position || '';
+  const headerDesignation = (rawHeaderDesignation && rawHeaderDesignation.toLowerCase() !== 'admin')
+    ? rawHeaderDesignation
+    : (actualRole === 'admin' ? 'Head of Admin' : activeRoleTitle);
+
   const initials = displayName.split(' ').filter(Boolean).map(n => n[0]).join('').toUpperCase().substring(0, 2) || 'U';
 
   useEffect(() => {
@@ -664,7 +785,9 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
         color: data.color || null,
         time: 'Just Now',
         read: false,
-        path: data.type === 'task' ? `/${activeRole}/task-management` : (data.path || getNotificationPath(data, activeRole))
+        path: (data.path && data.path !== '/notifications' && data.path !== `/${activeRole}/notifications`)
+          ? data.path
+          : getNotificationPath(data, activeRole)
       };
       setLiveNotifications(prev => [newAlert, ...prev.filter(x => x.id !== newAlert.id)].slice(0, 50));
       toast(data.message, { icon: '🔔', style: { borderRadius: '5px', background: '#201515', color: '#fff', fontWeight: 900, fontSize: '12px' } });
@@ -961,10 +1084,18 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
                                   console.error('Failed to mark notification as read:', err);
                                 }
                               }
-                              const targetPath = n.path || getNotificationPath(n, activeRole);
-                              // 🛡️ SMART NAVIGATION: Only navigate if page is visible in active sidebar menu!
-                              if (isPathInSidebar(targetPath)) {
-                                handleNav(targetPath, { state: { highlightedNotificationId: n.id, notification: n } });
+                              const targetPath = (n.path && n.path !== '/notifications' && n.path !== `/${activeRole}/notifications`)
+                                ? n.path
+                                : getNotificationPath(n, activeRole);
+                              // 🛡️ SMART NAVIGATION: Only navigate if page is visible in active sidebar menu or notifications!
+                              if (isPathInSidebar(targetPath) || targetPath.includes('/notifications')) {
+                                handleNav(targetPath, {
+                                  state: {
+                                    highlightedNotificationId: n.id,
+                                    notification: n,
+                                    tab: targetPath.includes('tab=meetingRequests') ? 'meetingRequests' : undefined
+                                  }
+                                });
                               }
                               setIsNotificationsOpen(false);
                             }}
@@ -1030,7 +1161,7 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
                       Mark All Read
                     </button>
                     <button
-                      onClick={() => { handleNav(`/${activeRole}/notifications`); setIsNotificationsOpen(false); }}
+                      onClick={() => { handleNav('/notifications'); setIsNotificationsOpen(false); }}
                       className="w-1/2 py-3 bg-[#eceae3] dark:bg-[#162722] text-[10px] font-black text-[#201515] dark:text-white uppercase tracking-wider hover:bg-[#c5c0b1] dark:hover:bg-[#111c18] transition-all border-none cursor-pointer"
                     >
                       View All
@@ -1080,8 +1211,8 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
                     )}
                   </div>
                   <div className="hidden md:flex flex-col items-start leading-none">
-                    <span className="text-[12px] font-bold text-[#201515] dark:text-white truncate max-w-[120px]">{displayName}</span>
-                    <span className="text-[9px] font-bold text-[#939084] dark:text-[#a3b3af] uppercase tracking-wider mt-1">{activeRoleTitle}</span>
+                    <span className="text-[12px] font-bold text-[#201515] dark:text-white truncate max-w-[130px]">{displayName}</span>
+                    <span className="text-[9px] font-bold text-[#939084] dark:text-[#a3b3af] uppercase tracking-wider mt-1 truncate max-w-[150px]">{headerDesignation}</span>
                   </div>
                   <ChevronDown size={14} className={`hidden md:block text-gray-500 transition-transform duration-200 ${isProfileDropdownOpen ? 'rotate-180' : ''}`} />
                 </button>
@@ -1099,7 +1230,12 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
                 >
                   <div className="px-6 pt-5 pb-4 flex flex-col">
                     <span className="text-[17px] font-semibold text-slate-900 dark:text-white leading-tight">{displayName}</span>
-                    <span className="text-[13px] text-slate-500 dark:text-slate-400 mt-1 leading-none">{displayEmail}</span>
+                    <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/50 text-[#00a76b] dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/60 uppercase tracking-wide">
+                        {headerDesignation}
+                      </span>
+                      <span className="text-[12px] text-slate-500 dark:text-slate-400 leading-none">{displayEmail}</span>
+                    </div>
                   </div>
                   <div className="h-px bg-slate-100 dark:bg-slate-800/80 w-full" />
                   <div className="flex flex-col animate-fade-in">
@@ -1191,10 +1327,10 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
                       <button
                         onClick={toggleSidebar}
                         className="hidden md:flex items-center justify-center w-6 h-6 rounded-md text-slate-500 dark:text-[#829e92] hover:text-[#00a76b] dark:hover:text-[#00a76b] hover:bg-slate-100 dark:hover:bg-[#111c18] transition-all cursor-pointer border-none bg-transparent active:scale-95"
-                        title={isSidebarOpen ? "Collapse sidebar" : "Keep sidebar open"}
-                        aria-label={isSidebarOpen ? "Collapse sidebar" : "Keep sidebar open"}
+                        title={isSidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
+                        aria-label={isSidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
                       >
-                        <ChevronLeft size={16} strokeWidth={2.8} />
+                        <ChevronLeft size={16} strokeWidth={2.8} className={`transition-transform duration-300 ease-in-out ${!isSidebarOpen ? 'rotate-180' : ''}`} />
                       </button>
                     </div>
                   ) : (

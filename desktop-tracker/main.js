@@ -36,6 +36,7 @@ if (process.env.TRACKER_ENV === 'staging' || app.getName().toLowerCase().include
 }
 
 const isStaging = trackerConfig.environment === 'staging';
+const isStagingApp = isStaging;
 
 if (isStaging) {
   autoUpdater.autoDownload = false;
@@ -49,7 +50,7 @@ if (process.platform === 'win32') {
   app.setAppUserModelId(trackerConfig.appId);
 }
 
-// Register custom protocol client
+// Register custom protocol client (strictly isolated per environment)
 if (process.defaultApp) {
   if (process.argv.length >= 2) {
     app.setAsDefaultProtocolClient(trackerConfig.protocol, process.execPath, [path.resolve(process.argv[1])]);
@@ -73,58 +74,53 @@ function handleDeepLink(urlStr) {
   try {
     const parsedUrl = new URL(urlStr);
     const validProtocols = [`${trackerConfig.protocol}:`, 'fluidhr-tracker:', 'fluidhr-staging-tracker:'];
-    if (validProtocols.includes(parsedUrl.protocol)) {
-      const token = parsedUrl.searchParams.get('token');
-      const server = parsedUrl.searchParams.get('server');
-      let action = parsedUrl.searchParams.get('action');
+    if (!validProtocols.includes(parsedUrl.protocol)) {
+      console.warn(`[Deep Link] Ignored protocol ${parsedUrl.protocol} because this instance is ${isStagingApp ? 'Staging' : 'Live'}`);
+      return;
+    }
 
-      if (!action) {
-        if (parsedUrl.hostname === 'stop' || parsedUrl.pathname.includes('stop')) {
-          action = 'stop';
-        } else if (parsedUrl.hostname === 'pause' || parsedUrl.pathname.includes('pause')) {
-          action = 'pause';
-        } else if (parsedUrl.hostname === 'auth' || parsedUrl.pathname.includes('auth')) {
-          action = 'auth';
-        } else {
-          action = 'start';
-        }
-      }
+    const token = parsedUrl.searchParams.get('token');
+    let action = parsedUrl.searchParams.get('action');
 
-      // 💾 Immediately persist token and serverHost to store
-      if (token) {
-        store.set('authToken', token);
-      }
-      if (server) {
-        let cleanServer = server.replace(/\/+$/, '');
-        if (cleanServer.includes('aupanishad.tech') || cleanServer.includes(':3000')) {
-          cleanServer = 'http://hrm.aupanishad.tech';
-        }
-        store.set('serverHost', cleanServer);
-      }
-      
-      if (mainWindow) {
-        if (mainWindow.isMinimized()) mainWindow.restore();
-        mainWindow.show();
-        mainWindow.focus();
-        mainWindow.setAlwaysOnTop(true);
-        setTimeout(() => {
-          if (mainWindow && !mainWindow.isDestroyed()) {
-            mainWindow.setAlwaysOnTop(false);
-          }
-        }, 800);
-
-        if (server) {
-          mainWindow.webContents.send('deep-link-server', server);
-        }
-        if (token) {
-          mainWindow.webContents.send('deep-link-token', token);
-        }
-        if (action) {
-          mainWindow.webContents.send('deep-link-action', action);
-        }
+    if (!action) {
+      if (parsedUrl.hostname === 'stop' || parsedUrl.pathname.includes('stop')) {
+        action = 'stop';
+      } else if (parsedUrl.hostname === 'pause' || parsedUrl.pathname.includes('pause')) {
+        action = 'pause';
+      } else if (parsedUrl.hostname === 'auth' || parsedUrl.pathname.includes('auth')) {
+        action = 'auth';
       } else {
-        app.readyUrl = urlStr;
+        action = 'start';
       }
+    }
+
+    // 💾 Immediately persist token and serverHost strictly locked to environment
+    if (token) {
+      store.set('authToken', token);
+    }
+    const cleanServer = isStagingApp ? 'https://hrm-staging.aupanishad.tech' : 'https://hrm.aupanishad.tech';
+    store.set('serverHost', cleanServer);
+    
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.show();
+      mainWindow.focus();
+      mainWindow.setAlwaysOnTop(true);
+      setTimeout(() => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.setAlwaysOnTop(false);
+        }
+      }, 800);
+
+      mainWindow.webContents.send('deep-link-server', cleanServer);
+      if (token) {
+        mainWindow.webContents.send('deep-link-token', token);
+      }
+      if (action) {
+        mainWindow.webContents.send('deep-link-action', action);
+      }
+    } else {
+      app.readyUrl = urlStr;
     }
   } catch (err) {
     console.error('Failed to parse deep link:', err);
@@ -163,16 +159,16 @@ function startLocalBridgeServer() {
 
       if (pathname === '/auth') {
         const token = reqUrl.searchParams.get('token');
-        const server = reqUrl.searchParams.get('server');
+        const defaultServer = isStagingApp ? 'https://hrm-staging.aupanishad.tech' : 'https://hrm.aupanishad.tech';
         if (token) store.set('authToken', token);
-        if (server) store.set('serverHost', server);
+        store.set('serverHost', defaultServer);
         if (mainWindow) {
           if (mainWindow.isMinimized()) mainWindow.restore();
           mainWindow.show();
           mainWindow.focus();
           mainWindow.setAlwaysOnTop(true);
           setTimeout(() => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.setAlwaysOnTop(false); }, 800);
-          if (server) mainWindow.webContents.send('deep-link-server', server);
+          mainWindow.webContents.send('deep-link-server', defaultServer);
           if (token) mainWindow.webContents.send('deep-link-token', token);
           mainWindow.webContents.send('deep-link-action', 'auth');
         }
@@ -436,6 +432,15 @@ ipcMain.handle('set-store-value', (event, key, value) => {
 ipcMain.handle('close-app', async () => {
   await autoPauseTrackingOnExit();
   app.quit();
+});
+
+ipcMain.handle('get-app-config', () => {
+  return {
+    isStaging: isStagingApp,
+    environment: isStagingApp ? 'staging' : 'production',
+    protocol: primaryProtocol,
+    bridgePort: isStagingApp ? 28735 : 28734
+  };
 });
 
 ipcMain.handle('minimize-app', () => {

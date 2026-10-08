@@ -11,7 +11,7 @@ export default defineConfig(({ command }) => ({
   base: command === 'build' ? '/employee/' : '/',
   plugins: [react()],
   server: {
-    port: 5003,
+    port: 3003,
     strictPort: true,
   },
   resolve: {

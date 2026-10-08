@@ -130,35 +130,7 @@ router.get('/download', async (req, res) => {
   const isStaging = req.query.env === 'staging' || (req.headers.host && req.headers.host.includes('staging'));
   const version = isStaging ? '1.0.1' : (getLocalPackageInfo().version || '1.4.1');
 
-  // 1. Check if a custom upload exists in backend/uploads/desktop/
-  const uploadsDesktopDir = path.resolve(__dirname, '../uploads/desktop');
-  if (fs.existsSync(uploadsDesktopDir)) {
-    if (isStaging) {
-      const preferredStaging = ['FluidHR-Tracker-Staging-Setup-1.0.1.exe', 'FluidHR-Tracker-Staging-Setup.exe', 'FluidHR-Tracker-Staging-Setup-1.0.0.exe'];
-      for (const candidate of preferredStaging) {
-        const fullPath = path.join(uploadsDesktopDir, candidate);
-        if (fs.existsSync(fullPath)) {
-          res.setHeader('Content-Disposition', `attachment; filename="${candidate}"`);
-          res.setHeader('Content-Type', 'application/octet-stream');
-          return res.sendFile(fullPath);
-        }
-      }
-    }
-    const files = fs.readdirSync(uploadsDesktopDir);
-    const exeFile = files.find(f => {
-      if (!f.endsWith('.exe')) return false;
-      if (isStaging) return f.toLowerCase().includes('staging');
-      return !f.toLowerCase().includes('staging');
-    });
-    if (exeFile) {
-      const filePath = path.join(uploadsDesktopDir, exeFile);
-      res.setHeader('Content-Disposition', `attachment; filename="${exeFile}"`);
-      res.setHeader('Content-Type', 'application/octet-stream');
-      return res.sendFile(filePath);
-    }
-  }
-
-  // 2. Check if a local build exists in desktop-tracker/dist/
+  // 1. Check if a local build exists in desktop-tracker/dist/ (pick newest by mtime)
   const distDir = path.resolve(__dirname, '../../desktop-tracker/dist');
   if (fs.existsSync(distDir)) {
     if (isStaging) {
@@ -172,14 +144,42 @@ router.get('/download', async (req, res) => {
         }
       }
     }
-    const files = fs.readdirSync(distDir);
-    const exeFile = files.find(f => {
-      if (!f.endsWith('.exe') || f.includes('builder')) return false;
-      if (isStaging) return f.toLowerCase().includes('staging');
-      return !f.toLowerCase().includes('staging');
-    });
-    if (exeFile) {
+    const files = fs.readdirSync(distDir)
+      .filter(f => f.endsWith('.exe') && !f.includes('builder') && (isStaging ? f.toLowerCase().includes('staging') : !f.toLowerCase().includes('staging')))
+      .map(f => ({ name: f, time: fs.statSync(path.join(distDir, f)).mtime.getTime() }))
+      .sort((a, b) => b.time - a.time);
+
+    if (files.length > 0) {
+      const exeFile = files[0].name;
       const filePath = path.join(distDir, exeFile);
+      res.setHeader('Content-Disposition', `attachment; filename="${exeFile}"`);
+      res.setHeader('Content-Type', 'application/octet-stream');
+      return res.sendFile(filePath);
+    }
+  }
+
+  // 2. Check if a custom upload exists in backend/uploads/desktop/ (pick newest by mtime)
+  const uploadsDesktopDir = path.resolve(__dirname, '../uploads/desktop');
+  if (fs.existsSync(uploadsDesktopDir)) {
+    if (isStaging) {
+      const preferredStaging = ['FluidHR-Tracker-Staging-Setup-1.0.1.exe', 'FluidHR-Tracker-Staging-Setup.exe', 'FluidHR-Tracker-Staging-Setup-1.0.0.exe'];
+      for (const candidate of preferredStaging) {
+        const fullPath = path.join(uploadsDesktopDir, candidate);
+        if (fs.existsSync(fullPath)) {
+          res.setHeader('Content-Disposition', `attachment; filename="${candidate}"`);
+          res.setHeader('Content-Type', 'application/octet-stream');
+          return res.sendFile(fullPath);
+        }
+      }
+    }
+    const files = fs.readdirSync(uploadsDesktopDir)
+      .filter(f => f.endsWith('.exe') && (isStaging ? f.toLowerCase().includes('staging') : !f.toLowerCase().includes('staging')))
+      .map(f => ({ name: f, time: fs.statSync(path.join(uploadsDesktopDir, f)).mtime.getTime() }))
+      .sort((a, b) => b.time - a.time);
+
+    if (files.length > 0) {
+      const exeFile = files[0].name;
+      const filePath = path.join(uploadsDesktopDir, exeFile);
       res.setHeader('Content-Disposition', `attachment; filename="${exeFile}"`);
       res.setHeader('Content-Type', 'application/octet-stream');
       return res.sendFile(filePath);

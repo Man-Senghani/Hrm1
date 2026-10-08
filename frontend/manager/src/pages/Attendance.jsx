@@ -5,9 +5,9 @@ import axios from 'axios';
 import toast from 'react-hot-toast';
 import {
   Clock, Calendar, Users, CheckCircle, XCircle, AlertTriangle,
-  Search, Filter, Download, RefreshCw, ChevronLeft, ChevronRight, ChevronDown,
+  Search, Filter, Download, RefreshCw, ChevronLeft, ChevronRight, ChevronDown, ChevronUp,
   LogIn, LogOut, Timer, TrendingUp, ArrowUpRight, ArrowDownRight,
-  Sun, Moon, Coffee, MoreVertical, Square, Activity, Zap
+  Sun, Moon, Coffee, MoreVertical, Square, Activity, Zap, CalendarRange
 } from 'lucide-react';
 import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -19,6 +19,8 @@ import CheckInButton from '../components/CheckInButton';
 import AttendanceSessionDetailModal from '@shared/components/AttendanceSessionDetailModal';
 import ExportFilterModal from '@shared/components/ExportFilterModal';
 import MeetingRequestsTable from '@shared/components/MeetingRequestsTable';
+import WeeklyHoursTable from '@shared/components/WeeklyHoursTable';
+import AttendanceProgressBars from '@shared/components/AttendanceProgressBars';
 
 // ─── LOCAL DATE HELPER ─────────────────────────
 export const getLocalYYYYMMDD = (d) => {
@@ -697,7 +699,7 @@ const StatusFilterDropdown = ({ value, onChange, statusColors }) => {
 
 // Card component
 const Card = ({ children, className = '' }) => (
-  <div className={`bg-white dark:bg-[#0a1f1a] border border-[#e2eae7] dark:border-[#133029] hover:border-emerald-500/70 dark:hover:border-emerald-500/70 rounded-2xl p-5 shadow-[0_2px_16px_rgba(0,0,0,0.02)] hover:shadow-md transition-all duration-300 ${className}`}>
+  <div className={`bg-white dark:bg-[#071e17] border border-[#e2eae7] dark:border-[#133029] hover:border-emerald-500/70 dark:hover:border-emerald-500/70 rounded-2xl p-5 shadow-[0_2px_16px_rgba(0,0,0,0.02)] hover:shadow-md transition-all duration-300 ${className}`}>
     {children}
   </div>
 );
@@ -908,10 +910,13 @@ const getInactiveTime = (record, liveIdleSecs) => {
   }
 
   let idleSecs = record.idleTime ?? record.inactiveTime ?? record.idle_time ?? 0;
-  if (liveIdleSecs && typeof liveIdleSecs === 'number' && liveIdleSecs > 0) {
+  const isTodayRec = record && record.date && (
+    typeof record.date === 'string' ? record.date.split('T')[0] === getLocalYYYYMMDD(new Date()) : false
+  );
+  if (isTodayRec && liveIdleSecs && typeof liveIdleSecs === 'number' && liveIdleSecs > 0) {
     idleSecs = liveIdleSecs;
   }
-  if (typeof idleSecs === 'number' && idleSecs > 0) {
+  if (typeof idleSecs === 'number' && idleSecs >= 0) {
     const h = Math.floor(idleSecs / 3600);
     const m = Math.floor((idleSecs % 3600) / 60);
     return `${h}h ${m}m`;
@@ -979,7 +984,12 @@ const getTotalHoursCombined = (clockIn, clockOut, totalHours, record, activeLive
 
   let idleSecs = record?.idleTime ?? record?.inactiveTime ?? record?.idle_time ?? 0;
   if (liveIdleSecs && typeof liveIdleSecs === 'number' && liveIdleSecs > 0) {
-    idleSecs = liveIdleSecs;
+    const isTodayRec = record && record.date && (
+      (typeof record.date === 'string' && record.date.split('T')[0] === getLocalYYYYMMDD(new Date()))
+    );
+    if (isTodayRec && (!cOutRaw || cOutRaw === '--' || cOutRaw === '--:--')) {
+      idleSecs = liveIdleSecs;
+    }
   }
 
   // Total hours should always be the true sum of working (active) hours + inactive (idle) hours
@@ -1047,6 +1057,14 @@ const Attendance = () => {
   const userRole = (sessionStorage.getItem('role') || 'employee').toLowerCase();
   const isEmployeeRoute = location.pathname.includes('/employee');
   const [viewContext, setViewContext] = useState(isEmployeeRoute || userRole === 'employee' ? 'employee' : 'team');
+  const currentLoggedInUser = useMemo(() => {
+    try {
+      return JSON.parse(sessionStorage.getItem('user') || '{}');
+    } catch (_) {
+      return {};
+    }
+  }, []);
+  const myUserId = currentLoggedInUser?._id || currentLoggedInUser?.id || sessionStorage.getItem('userId') || '';
   const [hoveredWeeklySlice, setHoveredWeeklySlice] = useState(null);
   const [selectedSessionRecord, setSelectedSessionRecord] = useState(null);
   const [hoveredStatusSlice, setHoveredStatusSlice] = useState(null);
@@ -1068,9 +1086,25 @@ const Attendance = () => {
     try {
       const p = new URLSearchParams(window.location.search);
       if (p.get('action') === 'new-offline-request' || p.get('tab') === 'meetingRequests') return 'meetingRequests';
+      if (p.get('tab') === 'weeklyHours') return 'weeklyHours';
     } catch (_) {}
     return 'history';
   });
+
+  useEffect(() => {
+    try {
+      const p = new URLSearchParams(location.search);
+      const tab = p.get('tab') || location.state?.tab;
+      const action = p.get('action') || location.state?.action;
+      if (action === 'new-offline-request' || tab === 'meetingRequests') {
+        setAttendanceSubTab('meetingRequests');
+      } else if (tab === 'weeklyHours') {
+        setAttendanceSubTab('weeklyHours');
+      } else if (tab === 'history') {
+        setAttendanceSubTab('history');
+      }
+    } catch (_) {}
+  }, [location.search, location.state]);
   const [viewMode, setViewMode] = useState('all'); // all | daily | weekly | monthly
   const [sortField, setSortField] = useState('date');
   const [sortDir, setSortDir] = useState('desc');
@@ -1319,19 +1353,21 @@ const Attendance = () => {
     return formatTimer(todayActiveSeconds + todayIdleSeconds);
   }, [todayActiveSeconds, todayIdleSeconds]);
 
-  // ── Calculate Total Weekly Worked Hours (Sunday to Saturday) for Current User ──
+  // ── Calculate Total Weekly Worked Hours (Monday to Sunday) for Current User ──
   const weeklyWorkedHoursData = useMemo(() => {
     const now = new Date();
     const currentDay = now.getDay();
-    const sunday = new Date(now);
-    sunday.setDate(now.getDate() - currentDay);
-    sunday.setHours(0, 0, 0, 0);
-    const saturday = new Date(sunday);
-    saturday.setDate(sunday.getDate() + 6);
-    saturday.setHours(23, 59, 59, 999);
+    // Monday as week start (Mon - Sun):
+    const distToMon = currentDay === 0 ? -6 : 1 - currentDay;
+    const monday = new Date(now);
+    monday.setDate(now.getDate() + distToMon);
+    monday.setHours(0, 0, 0, 0);
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+    sunday.setHours(23, 59, 59, 999);
 
+    const monStr = getLocalYYYYMMDD(monday);
     const sunStr = getLocalYYYYMMDD(sunday);
-    const satStr = getLocalYYYYMMDD(saturday);
     const todayStr = getLocalYYYYMMDD(now);
 
     const currentLoggedInUser = JSON.parse(sessionStorage.getItem('user') || '{}');
@@ -1345,7 +1381,7 @@ const Attendance = () => {
       if (myId && uId && String(uId) !== String(myId)) return;
 
       const rDate = r.date ? String(r.date).split('T')[0] : '';
-      if (rDate >= sunStr && rDate <= satStr) {
+      if (rDate >= monStr && rDate <= sunStr) {
         if (rDate === todayStr) {
           hasTodaySeconds = true;
           if (liveActiveSeconds > 0) {
@@ -1401,6 +1437,7 @@ const Attendance = () => {
     const targetHours = 42.5; // 8.5 * 5
 
     return {
+      totalSeconds,
       formatted: `${h}h ${m}m`,
       decimal: totalHoursDecimal.toFixed(1),
       targetHours: 42.5,
@@ -1510,6 +1547,9 @@ const Attendance = () => {
       const dStr = typeof r.date === 'string' ? r.date.split('T')[0] : getLocalYYYYMMDD(new Date(r.date));
       if (dStr !== todayStr) return false;
 
+      const empId = r.user?._id || r.user?.id || (typeof r.user === 'string' ? r.user : r._id);
+      if (myUserId && empId && String(empId) === String(myUserId)) return false;
+
       const role = (r.user?.role || '').toLowerCase();
       const name = (r.user?.name || '').toLowerCase();
       if (isHr) {
@@ -1530,7 +1570,7 @@ const Attendance = () => {
     });
 
     return uniquePresentUsers.size;
-  }, [allCombinedRecords, userRole, todayStr]);
+  }, [allCombinedRecords, userRole, todayStr, myUserId]);
 
   const teamCurrentLiveCount = useMemo(() => {
     const isHr = userRole === 'hr' || userRole.includes('hr');
@@ -1542,6 +1582,9 @@ const Attendance = () => {
       if (dStr !== todayStr || !s.isRunning || s.status !== 'active') return false;
 
       const emp = s.employeeId || s.user;
+      const empId = emp?._id || emp?.id || (typeof emp === 'string' ? emp : null);
+      if (myUserId && empId && String(empId) === String(myUserId)) return false;
+
       const role = (emp?.role || '').toLowerCase();
       const name = (emp?.name || s.employeeName || s.userName || '').toLowerCase();
       if (isHr) {
@@ -1551,15 +1594,19 @@ const Attendance = () => {
       }
       return true;
     }).length;
-  }, [teamLiveSessions, todayStr, userRole]);
+  }, [teamLiveSessions, todayStr, userRole, myUserId]);
 
   const teamOnBreakCount = useMemo(() => {
     return teamLiveSessions.filter(s => {
       if (!s.date) return false;
+      const emp = s.employeeId || s.user;
+      const empId = emp?._id || emp?.id || (typeof emp === 'string' ? emp : null);
+      if (myUserId && empId && String(empId) === String(myUserId)) return false;
+
       const dStr = typeof s.date === 'string' ? s.date.split('T')[0] : getLocalYYYYMMDD(new Date(s.date));
       return dStr === todayStr && (s.status === 'idle' || s.status === 'paused' || s.status === 'break');
     }).length;
-  }, [teamLiveSessions, todayStr]);
+  }, [teamLiveSessions, todayStr, myUserId]);
 
   // ── Calculate Team Worked Hours & Dynamic Target by Period (Today / Week / Month) ──
   const teamPeriodWorkedHoursData = useMemo(() => {
@@ -1590,9 +1637,20 @@ const Attendance = () => {
 
     let totalSeconds = 0;
     const periodPresentEmpSet = new Set();
+    const isHr = userRole === 'hr' || userRole.includes('hr');
+    const isManager = userRole === 'manager' || userRole.includes('manager') || userRole === 'team_manager';
 
     (allCombinedRecords || []).forEach(r => {
       const uId = r.user?._id || r.user?.id || (typeof r.user === 'string' ? r.user : r._id);
+      if (myUserId && uId && String(uId) === String(myUserId)) return;
+
+      const role = (r.user?.role || '').toLowerCase();
+      const name = (r.user?.name || '').toLowerCase();
+      if (isHr) {
+        if (role === 'admin' || role === 'superadmin' || name.includes('admin')) return;
+      } else if (isManager) {
+        if (role === 'admin' || role === 'hr' || role === 'superadmin' || name.includes('admin') || name.includes('hr manager')) return;
+      }
       const rDate = r.date ? String(r.date).split('T')[0] : '';
       let inPeriod = false;
 
@@ -1662,7 +1720,7 @@ const Attendance = () => {
       totalCompanyMembers,
       percentage: targetHours > 0 ? Math.min(100, Math.round((totalHoursDecimal / targetHours) * 100)) : 0
     };
-  }, [allCombinedRecords, teamStatsPeriod, teamPresentCount, teamStats]);
+  }, [allCombinedRecords, teamStatsPeriod, teamPresentCount, teamStats, userRole, myUserId]);
 
   const teamWeeklyWorkedHoursData = teamPeriodWorkedHoursData;
 
@@ -1994,7 +2052,7 @@ const Attendance = () => {
 
     if (viewContext === 'employee') {
       const currentUser = JSON.parse(sessionStorage.getItem('user') || '{}');
-      const currentUserId = currentUser._id || currentUser.id;
+      const currentUserId = currentUser._id || currentUser.id || myUserId;
       const currentUserName = (currentUser.name || '').toLowerCase().trim();
 
       filtered = filtered.filter(r => {
@@ -2009,6 +2067,12 @@ const Attendance = () => {
         return true;
       });
     } else {
+      if (myUserId) {
+        filtered = filtered.filter(r => {
+          const recUserId = r.user?._id || r.user?.id || (typeof r.user === 'string' ? r.user : r._id);
+          return String(recUserId) !== String(myUserId);
+        });
+      }
 
       if (userRole === 'hr') {
         filtered = filtered.filter(r => {
@@ -2171,7 +2235,12 @@ const Attendance = () => {
       const dayRecords = records.filter(r => {
         if (!r.date) return false;
         const dStr = typeof r.date === 'string' ? r.date.split('T')[0] : getLocalYYYYMMDD(new Date(r.date));
-        return dStr === dateStr;
+        if (dStr !== dateStr) return false;
+        if (viewContext === 'team' && myUserId) {
+          const recUserId = r.user?._id || r.user?.id || (typeof r.user === 'string' ? r.user : r._id);
+          if (String(recUserId) === String(myUserId)) return false;
+        }
+        return true;
       });
       const presentCount = dayRecords.filter(r => r.status === 'Present').length;
       const lateCount = dayRecords.filter(r => r.status === 'Late').length;
@@ -2688,9 +2757,14 @@ const Attendance = () => {
                       Working Hours
                     </span>
                   </div>
-                  <p className="text-base sm:text-lg font-black text-teal-600 dark:text-teal-400 tracking-tight font-mono truncate">
-                    {todayWorkingHoursDisplay}
-                  </p>
+                  <div className="flex items-baseline gap-1 min-w-0 flex-wrap">
+                    <p className="text-base sm:text-lg font-black text-teal-600 dark:text-teal-400 tracking-tight font-mono truncate">
+                      {todayWorkingHoursDisplay}
+                    </p>
+                    <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 dark:text-slate-500 shrink-0 whitespace-nowrap">
+                      / {formatTargetHours(8.5)}
+                    </span>
+                  </div>
                 </div>
               </div>
 
@@ -2724,14 +2798,9 @@ const Attendance = () => {
                       Today's Hours
                     </span>
                   </div>
-                  <div className="flex items-baseline gap-1 min-w-0 flex-wrap">
-                    <p className="text-base sm:text-lg font-black text-amber-600 dark:text-amber-400 tracking-tight font-mono truncate">
-                      {todayTotalHoursDisplay}
-                    </p>
-                    <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 dark:text-slate-500 shrink-0 whitespace-nowrap">
-                      / {formatTargetHours(8.5)}
-                    </span>
-                  </div>
+                  <p className="text-base sm:text-lg font-black text-amber-600 dark:text-amber-400 tracking-tight font-mono truncate">
+                    {todayTotalHoursDisplay}
+                  </p>
                 </div>
               </div>
 
@@ -2999,6 +3068,20 @@ const Attendance = () => {
         </div>
       </div>
 
+      {/* ── LIVE PREVIEW ATTENDANCE PROGRESS BARS (TODAY & WEEKLY) ── */}
+      {viewContext === 'employee' && (
+        <AttendanceProgressBars
+          todaySeconds={todayActiveSeconds}
+          todayTargetHours={8.5}
+          weeklySeconds={weeklyWorkedHoursData.totalSeconds}
+          weeklyTargetHours={42.5}
+          isLive={liveSessionStatus?.hasActiveSession && liveSessionStatus?.status === 'active'}
+          isRunning={liveSessionStatus?.isRunning}
+          onRefresh={handleRefresh}
+          isRefreshing={isRefreshing}
+        />
+      )}
+
       {/* ── DAILY ACTIVITY TABLE (BETWEEN CARDS AND HISTORY TABLE - ONLY FOR MY ATTENDANCE VIEW) ── */}
       {viewContext === 'employee' && (
         <Card className="!p-4 my-6">
@@ -3051,32 +3134,34 @@ const Attendance = () => {
         </Card>
       )}
 
-      {/* ── ATTENDANCE SUB-TAB NAVIGATION ── */}
-      <div className="flex items-center gap-2 mb-3">
-        <button
-          onClick={() => setAttendanceSubTab('history')}
-          className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
-            attendanceSubTab === 'history'
-              ? 'bg-emerald-600 text-white shadow-sm'
-              : 'bg-white dark:bg-[#071e17] text-slate-600 dark:text-slate-300 border border-[#e2eae7] dark:border-[#133029] hover:bg-slate-50 dark:hover:bg-[#0d2a22]'
-          }`}
-        >
-          <Calendar size={14} />
-          <span>Attendance History</span>
-        </button>
-
-        <button
-          onClick={() => setAttendanceSubTab('meetingRequests')}
-          className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
-            attendanceSubTab === 'meetingRequests'
-              ? 'bg-emerald-600 text-white shadow-sm'
-              : 'bg-white dark:bg-[#071e17] text-slate-600 dark:text-slate-300 border border-[#e2eae7] dark:border-[#133029] hover:bg-slate-50 dark:hover:bg-[#0d2a22]'
-          }`}
-        >
-          <Timer size={14} />
-          <span>Meeting & Offline Requests</span>
-        </button>
-      </div>
+      {/* ── ATTENDANCE SUB-TAB NAVIGATION & CONTENT (Gapless Connected Tabs) ── */}
+      <div className="w-full">
+        {/* Docked Sub-Tab Buttons */}
+        <div className="flex items-end gap-1.5 -mb-px relative z-10 px-3 sm:px-4">
+          {[
+            { id: 'history', label: 'Attendance History', icon: Calendar },
+            { id: 'meetingRequests', label: 'Meeting & Offline Requests', icon: Timer },
+            { id: 'weeklyHours', label: 'Weekly Hours', icon: CalendarRange }
+          ].map((tab) => {
+            const isActive = attendanceSubTab === tab.id;
+            const Icon = tab.icon;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setAttendanceSubTab(tab.id)}
+                className={`flex items-center gap-2 px-4 sm:px-5 py-2.5 rounded-t-xl text-xs font-bold transition-all cursor-pointer border-t border-l border-r ${
+                  isActive
+                    ? 'bg-white dark:bg-[#071e17] text-[#00a76b] font-extrabold border-t-2 border-t-[#00a76b] border-l-[#e2eae7] border-r-[#e2eae7] dark:border-l-[#133029] dark:border-r-[#133029] border-b border-b-white dark:border-b-[#071e17] shadow-xs'
+                    : 'bg-slate-100/90 dark:bg-[#0d2a22]/50 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white border-transparent border-b border-b-[#e2eae7] dark:border-b-[#133029]'
+                }`}
+              >
+                <Icon size={14} className={isActive ? 'text-[#00a76b]' : 'text-slate-400 dark:text-slate-500'} />
+                <span>{tab.label}</span>
+              </button>
+            );
+          })}
+        </div>
 
       {attendanceSubTab === 'history' ? (
       <Card className="!p-4">
@@ -3175,7 +3260,7 @@ const Attendance = () => {
                     <div className="flex items-center gap-1">
                       {col.label}
                       {sortField === col.key && (
-                        <span className="text-emerald-500">{sortDir === 'asc' ? '↑' : '↓'}</span>
+                        sortDir === 'asc' ? <ChevronUp size={13} className="text-emerald-500 inline" /> : <ChevronDown size={13} className="text-emerald-500 inline" />
                       )}
                     </div>
                   </th>
@@ -3189,7 +3274,6 @@ const Attendance = () => {
                     <div className="flex flex-col items-center gap-2">
                       <Calendar size={28} className="text-slate-300 dark:text-slate-600" />
                       <p className="text-xs font-semibold text-slate-400 dark:text-slate-500">No attendance records found</p>
-                      <p className="text-[10px] text-slate-400 dark:text-slate-600">Try adjusting your search or filters</p>
                     </div>
                   </td>
                 </tr>
@@ -3283,7 +3367,7 @@ const Attendance = () => {
                           const myId = currentLoggedInUser._id || currentLoggedInUser.id;
                           const recUserId = record.user?._id || record.user?.id || (typeof record.user === 'string' ? record.user : null);
                           const isMe = viewContext === 'employee' || (myId && recUserId && String(myId) === String(recUserId));
-                          const userLiveActive = isMe ? liveActiveSeconds : (record.activeTime || 0);
+                          const userLiveActive = (isToday && isMe && !hasCheckedOut) ? liveActiveSeconds : (record.activeTime || 0);
                           return getWorkingHours(cIn, cOut, record.totalHours, record, userLiveActive);
                         })()}
                       </span>
@@ -3295,7 +3379,7 @@ const Attendance = () => {
                           const myId = currentLoggedInUser._id || currentLoggedInUser.id;
                           const recUserId = record.user?._id || record.user?.id || (typeof record.user === 'string' ? record.user : null);
                           const isMe = viewContext === 'employee' || (myId && recUserId && String(myId) === String(recUserId));
-                          const userLiveIdle = isMe ? liveIdleSeconds : (record.idleTime || 0);
+                          const userLiveIdle = (isToday && isMe && !hasCheckedOut) ? liveIdleSeconds : 0;
                           return getInactiveTime(record, userLiveIdle);
                         })()}
                       </span>
@@ -3309,8 +3393,8 @@ const Attendance = () => {
                           const myId = currentLoggedInUser._id || currentLoggedInUser.id;
                           const recUserId = record.user?._id || record.user?.id || (typeof record.user === 'string' ? record.user : null);
                           const isMe = viewContext === 'employee' || (myId && recUserId && String(myId) === String(recUserId));
-                          const userLiveActive = isMe ? liveActiveSeconds : (record.activeTime || 0);
-                          const userLiveIdle = isMe ? liveIdleSeconds : (record.idleTime || 0);
+                          const userLiveActive = (isToday && isMe && !hasCheckedOut) ? liveActiveSeconds : (record.activeTime || 0);
+                          const userLiveIdle = (isToday && isMe && !hasCheckedOut) ? liveIdleSeconds : 0;
                           return getTotalHoursCombined(cIn, cOut, record.totalHours, record, userLiveActive, userLiveIdle);
                         })()}
                       </span>
@@ -3342,7 +3426,7 @@ const Attendance = () => {
         <div className="flex items-center justify-between mt-3.5 min-h-[36px]">
           <p className="text-xs font-semibold text-slate-400 dark:text-[#829e92]">
             {filteredRecords.length > 0
-              ? `Showing ${(currentPage - 1) * pageSize + 1}–${Math.min(currentPage * pageSize, filteredRecords.length)} of ${filteredRecords.length}`
+              ? `Showing ${(currentPage - 1) * pageSize + 1} - ${Math.min(currentPage * pageSize, filteredRecords.length)} of ${filteredRecords.length}`
               : 'Showing 0 records'}
           </p>
           {totalPages > 1 ? (
@@ -3377,7 +3461,7 @@ const Attendance = () => {
           )}
         </div>
       </Card>
-      ) : (
+      ) : attendanceSubTab === 'meetingRequests' ? (
         <MeetingRequestsTable
           userRole={userRole}
           currentUserId={(() => {
@@ -3393,7 +3477,16 @@ const Attendance = () => {
             fetchAttendance();
           }}
         />
+      ) : (
+        <WeeklyHoursTable
+          viewContext={viewContext}
+          records={records}
+          teamLiveSessions={teamLiveSessions}
+          userRole={userRole}
+          currentUserId={myUserId}
+        />
       )}
+      </div>
 
       {/* View Holidays Drawer */}
       <ViewHolidaysDrawer

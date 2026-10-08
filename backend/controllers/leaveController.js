@@ -102,7 +102,7 @@ const getAppBaseUrl = (req) => {
   }
 
   if (process.env.NODE_ENV === 'production') {
-    return 'https://hrm1-1-zli1.onrender.com';
+    return 'https://hrm.aupanishad.tech';
   }
 
   const port = process.env.PORT || 5000;
@@ -545,17 +545,15 @@ exports.applyLeave = async (req, res) => {
     };
 
     const totalDays = inputTotalDays || calcDays(startDate, endDate);
-
-    if (req.user && req.user.role === 'admin') {
-      return res.status(400).json({ message: 'Admin users cannot submit leave requests.' });
-    }
+    const isAdmin = req.user && req.user.role === 'admin';
 
     if (startDate && endDate && new Date(startDate) > new Date(endDate)) {
       return res.status(400).json({ message: 'Start date cannot be later than end date.' });
     }
 
-    if (isLeaveDatePassed(startDate, endDate)) {
-      return res.status(400).json({ message: 'Cannot apply for leave for dates that have already passed.' });
+    const dateCheck = isLeaveDatePassed(startDate, endDate, leaveType);
+    if (dateCheck && dateCheck.passed) {
+      return res.status(400).json({ message: dateCheck.error || 'Cannot apply for leave for dates that have already passed.' });
     }
 
     // 🛡️ OVERLAP CHECK: Ensure user does not already have an active leave for the selected dates
@@ -589,49 +587,67 @@ exports.applyLeave = async (req, res) => {
     const employee = await User.findById(req.user.id);
     if (!employee) return res.status(404).json({ message: 'User not found' });
 
-    // Validate remaining leave balance for requested category
-    const check = await checkUserLeaveBalance(req.user.id, leaveType, totalDays || 1);
-    if (!check.isSufficient) {
-      return res.status(400).json({
-        message: `Not enough ${check.categoryName} balance! Available: ${check.remainingBalance} day(s), Requested: ${totalDays || 1} day(s).`
-      });
+    // Validate remaining leave balance for requested category (Admins have flexible balance)
+    if (!isAdmin) {
+      const check = await checkUserLeaveBalance(req.user.id, leaveType, totalDays || 1);
+      if (!check.isSufficient) {
+        return res.status(400).json({
+          message: `Not enough ${check.categoryName} balance! Available: ${check.remainingBalance} day(s), Requested: ${totalDays || 1} day(s).`
+        });
+      }
     }
 
-    const managerUserId = await getReportingManagerUserId(employee);
+    const managerUserId = isAdmin ? null : await getReportingManagerUserId(employee);
+    const initialStatus = isAdmin ? 'approved' : 'pending';
 
     const leave = await Leave.create({
       user: req.user.id,
       managerId: managerUserId,
+      hrId: isAdmin ? req.user.id : undefined,
       leaveType: leaveType.toLowerCase(),
       startDate,
       endDate,
       reason,
       totalDays: totalDays || 1,
-      status: 'pending'
+      status: initialStatus
     });
 
     const LeaveHistory = require('../models/LeaveHistory');
     await LeaveHistory.create({
       leaveId: leave._id,
       actorId: req.user.id,
-      actorRole: req.user.role || 'employee',
-      action: 'Created',
+      actorRole: req.user.role || (isAdmin ? 'admin' : 'employee'),
+      action: isAdmin ? 'Approved' : 'Created',
       oldStatus: null,
-      newStatus: 'pending',
-      reason: reason || ''
+      newStatus: initialStatus,
+      reason: isAdmin ? 'Auto-approved by default for Admin' : (reason || '')
     });
+
+    // If Admin, immediately sync leave effects and update leave balance
+    if (isAdmin) {
+      await updateLeaveBalanceForUser(req.user.id, new Date(startDate));
+      await syncApprovedLeaveEffects(
+        req.user.id,
+        startDate,
+        endDate,
+        leaveType,
+        req.app?.get ? req.app.get('io') : null
+      );
+    }
 
     await AuditLog.create({
       userId: employee._id,
-      userName: employee.name || 'Unknown User',
-      userRole: employee.role || 'employee',
+      userName: employee.name || (isAdmin ? 'Admin' : 'Unknown User'),
+      userRole: employee.role || (isAdmin ? 'admin' : 'employee'),
       action: 'Apply Leave',
       module: 'Leave',
-      description: `${employee.name || 'User'} applied for ${totalDays || 1} day(s) of ${leaveType} leave.`,
+      description: isAdmin
+        ? `${employee.name || 'Admin'} applied for ${totalDays || 1} day(s) of ${leaveType} leave (Auto-Approved).`
+        : `${employee.name || 'User'} applied for ${totalDays || 1} day(s) of ${leaveType} leave.`,
       status: 'Success'
     });
 
-    const senderRoleLabel = employee.role === 'manager' ? 'Manager' : employee.role === 'hr' ? 'HR' : 'Employee';
+    const senderRoleLabel = employee.role === 'admin' ? 'Admin' : employee.role === 'manager' ? 'Manager' : employee.role === 'hr' ? 'HR' : 'Employee';
     const notificationMessage = `${senderRoleLabel} ${employee.name} has submitted a leave request.`;
     const notificationSubject = `${senderRoleLabel} Leave Request Submitted`;
 

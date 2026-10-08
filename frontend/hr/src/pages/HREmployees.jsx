@@ -537,7 +537,6 @@ const HREmployees = () => {
               <User size={20} />
             </div>
             <h3 className="text-sm font-semibold text-gray-900 dark:text-white">No employees found</h3>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Try adjusting your filters or search terms.</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
