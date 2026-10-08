@@ -426,8 +426,8 @@ const MeetingRequestsTable = ({
       {/* ── Table Header & Controls ── */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-4">
         <div>
-          <h3 className="text-sm sm:text-base font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
-            <Timer size={18} className="text-emerald-500 shrink-0" />
+          <h3 className="text-[14px] font-extrabold text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
+            <Timer size={17} className="text-emerald-500 shrink-0" />
             <span>Meeting & Offline Time Requests</span>
             <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/40">
               {total}

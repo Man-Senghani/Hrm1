@@ -129,6 +129,7 @@ const CreateUser = () => {
     email: '',
     personalEmail: '',
     phone: '',
+    familyContact: '',
     password: '',
     role: 'employee',
     department: '',
@@ -184,25 +185,27 @@ const CreateUser = () => {
     return list;
   }, [formData.department, formData.designation, customDesignations]);
 
+  const isDeptAdmin = (formData.department || '').trim().toLowerCase() === 'admin' || (formData.role || '').trim().toLowerCase() === 'admin';
+
   const filteredManagerOptions = useMemo(() => {
-    const isDeptHr = (formData.department || '').toLowerCase() === 'hr';
-    const isElevated = isManagerChecked || (formData.role || '').toLowerCase() === 'hr' || (formData.role || '').toLowerCase() === 'manager';
-    if (isElevated || isDeptHr) {
+    if (isDeptAdmin) {
       const adminList = managers.filter(m => (m.role || '').toLowerCase() === 'admin');
-      const targetList = adminList.length > 0 ? adminList : managers;
-      return targetList.map(m => ({
+      return adminList.map(m => ({
         value: m._id,
         label: `${m.name || m.fullName} (Admin)`
       }));
     } else {
-      const managerList = managers.filter(m => (m.role || '').toLowerCase() === 'manager');
-      const targetList = managerList.length > 0 ? managerList : managers;
-      return targetList.map(m => ({
-        value: m._id,
-        label: `${m.name || m.fullName} (${(m.role || 'Manager').toUpperCase()})`
-      }));
+      const allowedRoles = ['admin', 'hr', 'manager'];
+      const targetList = managers.filter(m => allowedRoles.includes((m.role || '').toLowerCase()));
+      return targetList.map(m => {
+        const roleLabel = (m.role || '').toLowerCase() === 'admin' ? 'Admin' : (m.role || '').toLowerCase() === 'hr' ? 'HR' : 'Manager';
+        return {
+          value: m._id,
+          label: `${m.name || m.fullName} (${roleLabel})`
+        };
+      });
     }
-  }, [isManagerChecked, formData.role, formData.department, managers]);
+  }, [isDeptAdmin, managers]);
 
   const handleManagerToggle = (checked) => {
     setIsManagerChecked(checked);
@@ -214,7 +217,7 @@ const CreateUser = () => {
     setFormData(prev => ({
       ...prev,
       role: newRole,
-      reportingManager: (newRole === 'admin') ? '' : prev.reportingManager
+      reportingManager: prev.reportingManager
     }));
   };
 
@@ -423,9 +426,9 @@ const CreateUser = () => {
       }
     }
 
-    if (name === 'phone') {
+    if (name === 'phone' || name === 'familyContact') {
       if (value && !/^[0-9]*$/.test(value)) {
-        newErrors.phone = 'Only numbers (0-9) are allowed.';
+        newErrors[name] = 'Only numbers (0-9) are allowed.';
         value = value.replace(/[^0-9]/g, '');
       }
       if (value.length > 10) {
@@ -477,7 +480,7 @@ const CreateUser = () => {
         department: value,
         designation: newDesignation,
         role: autoRole,
-        reportingManager: isDeptAdmin ? '' : prev.reportingManager
+        reportingManager: prev.reportingManager
       }));
       return;
     }
@@ -563,6 +566,11 @@ const CreateUser = () => {
     } else if (formData.phone.length !== 10) {
       newErrors.phone = 'Phone Number must be exactly 10 digits.';
     }
+    if (!formData.familyContact) {
+      newErrors.familyContact = 'Family Contact is required.';
+    } else if (formData.familyContact.length !== 10) {
+      newErrors.familyContact = 'Family Contact must be exactly 10 digits.';
+    }
     if (!formData.password) {
       newErrors.password = 'Password is required.';
     } else {
@@ -591,8 +599,14 @@ const CreateUser = () => {
       }
     }
 
-    if (formData.role !== 'admin' && !formData.reportingManager) {
-      newErrors.reportingManager = 'Reporting Manager is required.';
+    if (!formData.reportingManager) {
+      if (isDeptAdmin) {
+        if (filteredManagerOptions.length > 0) {
+          newErrors.reportingManager = 'Reporting Admin is required.';
+        }
+      } else {
+        newErrors.reportingManager = 'Reporting Manager is required.';
+      }
     }
     if (!formData.address) newErrors.address = 'Local Address is required.';
     if (!formData.permanentAddress) newErrors.permanentAddress = 'Permanent Address is required.';
@@ -616,12 +630,13 @@ const CreateUser = () => {
         department: formData.department,
         designation: (formData.designation || '').trim(),
         phone: formData.phone,
+        familyContact: formData.familyContact,
         gender: formData.gender,
         address: formData.address,
         permanentAddress: formData.permanentAddress,
         dob: formData.dob,
         joinDate: formData.joinDate,
-        reportingManager: formData.role !== 'admin' ? formData.reportingManager : null
+        reportingManager: formData.reportingManager || null
       };
 
       // 1. Create User Core
@@ -860,6 +875,13 @@ const CreateUser = () => {
                 </div>
 
                 <div className="flex justify-between items-center text-xs">
+                  <span className="font-semibold text-slate-500 dark:text-slate-400">Family Contact</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-200">
+                    {formData.familyContact || 'Not specified'}
+                  </span>
+                </div>
+
+                <div className="flex justify-between items-center text-xs">
                   <span className="font-semibold text-slate-500 dark:text-slate-400">Gender</span>
                   <span className="font-bold text-slate-800 dark:text-slate-200">{formData.gender}</span>
                 </div>
@@ -874,15 +896,15 @@ const CreateUser = () => {
                   <span className="font-bold text-slate-800 dark:text-slate-200">{formatDDMMYYYY(formData.dob) || 'Not selected'}</span>
                 </div>
 
-                {formData.role !== 'admin' && (
-                  <div className="flex justify-between items-center text-xs">
-                    <span className="font-semibold text-slate-500 dark:text-slate-400">Manager</span>
-                    <span className="font-bold text-slate-800 dark:text-slate-200 truncate max-w-[160px]">
-                      {managers.find(m => m._id === formData.reportingManager)?.name ||
-                       managers.find(m => m._id === formData.reportingManager)?.fullName || 'Not assigned'}
-                    </span>
-                  </div>
-                )}
+                <div className="flex justify-between items-center text-xs">
+                  <span className="font-semibold text-slate-500 dark:text-slate-400">
+                    {isDeptAdmin ? 'Reporting Admin' : 'Reporting Manager'}
+                  </span>
+                  <span className="font-bold text-slate-800 dark:text-slate-200 truncate max-w-[160px]">
+                    {managers.find(m => m._id === formData.reportingManager)?.name ||
+                     managers.find(m => m._id === formData.reportingManager)?.fullName || 'Not assigned'}
+                  </span>
+                </div>
 
                 <div className="flex flex-col text-xs pt-1 space-y-2">
                   <div>
@@ -1034,6 +1056,21 @@ const CreateUser = () => {
                     />
                   </div>
                   {errors.phone && <p className="text-red-500 text-[10px] font-semibold">{errors.phone}</p>}
+                </div>
+
+                {/* Family Contact */}
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-extrabold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Family Contact <span className="text-red-500">*</span></label>
+                  <div className="relative">
+                    <Phone size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      required name="familyContact" value={formData.familyContact} onChange={handleChange}
+                      autoComplete="off"
+                      className="w-full h-11 pl-10 pr-3.5 bg-white dark:bg-[#1a1714] border border-slate-200 dark:border-[#38352e] rounded-xl text-xs font-semibold text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-[#00a76b] focus:ring-1 focus:ring-[#00a76b] transition-all"
+                      placeholder="10-digit family contact" maxLength="10"
+                    />
+                  </div>
+                  {errors.familyContact && <p className="text-red-500 text-[10px] font-semibold">{errors.familyContact}</p>}
                 </div>
 
                 {/* Password */}
@@ -1202,23 +1239,21 @@ const CreateUser = () => {
                 </div>
               </div>
 
-              {/* Reporting Manager */}
-              {formData.role?.toLowerCase() !== 'admin' && formData.department?.toLowerCase() !== 'admin' && (
-                <div className="space-y-1.5 max-w-md">
-                  <label className="text-[11px] font-extrabold text-slate-600 dark:text-slate-300 uppercase tracking-wider">
-                    {((formData.department || '').toLowerCase() === 'hr' || isManagerChecked || (formData.role || '').toLowerCase() === 'manager') ? 'Reporting To (Admin)' : 'Reporting Manager'} <span className="text-red-500">*</span>
-                  </label>
-                  <StyledSelect
-                    name="reportingManager"
-                    value={formData.reportingManager}
-                    onChange={handleChange}
-                    placeholder={((formData.department || '').toLowerCase() === 'hr' || isManagerChecked || (formData.role || '').toLowerCase() === 'manager') ? "Select Admin" : "Select Manager"}
-                    error={errors.reportingManager}
-                    options={filteredManagerOptions}
-                  />
-                  {errors.reportingManager && <p className="text-red-500 text-[10px] font-semibold">{errors.reportingManager}</p>}
-                </div>
-              )}
+              {/* Reporting Manager / Reporting Admin */}
+              <div className="space-y-1.5 max-w-md">
+                <label className="text-[11px] font-extrabold text-slate-600 dark:text-slate-300 uppercase tracking-wider">
+                  {isDeptAdmin ? 'Reporting Admin' : 'Reporting Manager'} <span className="text-red-500">*</span>
+                </label>
+                <StyledSelect
+                  name="reportingManager"
+                  value={formData.reportingManager}
+                  onChange={handleChange}
+                  placeholder={isDeptAdmin ? "Select Admin" : "Select Manager"}
+                  error={errors.reportingManager}
+                  options={filteredManagerOptions}
+                />
+                {errors.reportingManager && <p className="text-red-500 text-[10px] font-semibold">{errors.reportingManager}</p>}
+              </div>
 
               {/* Residential Addresses */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">

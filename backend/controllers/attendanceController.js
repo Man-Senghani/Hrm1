@@ -513,7 +513,7 @@ const buildEmployeeAttendanceHistory = async (userId) => {
 };
 
 // @desc    Get Attendance based on Role Hierarchy
-const getManagerSubordinateUserIds = async (managerUserId) => {
+const getManagerSubordinateUserIds = async (managerUserId, includeSelf = false) => {
   const User = require('../models/User');
   const Employee = require('../models/Employee');
 
@@ -544,10 +544,11 @@ const getManagerSubordinateUserIds = async (managerUserId) => {
     combined = unassigned.map(u => u._id.toString());
   }
 
-  // Include manager's own user ID so manager check-in/out data appears in Attendance History
   const mgrStr = managerUserId ? managerUserId.toString() : '';
-  if (mgrStr && !combined.includes(mgrStr)) {
+  if (includeSelf && mgrStr && !combined.includes(mgrStr)) {
     combined.push(mgrStr);
+  } else if (!includeSelf && mgrStr) {
+    combined = combined.filter(id => id !== mgrStr);
   }
 
   return combined;
@@ -569,15 +570,19 @@ exports.getAttendance = async (req, res) => {
     let query = {};
 
     if (role === 'admin') {
-      query = {};
+      query = { user: { $ne: userId } };
     } else if (role === 'hr') {
       const User = require('../models/User');
-      const nonAdminUsers = await User.find({ role: { $not: /admin/i } }).select('_id');
+      const nonAdminUsers = await User.find({ 
+        role: { $nin: ['admin', 'superadmin'] },
+        _id: { $ne: userId }
+      }).select('_id');
       const hrUserIds = nonAdminUsers.map(u => u._id.toString());
       query = { user: { $in: hrUserIds } };
     } else if (role === 'manager') {
-      const empIds = await getManagerSubordinateUserIds(userId);
-      query = { user: { $in: empIds } };
+      const empIds = await getManagerSubordinateUserIds(userId, false);
+      const filteredEmpIds = empIds.filter(id => id.toString() !== userId.toString());
+      query = { user: { $in: filteredEmpIds } };
     }
 
     let records = await Attendance.find(query)
@@ -588,20 +593,32 @@ exports.getAttendance = async (req, res) => {
       records = records.filter(r => {
         const userRole = (r.user?.role || '').toLowerCase();
         const userName = (r.user?.name || '').toLowerCase();
-        return !userRole.includes('admin') && !userName.includes('admin');
+        const recUserId = r.user?._id ? r.user._id.toString() : (typeof r.user === 'string' ? r.user : '');
+        return !userRole.includes('admin') && !userName.includes('admin') && recUserId !== userId.toString();
+      });
+    } else if (role === 'admin' || role === 'manager') {
+      records = records.filter(r => {
+        const recUserId = r.user?._id ? r.user._id.toString() : (typeof r.user === 'string' ? r.user : '');
+        return recUserId !== userId.toString();
       });
     }
 
     const Leave = require('../models/Leave');
     let leaveQuery = { status: 'approved' };
     if (role === 'manager') {
-      const empIds = await getManagerSubordinateUserIds(userId);
-      leaveQuery.user = { $in: empIds };
+      const empIds = await getManagerSubordinateUserIds(userId, false);
+      const filteredEmpIds = empIds.filter(id => id.toString() !== userId.toString());
+      leaveQuery.user = { $in: filteredEmpIds };
     } else if (role === 'hr') {
       const User = require('../models/User');
-      const users = await User.find({ role: { $not: /admin/i } }).select('_id');
+      const users = await User.find({ 
+        role: { $nin: ['admin', 'superadmin'] },
+        _id: { $ne: userId }
+      }).select('_id');
       const hrUserIds = users.map(u => u._id.toString());
       leaveQuery.user = { $in: hrUserIds };
+    } else if (role === 'admin') {
+      leaveQuery.user = { $ne: userId };
     }
 
     const approvedLeaves = await Leave.find(leaveQuery)
@@ -653,11 +670,24 @@ exports.getAttendance = async (req, res) => {
     // Generate Absent records for users who did not check in or take leave on past working days
     const User = require('../models/User');
     let targetUsers = [];
-    if (role === 'admin' || role === 'hr') {
-      targetUsers = await User.find({ role: { $not: /admin/i } }).select('_id name email role joinDate createdAt').lean();
+    if (role === 'admin') {
+      targetUsers = await User.find({ 
+        _id: { $ne: userId },
+        status: { $ne: 'inactive' }
+      }).select('_id name email role joinDate createdAt').lean();
+    } else if (role === 'hr') {
+      targetUsers = await User.find({ 
+        role: { $nin: ['admin', 'superadmin'] },
+        _id: { $ne: userId },
+        status: { $ne: 'inactive' }
+      }).select('_id name email role joinDate createdAt').lean();
     } else if (role === 'manager') {
-      const empIds = await getManagerSubordinateUserIds(userId);
-      targetUsers = await User.find({ _id: { $in: empIds } }).select('_id name email role joinDate createdAt').lean();
+      const empIds = await getManagerSubordinateUserIds(userId, false);
+      const filteredEmpIds = empIds.filter(id => id.toString() !== userId.toString());
+      targetUsers = await User.find({ 
+        _id: { $in: filteredEmpIds },
+        status: { $ne: 'inactive' }
+      }).select('_id name email role joinDate createdAt').lean();
     }
 
     const todayObj = new Date();
@@ -864,11 +894,24 @@ exports.getWeeklySummary = async (req, res) => {
     if (isEmployee) {
       eligibleUserIds = [req.user.id.toString()];
     } else if (req.user.role === 'manager') {
-      eligibleUserIds = await getManagerSubordinateUserIds(req.user.id);
-      if (!eligibleUserIds.includes(req.user.id.toString())) {
-        eligibleUserIds.push(req.user.id.toString());
-      }
-    } else if (req.user.role === 'hr' || req.user.role === 'admin') {
+      eligibleUserIds = await getManagerSubordinateUserIds(req.user.id, false);
+      eligibleUserIds = eligibleUserIds.filter(id => id.toString() !== req.user.id.toString());
+    } else if (req.user.role === 'hr') {
+      const nonAdminUsers = await User.find({ 
+        role: { $nin: ['admin', 'superadmin'] },
+        status: { $ne: 'inactive' },
+        _id: { $ne: req.user.id }
+      }).select('_id');
+      const nonAdminIds = new Set(nonAdminUsers.map(u => u._id.toString()));
+
+      const activeEmps = await Employee.find({ status: { $ne: 'inactive' } }).select('userId user');
+      const empUserIds = activeEmps
+        .map(e => e.userId?.toString() || e.user?.toString())
+        .filter(id => id && nonAdminIds.has(id.toString()));
+
+      eligibleUserIds = empUserIds.length > 0 ? Array.from(new Set(empUserIds)) : Array.from(nonAdminIds);
+      eligibleUserIds = eligibleUserIds.filter(id => id.toString() !== req.user.id.toString());
+    } else if (req.user.role === 'admin') {
       const activeEmps = await Employee.find({ status: { $ne: 'inactive' } }).select('userId user');
       const empUserIds = activeEmps.map(e => e.userId?.toString() || e.user?.toString()).filter(Boolean);
       if (empUserIds.length > 0) {
@@ -877,6 +920,7 @@ exports.getWeeklySummary = async (req, res) => {
         const users = await User.find({ status: { $ne: 'inactive' } }).select('_id');
         eligibleUserIds = users.map(u => u._id.toString());
       }
+      eligibleUserIds = eligibleUserIds.filter(id => id.toString() !== req.user.id.toString());
     }
 
     const totalEmployees = eligibleUserIds.length || 1;
@@ -1512,7 +1556,7 @@ exports.getTeamStats = async (req, res) => {
     const Employee = require('../models/Employee');
     const Leave = require('../models/Leave');
 
-    if (role === 'admin' || role === 'hr') {
+    if (role === 'admin') {
       const activeEmps = await Employee.find({ status: { $ne: 'inactive' } }).select('userId user');
       const empUserIds = activeEmps.map(e => e.userId?.toString() || e.user?.toString()).filter(Boolean);
       if (empUserIds.length > 0) {
@@ -1521,8 +1565,29 @@ exports.getTeamStats = async (req, res) => {
         const users = await User.find({ status: { $ne: 'inactive' } }).select('_id');
         eligibleUserIds = users.map(u => u._id.toString());
       }
+      eligibleUserIds = eligibleUserIds.filter(id => id.toString() !== userId.toString());
+    } else if (role === 'hr') {
+      const nonAdminUsers = await User.find({ 
+        role: { $nin: ['admin', 'superadmin'] },
+        status: { $ne: 'inactive' },
+        _id: { $ne: userId }
+      }).select('_id');
+      const nonAdminIds = new Set(nonAdminUsers.map(u => u._id.toString()));
+
+      const activeEmps = await Employee.find({ status: { $ne: 'inactive' } }).select('userId user');
+      const empUserIds = activeEmps
+        .map(e => e.userId?.toString() || e.user?.toString())
+        .filter(id => id && nonAdminIds.has(id.toString()));
+
+      if (empUserIds.length > 0) {
+        eligibleUserIds = Array.from(new Set(empUserIds));
+      } else {
+        eligibleUserIds = Array.from(nonAdminIds);
+      }
+      eligibleUserIds = eligibleUserIds.filter(id => id.toString() !== userId.toString());
     } else if (role === 'manager') {
-      eligibleUserIds = await getManagerSubordinateUserIds(userId);
+      const subIds = await getManagerSubordinateUserIds(userId, false);
+      eligibleUserIds = subIds.filter(id => id.toString() !== userId.toString());
     } else {
       return res.status(403).json({ message: 'Not authorized for team stats' });
     }

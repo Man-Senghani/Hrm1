@@ -99,6 +99,7 @@ const Profile = () => {
   const joinDateRaw = safeUserData.joinDate;
   const joinDate = joinDateRaw ? new Date(joinDateRaw).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
   const phone = safeUserData.phone || '';
+  const familyContact = safeUserData.familyContact || '';
   const empType = safeUserData.employmentType || '';
   const gender = safeUserData.gender || '';
   const localAddress = safeUserData.localAddress || safeUserData.address || '';
@@ -168,8 +169,28 @@ const Profile = () => {
   };
 
   const handleSaveProfile = async () => {
+    if (!editForm.fullName?.trim()) {
+      toast.error('Full Name is a required field.');
+      return;
+    }
+
     if (!editForm.personalEmail?.trim() || !editForm.phone?.trim()) {
       toast.error('Personal Email and Phone Number are required fields.');
+      return;
+    }
+
+    if (!editForm.familyContact?.trim()) {
+      toast.error('Family Contact is a required field.');
+      return;
+    }
+
+    if (!editForm.localAddress?.trim()) {
+      toast.error('Local Address is a required field.');
+      return;
+    }
+
+    if (!editForm.permanentAddress?.trim()) {
+      toast.error('Permanent Address is a required field.');
       return;
     }
 
@@ -183,8 +204,13 @@ const Profile = () => {
       return;
     }
 
-    if (editForm.phone && !/^\d+$/.test(editForm.phone)) {
-      toast.error('Phone number must contain only numeric values.');
+    if (editForm.phone && (!/^\d+$/.test(editForm.phone) || editForm.phone.length !== 10)) {
+      toast.error('Phone number must be exactly 10 digits.');
+      return;
+    }
+
+    if (editForm.familyContact && (!/^\d+$/.test(editForm.familyContact) || editForm.familyContact.length !== 10)) {
+      toast.error('Family Contact number must be exactly 10 digits.');
       return;
     }
 
@@ -209,6 +235,7 @@ const Profile = () => {
         fullName: editForm.fullName,
         personalEmail: editForm.personalEmail,
         phone: editForm.phone,
+        familyContact: editForm.familyContact,
         address: editForm.localAddress,
         localAddress: editForm.localAddress,
         permanentAddress: editForm.permanentAddress,
@@ -224,6 +251,7 @@ const Profile = () => {
           fullName: editForm.fullName,
           personalEmail: editForm.personalEmail,
           phone: editForm.phone,
+          familyContact: editForm.familyContact,
           address: editForm.localAddress,
           localAddress: editForm.localAddress,
           permanentAddress: editForm.permanentAddress,
@@ -245,6 +273,7 @@ const Profile = () => {
       fullName: fullName || '',
       personalEmail: personalEmail || '',
       phone: phone || '',
+      familyContact: familyContact || '',
       localAddress: localAddress || '',
       permanentAddress: permanentAddress || '',
       profileImage: null,
@@ -505,42 +534,65 @@ const Profile = () => {
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px 24px' }}>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <label style={{ fontSize: 11, fontWeight: 700, color: isDark ? '#a3b3af' : '#939084', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Full name</label>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: isDark ? '#a3b3af' : '#939084', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    Full name <span className="text-red-500" style={{ color: '#ef4444', marginLeft: 4 }}>*</span>
+                  </label>
                   <input type="text" readOnly={!isEditing} value={isEditing ? editForm.fullName : fullName} onChange={e => setEditForm({...editForm, fullName: e.target.value})} className="verdant-input" style={{ backgroundColor: isEditing ? (isDark ? '#162722' : '#fff') : undefined }} />
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <label style={{ fontSize: 11, fontWeight: 700, color: isDark ? '#a3b3af' : '#939084', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Email</label>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: isDark ? '#a3b3af' : '#939084', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    Email <span className="text-red-500" style={{ color: '#ef4444', marginLeft: 4 }}>*</span>
+                  </label>
                   <input type="email" readOnly value={userEmail} className="verdant-input" style={{ opacity: 0.7 }} />
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <label style={{ fontSize: 11, fontWeight: 700, color: isDark ? '#a3b3af' : '#939084', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Personal Email</label>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: isDark ? '#a3b3af' : '#939084', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    Personal Email <span className="text-red-500" style={{ color: '#ef4444', marginLeft: 4 }}>*</span>
+                  </label>
                   <input type="email" readOnly={!isEditing} value={isEditing ? editForm.personalEmail : personalEmail} onChange={e => setEditForm({...editForm, personalEmail: e.target.value})} className="verdant-input" style={{ backgroundColor: isEditing ? (isDark ? '#162722' : '#fff') : undefined }} />
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <label style={{ fontSize: 11, fontWeight: 700, color: isDark ? '#a3b3af' : '#939084', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Phone</label>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: isDark ? '#a3b3af' : '#939084', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    Phone <span className="text-red-500" style={{ color: '#ef4444', marginLeft: 4 }}>*</span>
+                  </label>
                   <input type="text" maxLength="10" readOnly={!isEditing} value={isEditing ? editForm.phone : phone} onChange={e => setEditForm({...editForm, phone: e.target.value.replace(/\D/g, '')})} className="verdant-input" style={{ backgroundColor: isEditing ? (isDark ? '#162722' : '#fff') : undefined }} />
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <label style={{ fontSize: 11, fontWeight: 700, color: isDark ? '#a3b3af' : '#939084', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Date of Birth</label>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: isDark ? '#a3b3af' : '#939084', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    Family Contact <span className="text-red-500" style={{ color: '#ef4444', marginLeft: 4 }}>*</span>
+                  </label>
+                  <input type="text" maxLength="10" readOnly={!isEditing} value={isEditing ? editForm.familyContact : familyContact} onChange={e => setEditForm({...editForm, familyContact: e.target.value.replace(/\D/g, '')})} className="verdant-input" style={{ backgroundColor: isEditing ? (isDark ? '#162722' : '#fff') : undefined }} />
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: isDark ? '#a3b3af' : '#939084', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    Date of Birth <span className="text-red-500" style={{ color: '#ef4444', marginLeft: 4 }}>*</span>
+                  </label>
                   <input type="text" readOnly value={birthdate} className="verdant-input" style={{ opacity: 0.7 }} />
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <label style={{ fontSize: 11, fontWeight: 700, color: isDark ? '#a3b3af' : '#939084', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Gender</label>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: isDark ? '#a3b3af' : '#939084', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    Gender <span className="text-red-500" style={{ color: '#ef4444', marginLeft: 4 }}>*</span>
+                  </label>
                   <input type="text" readOnly value={gender} className="verdant-input" style={{ opacity: 0.7 }} />
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <label style={{ fontSize: 11, fontWeight: 700, color: isDark ? '#a3b3af' : '#939084', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Local Address</label>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: isDark ? '#a3b3af' : '#939084', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    Local Address <span className="text-red-500" style={{ color: '#ef4444', marginLeft: 4 }}>*</span>
+                  </label>
                   <input type="text" maxLength="250" readOnly={!isEditing} value={isEditing ? editForm.localAddress : localAddress} onChange={e => setEditForm({...editForm, localAddress: e.target.value.replace(/[^a-zA-Z0-9\s,.\-/#]/g, '')})} className="verdant-input" style={{ backgroundColor: isEditing ? (isDark ? '#162722' : '#fff') : undefined }} />
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <label style={{ fontSize: 11, fontWeight: 700, color: isDark ? '#a3b3af' : '#939084', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Permanent Address</label>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: isDark ? '#a3b3af' : '#939084', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    Permanent Address <span className="text-red-500" style={{ color: '#ef4444', marginLeft: 4 }}>*</span>
+                  </label>
                   <input type="text" maxLength="250" readOnly={!isEditing} value={isEditing ? editForm.permanentAddress : permanentAddress} onChange={e => setEditForm({...editForm, permanentAddress: e.target.value.replace(/[^a-zA-Z0-9\s,.\-/#]/g, '')})} className="verdant-input" style={{ backgroundColor: isEditing ? (isDark ? '#162722' : '#fff') : undefined }} />
                 </div>
               </div>
@@ -557,24 +609,32 @@ const Profile = () => {
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <label style={{ fontSize: 11, fontWeight: 700, color: isDark ? '#a3b3af' : '#939084', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Department</label>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: isDark ? '#a3b3af' : '#939084', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    Department <span className="text-red-500" style={{ color: '#ef4444', marginLeft: 4 }}>*</span>
+                  </label>
                   <input type="text" readOnly value={userDept} className="verdant-input" />
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <label style={{ fontSize: 11, fontWeight: 700, color: isDark ? '#a3b3af' : '#939084', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Designation</label>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: isDark ? '#a3b3af' : '#939084', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    Designation <span className="text-red-500" style={{ color: '#ef4444', marginLeft: 4 }}>*</span>
+                  </label>
                   <input type="text" readOnly value={displayDesignation} className="verdant-input" />
                 </div>
 
                 {showReportingManager && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    <label style={{ fontSize: 11, fontWeight: 700, color: isDark ? '#a3b3af' : '#939084', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Reporting Manager</label>
+                    <label style={{ fontSize: 11, fontWeight: 700, color: isDark ? '#a3b3af' : '#939084', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      Reporting Manager <span className="text-red-500" style={{ color: '#ef4444', marginLeft: 4 }}>*</span>
+                    </label>
                     <input type="text" readOnly value={reportingManagerName} className="verdant-input" />
                   </div>
                 )}
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <label style={{ fontSize: 11, fontWeight: 700, color: isDark ? '#a3b3af' : '#939084', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Joining Date</label>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: isDark ? '#a3b3af' : '#939084', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    Joining Date <span className="text-red-500" style={{ color: '#ef4444', marginLeft: 4 }}>*</span>
+                  </label>
                   <input type="text" readOnly value={joinDate} className="verdant-input" />
                 </div>
 

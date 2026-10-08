@@ -143,6 +143,7 @@ const EmployeeForm = () => {
     personalEmail: '',
     password: '',
     phone: '',
+    familyContact: '',
     gender: 'Male',
     dob: '',
     address: '',
@@ -277,25 +278,28 @@ const EmployeeForm = () => {
     return list;
   }, [formData.department, formData.designation, customDesignations]);
 
+  const isDeptAdmin = (formData.department || '').trim().toLowerCase() === 'admin' || (formData.role || '').trim().toLowerCase() === 'admin';
+
   const filteredManagerOptions = useMemo(() => {
-    const isDeptHr = (formData.department || '').toLowerCase() === 'hr';
-    const isElevated = isManagerChecked || (formData.role || '').toLowerCase() === 'hr' || (formData.role || '').toLowerCase() === 'manager';
-    if (isElevated || isDeptHr) {
-      const adminList = managers.filter(m => (m.role || '').toLowerCase() === 'admin');
-      const targetList = adminList.length > 0 ? adminList : managers;
-      return targetList.map(m => ({
+    const editUserId = employeeData?.userId?._id || employeeData?.userId || employeeData?._id;
+    if (isDeptAdmin) {
+      const adminList = managers.filter(m => (m.role || '').toLowerCase() === 'admin' && m._id !== editUserId);
+      return adminList.map(m => ({
         value: m._id,
         label: `${m.name || m.fullName} (Admin)`
       }));
     } else {
-      const managerList = managers.filter(m => (m.role || '').toLowerCase() === 'manager');
-      const targetList = managerList.length > 0 ? managerList : managers;
-      return targetList.map(m => ({
-        value: m._id,
-        label: `${m.name || m.fullName} (${(m.role || 'Manager').toUpperCase()})`
-      }));
+      const allowedRoles = ['admin', 'hr', 'manager'];
+      const targetList = managers.filter(m => allowedRoles.includes((m.role || '').toLowerCase()) && m._id !== editUserId);
+      return targetList.map(m => {
+        const roleLabel = (m.role || '').toLowerCase() === 'admin' ? 'Admin' : (m.role || '').toLowerCase() === 'hr' ? 'HR' : 'Manager';
+        return {
+          value: m._id,
+          label: `${m.name || m.fullName} (${roleLabel})`
+        };
+      });
     }
-  }, [isManagerChecked, formData.role, formData.department, managers]);
+  }, [isDeptAdmin, managers, employeeData]);
 
   const handleManagerToggle = (checked) => {
     setIsManagerChecked(checked);
@@ -307,7 +311,7 @@ const EmployeeForm = () => {
     setFormData(prev => ({
       ...prev,
       role: newRole,
-      managerId: (newRole === 'admin') ? '' : prev.managerId
+      managerId: prev.managerId
     }));
   };
 
@@ -463,6 +467,7 @@ const EmployeeForm = () => {
             personalEmail: emp.personalEmail || '',
             password: '',
             phone: emp.phone || '',
+            familyContact: emp.familyContact || '',
             gender: emp.gender || 'Male',
             dob: emp.dob ? emp.dob.split('T')[0] : '',
             address: emp.address || '',
@@ -509,9 +514,9 @@ const EmployeeForm = () => {
       }
     }
 
-    if (name === 'phone') {
+    if (name === 'phone' || name === 'familyContact') {
       if (value && !/^[0-9]*$/.test(value)) {
-        newErrors.phone = 'Only numbers (0-9) are allowed.';
+        newErrors[name] = 'Only numbers (0-9) are allowed.';
         value = value.replace(/[^0-9]/g, '');
       }
       if (value.length > 10) {
@@ -563,7 +568,7 @@ const EmployeeForm = () => {
         department: value,
         designation: newDesignation,
         role: autoRole,
-        managerId: isDeptAdmin ? '' : prev.managerId
+        managerId: prev.managerId
       }));
     } else if (name === 'designation') {
       const isDeptAdmin = (formData.department || '').trim().toLowerCase() === 'admin';
@@ -664,6 +669,12 @@ const EmployeeForm = () => {
       newErrors.phone = 'Phone Number must be exactly 10 digits.';
     }
 
+    if (!formData.familyContact) {
+      newErrors.familyContact = 'Family Contact is required.';
+    } else if (formData.familyContact.length !== 10) {
+      newErrors.familyContact = 'Family Contact must be exactly 10 digits.';
+    }
+
     if (!isEdit && !formData.password) {
       newErrors.password = 'Password is required.';
     } else if (formData.password) {
@@ -692,8 +703,14 @@ const EmployeeForm = () => {
       }
     }
 
-    if (formData.role?.toLowerCase() !== 'admin' && !formData.managerId) {
-      newErrors.managerId = 'Reporting Manager is required.';
+    if (!formData.managerId) {
+      if (isDeptAdmin) {
+        if (filteredManagerOptions.length > 0) {
+          newErrors.managerId = 'Reporting Admin is required.';
+        }
+      } else {
+        newErrors.managerId = 'Reporting Manager is required.';
+      }
     }
     if (!formData.address) newErrors.address = 'Physical Address is required.';
 
@@ -715,12 +732,14 @@ const EmployeeForm = () => {
         department: formData.department,
         designation: formData.designation,
         phone: formData.phone,
+        familyContact: formData.familyContact,
         gender: formData.gender,
         address: formData.address,
         dob: formData.dob,
         joinDate: formData.joinDate,
         employmentType: formData.employmentType || 'Full-time',
-        managerId: formData.role?.toLowerCase() !== 'admin' ? formData.managerId : null
+        managerId: formData.managerId || null,
+        reportingManager: formData.managerId || null
       };
 
       if (formData.password) {
@@ -888,14 +907,6 @@ const EmployeeForm = () => {
             >
               ← Back
             </button>
-            <button
-              type="submit"
-              disabled={loading}
-              className="px-5 py-2.5 bg-[#00a76b] hover:bg-[#00915c] text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer uppercase tracking-wider shrink-0"
-            >
-              {loading ? <RefreshCw className="animate-spin" size={15} /> : <Save size={15} />}
-              <span>{loading ? 'Saving...' : (isEdit ? 'SAVE EMPLOYEE' : 'Save Employee')}</span>
-            </button>
           </div>
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -985,6 +996,13 @@ const EmployeeForm = () => {
                 </div>
 
                 <div className="flex justify-between items-center text-xs">
+                  <span className="font-semibold text-slate-500 dark:text-slate-400">Family Contact</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-200">
+                    {formData.familyContact || 'Not specified'}
+                  </span>
+                </div>
+
+                <div className="flex justify-between items-center text-xs">
                   <span className="font-semibold text-slate-500 dark:text-slate-400">Gender</span>
                   <span className="font-bold text-slate-800 dark:text-slate-200">{formData.gender}</span>
                 </div>
@@ -999,15 +1017,15 @@ const EmployeeForm = () => {
                   <span className="font-bold text-slate-800 dark:text-slate-200">{formatDDMMYYYY(formData.dob) || 'Not selected'}</span>
                 </div>
 
-                {!['hr', 'manager', 'admin'].includes(formData.role?.toLowerCase()) && (
-                  <div className="flex justify-between items-center text-xs">
-                    <span className="font-semibold text-slate-500 dark:text-slate-400">Manager</span>
-                    <span className="font-bold text-slate-800 dark:text-slate-200 truncate max-w-[160px]">
-                      {managers.find(m => m._id === formData.managerId)?.name ||
-                       managers.find(m => m._id === formData.managerId)?.fullName || 'Not assigned'}
-                    </span>
-                  </div>
-                )}
+                <div className="flex justify-between items-center text-xs">
+                  <span className="font-semibold text-slate-500 dark:text-slate-400">
+                    {isDeptAdmin ? 'Reporting Admin' : 'Reporting Manager'}
+                  </span>
+                  <span className="font-bold text-slate-800 dark:text-slate-200 truncate max-w-[160px]">
+                    {managers.find(m => m._id === formData.managerId)?.name ||
+                     managers.find(m => m._id === formData.managerId)?.fullName || 'Not assigned'}
+                  </span>
+                </div>
 
                 <div className="flex flex-col text-xs pt-1 space-y-2">
                   <div>
@@ -1153,6 +1171,20 @@ const EmployeeForm = () => {
                     />
                   </div>
                   {errors.phone && <p className="text-red-500 text-[10px] font-semibold">{errors.phone}</p>}
+                </div>
+
+                {/* Family Contact */}
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-extrabold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Family Contact <span className="text-red-500">*</span></label>
+                  <div className="relative">
+                    <Phone size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      required name="familyContact" value={formData.familyContact} onChange={handleChange}
+                      className="w-full h-11 pl-10 pr-3.5 bg-white dark:bg-[#1a1714] border border-slate-200 dark:border-[#38352e] rounded-xl text-xs font-semibold text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-[#00a76b] focus:ring-1 focus:ring-[#00a76b] transition-all"
+                      placeholder="10-digit family contact" maxLength="10"
+                    />
+                  </div>
+                  {errors.familyContact && <p className="text-red-500 text-[10px] font-semibold">{errors.familyContact}</p>}
                 </div>
 
                 {/* Password */}
@@ -1321,23 +1353,21 @@ const EmployeeForm = () => {
                 </div>
               </div>
 
-              {/* Reporting Manager */}
-              {formData.role?.toLowerCase() !== 'admin' && formData.department?.toLowerCase() !== 'admin' && (
-                <div className="space-y-1.5 max-w-md">
-                  <label className="text-[11px] font-extrabold text-slate-600 dark:text-slate-300 uppercase tracking-wider">
-                    {((formData.department || '').toLowerCase() === 'hr' || isManagerChecked || (formData.role || '').toLowerCase() === 'manager') ? 'Reporting To (Admin)' : 'Reporting Manager'} <span className="text-red-500">*</span>
-                  </label>
-                  <StyledSelect
-                    name="managerId"
-                    value={formData.managerId}
-                    onChange={handleChange}
-                    placeholder={((formData.department || '').toLowerCase() === 'hr' || isManagerChecked || (formData.role || '').toLowerCase() === 'manager') ? "Select Admin" : "Select Manager"}
-                    error={errors.managerId}
-                    options={filteredManagerOptions}
-                  />
-                  {errors.managerId && <p className="text-red-500 text-[10px] font-semibold">{errors.managerId}</p>}
-                </div>
-              )}
+              {/* Reporting Manager / Reporting Admin */}
+              <div className="space-y-1.5 max-w-md">
+                <label className="text-[11px] font-extrabold text-slate-600 dark:text-slate-300 uppercase tracking-wider">
+                  {isDeptAdmin ? 'Reporting Admin' : 'Reporting Manager'} <span className="text-red-500">*</span>
+                </label>
+                <StyledSelect
+                  name="managerId"
+                  value={formData.managerId}
+                  onChange={handleChange}
+                  placeholder={isDeptAdmin ? "Select Admin" : "Select Manager"}
+                  error={errors.managerId}
+                  options={filteredManagerOptions}
+                />
+                {errors.managerId && <p className="text-red-500 text-[10px] font-semibold">{errors.managerId}</p>}
+              </div>
 
               {/* Residential Addresses */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

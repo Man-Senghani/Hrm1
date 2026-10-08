@@ -3,7 +3,8 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import Login from '@shared/pages/Login';
 import ForgotPassword from '@shared/pages/ForgotPassword';
 import ResetPassword from '@shared/pages/ResetPassword';
-import { Toaster } from 'react-hot-toast';
+import toast, { Toaster, ToastBar } from 'react-hot-toast';
+import { X } from 'lucide-react';
 
 function App() {
   return (
@@ -16,7 +17,7 @@ function App() {
           style: {
             background: '#111827',
             color: '#f9fafb',
-            padding: '14px 18px',
+            padding: '12px 16px',
             borderRadius: '16px',
             fontSize: '13px',
             fontWeight: '600',
@@ -50,7 +51,54 @@ function App() {
             }
           }
         }}
-      />
+      >
+        {(t) => (
+          <ToastBar toast={t}>
+            {({ icon, message }) => (
+              <>
+                {icon}
+                {message}
+                {t.type !== 'loading' && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toast.dismiss(t.id);
+                    }}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      padding: '3px',
+                      marginLeft: '8px',
+                      borderRadius: '6px',
+                      color: 'currentColor',
+                      opacity: 0.75,
+                      background: 'transparent',
+                      border: 'none',
+                      cursor: 'pointer',
+                      flexShrink: 0,
+                      transition: 'all 0.15s ease'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.opacity = '1';
+                      e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.15)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.opacity = '0.75';
+                      e.currentTarget.style.backgroundColor = 'transparent';
+                    }}
+                    aria-label="Dismiss notification"
+                    title="Dismiss"
+                  >
+                    <X size={15} strokeWidth={2.5} />
+                  </button>
+                )}
+              </>
+            )}
+          </ToastBar>
+        )}
+      </Toaster>
       <Routes>
         <Route path="/" element={<Login />} />
         <Route path="/login" element={<Login />} />

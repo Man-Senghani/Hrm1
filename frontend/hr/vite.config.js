@@ -12,7 +12,7 @@ export default defineConfig(({ command }) => ({
   base: command === 'build' ? '/hr/' : '/',
   plugins: [react()],
   server: {
-    port: 5002,
+    port: 3002,
     strictPort: true,
   },
   resolve: {

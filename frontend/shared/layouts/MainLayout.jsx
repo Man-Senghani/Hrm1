@@ -147,13 +147,19 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
   // Helper to normalize navigation paths across standalone sub-apps and unified admin
   const handleNav = (targetPath, options) => {
     if (!targetPath) return;
-    navigate(targetPath, typeof options === 'object' && options !== null ? options : { state: options });
+    let cleanPath = targetPath;
+    // Strip redundant leading activeRole prefix if running inside a scoped sub-app basename (e.g. /employee/notifications -> /notifications)
+    if (activeRole && cleanPath.startsWith(`/${activeRole}/`)) {
+      cleanPath = cleanPath.slice(activeRole.length + 1);
+    } else if (activeRole && cleanPath === `/${activeRole}`) {
+      cleanPath = '/';
+    }
+    navigate(cleanPath, typeof options === 'object' && options !== null ? options : { state: options });
   };
 
   // Helper to determine target navigation path based on notification
   const getNotificationPath = (notif, targetRole) => {
-    const currentRole = targetRole || activeRole || 'employee';
-    return `/${currentRole}/notifications`;
+    return '/notifications';
   };
 
   // 🎨 Helper to determine notification color (from custom color or derived from type/urgency)
@@ -520,6 +526,7 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
         return [
           { name: 'Employees', path: `${prefix}/employees`, icon: Users },
           { name: 'Attendance', path: `${prefix}/attendance`, icon: Calendar },
+          { name: 'Leave Management', path: `${prefix}/leave`, icon: ClipboardList },
           { name: 'Daily Report', path: `${prefix}/daily-report`, icon: FileText },
           { name: 'Notifications', path: `${prefix}/notifications`, icon: Bell },
           { name: 'Screenshots', path: `${prefix}/screenshots`, icon: Camera },
@@ -528,6 +535,7 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
       case 'employee':
         return [
           { name: 'Attendance', path: `${prefix}/attendance`, icon: Calendar },
+          { name: 'Leave Management', path: `${prefix}/leave`, icon: ClipboardList },
           { name: 'Daily Report', path: `${prefix}/daily-report`, icon: FileText },
           { name: 'My Profile', path: `${prefix}/profile`, icon: User },
         ];
@@ -535,6 +543,7 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
         return [
           { name: 'Notifications', path: `${prefix}/notifications`, icon: Bell },
           { name: 'Attendance', path: `${prefix}/attendance`, icon: Calendar },
+          { name: 'Leave Management', path: `${prefix}/leave`, icon: ClipboardList },
           { name: 'Daily Report', path: `${prefix}/daily-report`, icon: FileText },
           { name: 'Screenshots', path: `${prefix}/screenshots`, icon: Camera },
           { name: 'My Profile', path: `${prefix}/profile`, icon: User },
@@ -545,6 +554,7 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
           { name: 'Notifications', path: `${prefix}/notifications`, icon: Bell },
           { name: 'Employees', path: `${prefix}/employees`, icon: Users },
           { name: 'Attendance', path: `${prefix}/attendance`, icon: Calendar },
+          { name: 'Leave Management', path: `${prefix}/leave`, icon: ClipboardList },
           { name: 'Daily Report', path: `${prefix}/daily-report`, icon: FileText },
           { name: 'Screenshots', path: `${prefix}/screenshots`, icon: Camera },
           { name: 'My Profile', path: `${prefix}/profile`, icon: User },
@@ -963,8 +973,8 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
                                 }
                               }
                               const targetPath = n.path || getNotificationPath(n, activeRole);
-                              // 🛡️ SMART NAVIGATION: Only navigate if page is visible in active sidebar menu!
-                              if (isPathInSidebar(targetPath)) {
+                              // 🛡️ SMART NAVIGATION: Only navigate if page is visible in active sidebar menu or notifications!
+                              if (isPathInSidebar(targetPath) || targetPath.includes('/notifications')) {
                                 handleNav(targetPath, { state: { highlightedNotificationId: n.id, notification: n } });
                               }
                               setIsNotificationsOpen(false);
@@ -1031,7 +1041,7 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
                       Mark All Read
                     </button>
                     <button
-                      onClick={() => { handleNav(`/${activeRole}/notifications`); setIsNotificationsOpen(false); }}
+                      onClick={() => { handleNav('/notifications'); setIsNotificationsOpen(false); }}
                       className="w-1/2 py-3 bg-[#eceae3] dark:bg-[#162722] text-[10px] font-black text-[#201515] dark:text-white uppercase tracking-wider hover:bg-[#c5c0b1] dark:hover:bg-[#111c18] transition-all border-none cursor-pointer"
                     >
                       View All

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { toast } from 'react-hot-toast';
@@ -131,6 +131,43 @@ const LeaveManagement = ({ isChild = false }) => {
     reason: ''
   });
   const [formErrors, setFormErrors] = useState({});
+
+  // ─── DYNAMIC LEAVE DATE BOUNDS ─────────────────────────
+  // Option C:
+  // - Sick Leave: from 1st day of current month up to today only (no future dates).
+  // - General/Casual Leave: from today up to 6 months in the future.
+  const isSickLeave = useMemo(() => {
+    const lt = (formData.leaveType || '').toLowerCase();
+    return lt === 'sick' || lt === 'sl';
+  }, [formData.leaveType]);
+
+  const todayStr = useMemo(() => {
+    const now = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+  }, []);
+
+  const pastOneMonthDateStr = useMemo(() => {
+    const now = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    const past = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
+    if (past.getMonth() === now.getMonth()) {
+      past.setDate(0);
+    }
+    return `${past.getFullYear()}-${pad(past.getMonth() + 1)}-${pad(past.getDate())}`;
+  }, []);
+
+  const maxFutureDateStr = useMemo(() => {
+    const now = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    const future = new Date(now.getFullYear(), now.getMonth() + 6, now.getDate());
+    return `${future.getFullYear()}-${pad(future.getMonth() + 1)}-${pad(future.getDate())}`;
+  }, []);
+
+  const minLeaveStartDate = isSickLeave ? pastOneMonthDateStr : todayStr;
+  const maxLeaveStartDate = isSickLeave ? todayStr : maxFutureDateStr;
+  const minLeaveEndDate = formData.startDate || minLeaveStartDate;
+  const maxLeaveEndDate = isSickLeave ? todayStr : maxFutureDateStr;
 
   const [filterType, setFilterType] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
@@ -287,7 +324,24 @@ const LeaveManagement = ({ isChild = false }) => {
       if (start > end) {
         errors.startDate = 'Start date cannot be later than end date';
         errors.endDate = 'End date cannot be earlier than start date';
+      } else if (isSickLeave) {
+        if (formData.startDate > todayStr || formData.endDate > todayStr) {
+          errors.startDate = 'Sick leave cannot be applied for future dates';
+          errors.endDate = 'Sick leave cannot be applied for future dates';
+        } else if (formData.startDate < pastOneMonthDateStr || formData.endDate < pastOneMonthDateStr) {
+          errors.startDate = 'Sick leave can only be applied for dates within the past 1 month';
+          errors.endDate = 'Sick leave can only be applied for dates within the past 1 month';
+        }
       } else {
+        if (formData.startDate < todayStr) {
+          errors.startDate = 'Cannot apply for leave for dates that have already passed';
+        }
+        if (formData.endDate > maxFutureDateStr) {
+          errors.endDate = 'Leave cannot be applied more than 6 months in advance';
+        }
+      }
+
+      if (!errors.startDate && !errors.endDate) {
         const activeStatuses = ['pending', 'manager_approved', 'hr_approved', 'approved', 'cancellation_pending'];
         const activeLeaves = (leaves || []).filter(l => activeStatuses.includes((l.status || '').toLowerCase()));
 
@@ -1339,7 +1393,19 @@ const LeaveManagement = ({ isChild = false }) => {
                             setIsRequestModalOpen(false);
                             setTimeout(() => setIsCompOffOnDutyDrawerOpen(true), 100);
                           } else {
-                            setFormData({ ...formData, leaveType: val });
+                            const isNewSick = val === 'sick' || val === 'sl';
+                            setFormData(prev => {
+                              let newStart = prev.startDate;
+                              let newEnd = prev.endDate;
+                              if (isNewSick) {
+                                if (newStart && (newStart > todayStr || newStart < pastOneMonthDateStr)) newStart = '';
+                                if (newEnd && (newEnd > todayStr || newEnd < pastOneMonthDateStr)) newEnd = '';
+                              } else {
+                                if (newStart && (newStart < todayStr || newStart > maxFutureDateStr)) newStart = '';
+                                if (newEnd && (newEnd < todayStr || newEnd > maxFutureDateStr)) newEnd = '';
+                              }
+                              return { ...prev, leaveType: val, startDate: newStart, endDate: newEnd };
+                            });
                           }
                         }}
                         placeholder="Choose Leave Type"
@@ -1355,12 +1421,14 @@ const LeaveManagement = ({ isChild = false }) => {
 
                     <div className="grid grid-cols-2 gap-4">
                       <div className="flex flex-col gap-2">
-                        <label className="text-xs font-semibold text-gray-700 dark:text-gray-300">Start Date</label>
+                        <label className="text-xs font-semibold text-gray-700 dark:text-gray-300">
+                          Start Date
+                        </label>
                         <CustomDatePicker
                           name="startDate"
                           value={formData.startDate}
-                          minDate={`${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-01`}
-                          maxDate={`${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate()).padStart(2, '0')}`}
+                          minDate={minLeaveStartDate}
+                          maxDate={maxLeaveStartDate}
                           onChange={e => {
                             const newStart = e.target.value;
                             setFormData(prev => {
@@ -1383,14 +1451,19 @@ const LeaveManagement = ({ isChild = false }) => {
                         {formErrors.startDate && (
                           <p className="text-[#ff4f00] text-[10px] font-bold leading-none mt-1">{formErrors.startDate}</p>
                         )}
+                        <p className="text-[9.5px] font-medium text-slate-400 dark:text-slate-500">
+                          {isSickLeave ? 'Past 1 month up to today' : 'Up to 6 months in advance'}
+                        </p>
                       </div>
                       <div className="flex flex-col gap-2">
-                        <label className="text-xs font-semibold text-gray-700 dark:text-gray-300">End Date</label>
+                        <label className="text-xs font-semibold text-gray-700 dark:text-gray-300">
+                          End Date
+                        </label>
                         <CustomDatePicker
                           name="endDate"
                           value={formData.endDate}
-                          minDate={formData.startDate || `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-01`}
-                          maxDate={`${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate()).padStart(2, '0')}`}
+                          minDate={minLeaveEndDate}
+                          maxDate={maxLeaveEndDate}
                           onChange={e => {
                             const newEnd = e.target.value;
                             setFormData(prev => {
@@ -1414,6 +1487,9 @@ const LeaveManagement = ({ isChild = false }) => {
                         {formErrors.endDate && (
                           <p className="text-[#ff4f00] text-[10px] font-bold leading-none mt-1">{formErrors.endDate}</p>
                         )}
+                        <p className="text-[9.5px] font-medium text-slate-400 dark:text-slate-500">
+                          {isSickLeave ? 'Past 1 month up to today' : 'Up to 6 months in advance'}
+                        </p>
                       </div>
                     </div>
 

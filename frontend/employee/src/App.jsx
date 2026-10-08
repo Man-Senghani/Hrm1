@@ -2,7 +2,7 @@ import React, { useEffect, Suspense, lazy } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import MainLayout from '@shared/layouts/MainLayout';
 import ErrorBoundary from '@shared/components/ErrorBoundary';
-import { Toaster } from 'react-hot-toast';
+import toast, { Toaster, ToastBar } from 'react-hot-toast';
 import {
   LayoutDashboard,
   Clock,
@@ -16,7 +16,8 @@ import {
   Globe,
   Briefcase,
   User,
-  ClipboardList
+  ClipboardList,
+  X
 } from 'lucide-react';
 import { syncSessionFromActiveAccount, clearActiveAccountAndSession, setupCrossTabSessionSync } from '@shared/utils/sessionSync';
 
@@ -34,6 +35,7 @@ const Chat = lazy(() => import('@shared/pages/Chat'));
 const Profile = lazy(() => import('@shared/pages/Profile'));
 const NotFound = lazy(() => import('@shared/pages/NotFound'));
 const DailyReport = lazy(() => import('./pages/DailyReport'));
+const Notifications = lazy(() => import('./pages/Notifications'));
 
 const ScrollToTop = () => {
   const { pathname } = useLocation();
@@ -92,6 +94,7 @@ function App() {
 
   const navItems = [
     { label: 'Attendance', icon: CalendarDays, path: '/attendance' },
+    { label: 'Leave Management', icon: ClipboardList, path: '/leave' },
     { label: 'Daily Report', icon: FileText, path: '/daily-report' },
     { label: 'My Profile', icon: User, path: '/profile' },
   ];
@@ -106,7 +109,7 @@ function App() {
           style: {
             background: '#111827',
             color: '#f9fafb',
-            padding: '14px 18px',
+            padding: '12px 16px',
             borderRadius: '16px',
             fontSize: '13px',
             fontWeight: '600',
@@ -140,7 +143,54 @@ function App() {
             }
           }
         }}
-      />
+      >
+        {(t) => (
+          <ToastBar toast={t}>
+            {({ icon, message }) => (
+              <>
+                {icon}
+                {message}
+                {t.type !== 'loading' && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toast.dismiss(t.id);
+                    }}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      padding: '3px',
+                      marginLeft: '8px',
+                      borderRadius: '6px',
+                      color: 'currentColor',
+                      opacity: 0.75,
+                      background: 'transparent',
+                      border: 'none',
+                      cursor: 'pointer',
+                      flexShrink: 0,
+                      transition: 'all 0.15s ease'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.opacity = '1';
+                      e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.15)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.opacity = '0.75';
+                      e.currentTarget.style.backgroundColor = 'transparent';
+                    }}
+                    aria-label="Dismiss notification"
+                    title="Dismiss"
+                  >
+                    <X size={15} strokeWidth={2.5} />
+                  </button>
+                )}
+              </>
+            )}
+          </ToastBar>
+        )}
+      </Toaster>
       <ScrollToTop />
       <MainLayout
         navItems={navItems}
@@ -168,6 +218,14 @@ function App() {
             {/* Daily Report */}
             <Route path="/daily-report" element={<DailyReport />} />
             <Route path="/employee/daily-report" element={<DailyReport />} />
+
+            {/* Notifications */}
+            <Route path="/notifications" element={<Notifications />} />
+            <Route path="/employee/notifications" element={<Notifications />} />
+            <Route path="/notifications/all" element={<Notifications />} />
+            <Route path="/employee/notifications/all" element={<Notifications />} />
+            <Route path="/employee/employee/notifications" element={<Navigate to="/notifications" replace />} />
+            <Route path="/employee/employee/*" element={<Navigate to="/attendance" replace />} />
 
             {/* Profile */}
             <Route path="/profile" element={<Profile />} />

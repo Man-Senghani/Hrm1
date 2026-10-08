@@ -136,8 +136,8 @@ const Notifications = () => {
   const [employees, setEmployees]         = useState([]);
   const [selectedNotif, setSelectedNotif] = useState(null);
 
-  const token         = sessionStorage.getItem('token');
-  const role          = sessionStorage.getItem('role') || 'hr';
+  const token         = sessionStorage.getItem('token') || localStorage.getItem('token');
+  const role          = sessionStorage.getItem('role') || localStorage.getItem('role') || 'hr';
   const headers       = { Authorization: `Bearer ${token}` };
   const currentUserId = (() => { try { return JSON.parse(atob(token.split('.')[1]))?.id; } catch { return null; } })();
 
@@ -582,8 +582,18 @@ const Notifications = () => {
 
                     {/* Trigger */}
                     <div
-                      onClick={() => { setActiveColorPickerIdx(null); setIsTypeEditMode(false); setForm(f=>({...f,_typeOpen:!f._typeOpen,_targetRoleOpen:false,_roleFilterOpen:false,_empSelectOpen:false})); }}
-                      className={`w-full bg-white dark:bg-[#162722] border ${form._typeOpen?'border-[#00a76b]':'border-[#eceae3] dark:border-[#1a2d29]'} rounded-[12px] px-4 py-3 text-[13px] font-bold text-[#201515] dark:text-white cursor-pointer flex justify-between items-center transition-colors`}
+                      onClick={() => {
+                        setForm(f => {
+                          const isOpening = !f._typeOpen;
+                          if (isOpening) {
+                            // Only reset color picker/edit mode when OPENING the dropdown
+                            setActiveColorPickerIdx(null);
+                            setIsTypeEditMode(false);
+                          }
+                          return { ...f, _typeOpen: !f._typeOpen, _targetRoleOpen: false, _roleFilterOpen: false, _empSelectOpen: false };
+                        });
+                      }}
+                      className={`w-full bg-white dark:bg-[#162722] border ${form._typeOpen ? 'border-[#00a76b]' : 'border-[#eceae3] dark:border-[#1a2d29]'} rounded-[12px] px-4 py-3 text-[13px] font-bold text-[#201515] dark:text-white cursor-pointer flex justify-between items-center transition-colors`}
                     >
                       <div className="flex items-center gap-2">
                         <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: getTypeColor(form.type) }} />
@@ -846,12 +856,14 @@ const Notifications = () => {
           {loading ? (
             <div className="flex items-center justify-center py-20"><Loader2 size={36} className="animate-spin text-[#00a76b]"/></div>
           ) : (() => {
-            const displayNotifications = role==='manager' ? notifications.filter(n=>n.senderId===currentUserId) : notifications;
+            const displayNotifications = notifications;
             if (displayNotifications.length === 0) return (
               <div className="flex flex-col items-center justify-center py-20 text-center px-6">
                 <div className="w-16 h-16 rounded-full bg-emerald-50 dark:bg-emerald-950/20 flex items-center justify-center mb-4"><Bell size={28} className="text-[#00a76b]"/></div>
                 <h3 className="text-[16px] font-bold text-slate-800 dark:text-white mb-2">No notifications found</h3>
-                <p className="text-[13px] font-medium text-slate-500 dark:text-[#829e92]">Send a notification using the button above</p>
+                <p className="text-[13px] font-medium text-slate-500 dark:text-[#829e92]">
+                  {role === 'employee' ? 'You have no notifications yet' : 'Send a notification using the button above'}
+                </p>
               </div>
             );
 

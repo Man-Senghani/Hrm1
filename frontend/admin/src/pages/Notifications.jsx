@@ -136,8 +136,8 @@ const Notifications = () => {
   const [employees, setEmployees]         = useState([]);
   const [selectedNotif, setSelectedNotif] = useState(null);
 
-  const token         = sessionStorage.getItem('token');
-  const role          = sessionStorage.getItem('role') || 'hr';
+  const token         = sessionStorage.getItem('token') || localStorage.getItem('token');
+  const role          = sessionStorage.getItem('role') || localStorage.getItem('role') || 'admin';
   const headers       = { Authorization: `Bearer ${token}` };
   const currentUserId = (() => { try { return JSON.parse(atob(token.split('.')[1]))?.id; } catch { return null; } })();
 
@@ -856,12 +856,14 @@ const Notifications = () => {
           {loading ? (
             <div className="flex items-center justify-center py-20"><Loader2 size={36} className="animate-spin text-[#00a76b]"/></div>
           ) : (() => {
-            const displayNotifications = role==='manager' ? notifications.filter(n=>n.senderId===currentUserId) : notifications;
+            const displayNotifications = notifications;
             if (displayNotifications.length === 0) return (
               <div className="flex flex-col items-center justify-center py-20 text-center px-6">
                 <div className="w-16 h-16 rounded-full bg-emerald-50 dark:bg-emerald-950/20 flex items-center justify-center mb-4"><Bell size={28} className="text-[#00a76b]"/></div>
                 <h3 className="text-[16px] font-bold text-slate-800 dark:text-white mb-2">No notifications found</h3>
-                <p className="text-[13px] font-medium text-slate-500 dark:text-[#829e92]">Send a notification using the button above</p>
+                <p className="text-[13px] font-medium text-slate-500 dark:text-[#829e92]">
+                  {role === 'employee' ? 'You have no notifications yet' : 'Send a notification using the button above'}
+                </p>
               </div>
             );
 

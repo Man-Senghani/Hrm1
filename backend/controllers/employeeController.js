@@ -182,6 +182,7 @@ exports.createEmployee = async (req, res) => {
       email,
       password,
       role: userRole,
+      reportingManager: employeeData.reportingManager || employeeData.managerId || null
     });
     const savedUser = await newUser.save();
 
@@ -192,6 +193,8 @@ exports.createEmployee = async (req, res) => {
       fullName,
       role: userRole,
       ...employeeData,
+      managerId: employeeData.managerId || employeeData.reportingManager || null,
+      reportingManager: employeeData.reportingManager || employeeData.managerId || null,
       employeeId: finalEmployeeId
     });
 
@@ -246,14 +249,23 @@ exports.updateEmployee = async (req, res) => {
       return res.status(403).json({ message: 'Not authorized to modify this employee' });
     }
 
+    if (updateData.managerId !== undefined || updateData.reportingManager !== undefined) {
+      const targetMgr = updateData.reportingManager !== undefined ? updateData.reportingManager : updateData.managerId;
+      updateData.managerId = targetMgr || null;
+      updateData.reportingManager = targetMgr || null;
+    }
+
     const updatedEmployee = await Employee.findByIdAndUpdate(req.params.id, updateData, { new: true });
 
-    // Also update User if name or role changed (email is now locked)
-    if (updateData.fullName || updateData.role) {
+    // Also update User if name, role or reporting manager changed (email is now locked)
+    if (updateData.fullName || updateData.role || updateData.managerId !== undefined || updateData.reportingManager !== undefined) {
       const userUpdate = {};
       if (updateData.fullName) userUpdate.name = updateData.fullName;
       if (updateData.role) {
         userUpdate.role = updateData.role;
+      }
+      if (updateData.managerId !== undefined || updateData.reportingManager !== undefined) {
+        userUpdate.reportingManager = updateData.reportingManager || updateData.managerId || null;
       }
       await User.findByIdAndUpdate(employee.userId, userUpdate);
     }

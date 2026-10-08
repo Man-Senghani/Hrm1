@@ -54,6 +54,7 @@ exports.createNewUserAtomic = async (userData) => {
         password, 
         role: role.toLowerCase(), 
         employeeId: generatedId,
+        reportingManager: userData.reportingManager || null,
         status: 'active' 
     });
     await user.save();
@@ -69,6 +70,7 @@ exports.createNewUserAtomic = async (userData) => {
           role: role.toLowerCase(),
           joinDate: userData.joinDate || new Date(),
           reportingManager: userData.reportingManager || null,
+          managerId: userData.reportingManager || null,
           ...extraData 
       });
       await employeeProfile.save();

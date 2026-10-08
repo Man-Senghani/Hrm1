@@ -22,12 +22,12 @@ const ScrollToTop = () => {
   }, [pathname]);
   return null;
 };
-import { Toaster } from 'react-hot-toast';
+import toast, { Toaster, ToastBar } from 'react-hot-toast';
 import Login from '@shared/pages/Login';
 import ForgotPassword from '@shared/pages/ForgotPassword';
 import ResetPassword from '@shared/pages/ResetPassword';
 import MainLayout from '@shared/layouts/MainLayout';
-import { Users, Calendar, Bell, Camera, User, FileText, ClipboardList } from 'lucide-react';
+import { Users, Calendar, Bell, Camera, User, FileText, ClipboardList, X } from 'lucide-react';
 import { syncSessionFromActiveAccount, setupCrossTabSessionSync } from '@shared/utils/sessionSync';
 
 // Route-level pages are lazy-loaded so a role only downloads the code for
@@ -206,6 +206,7 @@ const App = () => {
     { label: 'Notifications', icon: Bell, path: '/notifications' },
     { label: 'Employees', icon: Users, path: '/employees' },
     { label: 'Attendance', icon: Calendar, path: '/attendance' },
+    { label: 'Leave Management', icon: ClipboardList, path: '/leave' },
     { label: 'Daily Report', icon: FileText, path: '/daily-report' },
     { label: 'Screenshots', icon: Camera, path: '/screenshots' },
     { label: 'My Profile', icon: User, path: '/profile' },
@@ -222,7 +223,7 @@ const App = () => {
           style: {
             background: '#111827',
             color: '#f9fafb',
-            padding: '14px 18px',
+            padding: '12px 16px',
             borderRadius: '16px',
             fontSize: '13px',
             fontWeight: '600',
@@ -256,7 +257,54 @@ const App = () => {
             }
           }
         }}
-      />
+      >
+        {(t) => (
+          <ToastBar toast={t}>
+            {({ icon, message }) => (
+              <>
+                {icon}
+                {message}
+                {t.type !== 'loading' && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toast.dismiss(t.id);
+                    }}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      padding: '3px',
+                      marginLeft: '8px',
+                      borderRadius: '6px',
+                      color: 'currentColor',
+                      opacity: 0.75,
+                      background: 'transparent',
+                      border: 'none',
+                      cursor: 'pointer',
+                      flexShrink: 0,
+                      transition: 'all 0.15s ease'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.opacity = '1';
+                      e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.15)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.opacity = '0.75';
+                      e.currentTarget.style.backgroundColor = 'transparent';
+                    }}
+                    aria-label="Dismiss notification"
+                    title="Dismiss"
+                  >
+                    <X size={15} strokeWidth={2.5} />
+                  </button>
+                )}
+              </>
+            )}
+          </ToastBar>
+        )}
+      </Toaster>
       <Suspense fallback={<RouteLoadingFallback />}>
         <Routes>
           {/* PUBLIC ROUTES */}
@@ -279,9 +327,9 @@ const App = () => {
 
             {/* Notifications */}
             <Route path="notifications" element={<Notifications />} />
-            <Route path="notifications/all" element={<AllNotifications />} />
+            <Route path="notifications/all" element={<Notifications />} />
             <Route path="admin/notifications" element={<Notifications />} />
-            <Route path="admin/notifications/all" element={<AllNotifications />} />
+            <Route path="admin/notifications/all" element={<Notifications />} />
 
             {/* Employees */}
             <Route path="employees" element={<HREmployees />} />

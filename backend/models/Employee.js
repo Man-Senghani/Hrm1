@@ -13,6 +13,7 @@ const employeeSchema = new mongoose.Schema({
   role: String,
   personalEmail: { type: String, trim: true, lowercase: true },
   phone: String,
+  familyContact: { type: String, trim: true },
   gender: { type: String, default: 'Male' },
   dob: Date,
   address: String,

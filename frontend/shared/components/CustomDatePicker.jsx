@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Calendar, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react';
 
 const CustomDatePicker = ({ name, value, onChange, minDate, maxDate, isDateDisabled, className = '', placeholder = 'Select Date', align = 'left' }) => {
@@ -128,6 +128,24 @@ const CustomDatePicker = ({ name, value, onChange, minDate, maxDate, isDateDisab
   const endYear = Math.max(maxAllowedYear, currentYear + 10);
   const yearList = Array.from({ length: endYear - startYear + 1 }, (_, i) => startYear + i);
 
+  const isPrevDisabled = useMemo(() => {
+    if (!minDate) return false;
+    const parts = minDate.split('-');
+    if (parts.length < 2) return false;
+    const minY = parseInt(parts[0], 10);
+    const minM = parseInt(parts[1], 10) - 1;
+    return new Date(year, month - 1, 1) < new Date(minY, minM, 1);
+  }, [minDate, year, month]);
+
+  const isNextDisabled = useMemo(() => {
+    if (!maxDate) return false;
+    const parts = maxDate.split('-');
+    if (parts.length < 2) return false;
+    const maxY = parseInt(parts[0], 10);
+    const maxM = parseInt(parts[1], 10) - 1;
+    return new Date(year, month + 1, 1) > new Date(maxY, maxM, 1);
+  }, [maxDate, year, month]);
+
   return (
     <div className="relative w-full" ref={wrapperRef}>
       <div
@@ -155,8 +173,13 @@ const CustomDatePicker = ({ name, value, onChange, minDate, maxDate, isDateDisab
           <div className="flex justify-between items-center mb-3">
             <button
               type="button"
+              disabled={isPrevDisabled}
               onClick={handlePrevMonth}
-              className="w-7 h-7 flex items-center justify-center hover:bg-slate-100 dark:hover:bg-[#1a332c] rounded-xl transition-colors cursor-pointer text-slate-600 dark:text-slate-300"
+              className={`w-7 h-7 flex items-center justify-center rounded-xl transition-colors cursor-pointer text-slate-600 dark:text-slate-300 ${
+                isPrevDisabled
+                  ? 'opacity-25 cursor-not-allowed pointer-events-none'
+                  : 'hover:bg-slate-100 dark:hover:bg-[#1a332c]'
+              }`}
             >
               <ChevronLeft size={16} />
             </button>
@@ -193,8 +216,13 @@ const CustomDatePicker = ({ name, value, onChange, minDate, maxDate, isDateDisab
 
             <button
               type="button"
+              disabled={isNextDisabled}
               onClick={handleNextMonth}
-              className="w-7 h-7 flex items-center justify-center hover:bg-slate-100 dark:hover:bg-[#1a332c] rounded-xl transition-colors cursor-pointer text-slate-600 dark:text-slate-300"
+              className={`w-7 h-7 flex items-center justify-center rounded-xl transition-colors cursor-pointer text-slate-600 dark:text-slate-300 ${
+                isNextDisabled
+                  ? 'opacity-25 cursor-not-allowed pointer-events-none'
+                  : 'hover:bg-slate-100 dark:hover:bg-[#1a332c]'
+              }`}
             >
               <ChevronRight size={16} />
             </button>
@@ -205,17 +233,24 @@ const CustomDatePicker = ({ name, value, onChange, minDate, maxDate, isDateDisab
             <div className="grid grid-cols-3 gap-2 py-2 animate-fadeIn">
               {monthNamesShort.map((m, idx) => {
                 const isSelected = month === idx;
+                const mStartStr = `${year}-${pad(idx + 1)}-01`;
+                const mEndStr = `${year}-${pad(idx + 1)}-${pad(daysInMonth(year, idx))}`;
+                const isMonthDisabled = (maxDate && mStartStr > maxDate) || (minDate && mEndStr < minDate);
                 return (
                   <button
                     key={m}
                     type="button"
+                    disabled={isMonthDisabled}
                     onClick={() => {
+                      if (isMonthDisabled) return;
                       setCurrentMonth(new Date(year, idx, 1));
                       setViewMode('days');
                     }}
                     className={`py-2 px-1 rounded-xl text-xs font-bold transition-all cursor-pointer text-center ${
                       isSelected
                         ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/20 scale-105'
+                        : isMonthDisabled
+                        ? 'opacity-30 cursor-not-allowed text-slate-400 bg-slate-100 dark:bg-[#0d1c18]'
                         : 'bg-slate-50 dark:bg-[#0d1c18] hover:bg-emerald-50 dark:hover:bg-emerald-950/40 text-slate-700 dark:text-slate-200 border border-slate-200/60 dark:border-[#1e3831]'
                     }`}
                   >

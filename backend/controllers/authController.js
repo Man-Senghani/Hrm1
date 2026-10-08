@@ -210,6 +210,7 @@ exports.getMe = async (req, res) => {
     const profile = {
       ...employeeData,
       ...user,
+      familyContact: employeeData?.familyContact || '',
       role: user.role,
       fullName: employeeData?.fullName || user.fullName || user.name || '',
       name: user.name || employeeData?.fullName || '',
@@ -254,7 +255,7 @@ exports.updatePassword = async (req, res) => {
 // 📝 PROFILE: Update Details
 exports.updateProfile = async (req, res) => {
   try {
-    const { fullName, personalEmail, phone, address, localAddress, permanentAddress, profileImage, adharCard, bankDetails, panCard } = req.body;
+    const { fullName, personalEmail, phone, familyContact, address, localAddress, permanentAddress, profileImage, adharCard, bankDetails, panCard } = req.body;
     let user = await User.findById(req.user.id);
     if (!user && req.user?.name) {
       user = await User.findOne({ name: req.user.name, role: req.user.role });
@@ -304,6 +305,7 @@ exports.updateProfile = async (req, res) => {
     if (fullName) updateData.fullName = fullName;
     if (personalEmail !== undefined) updateData.personalEmail = personalEmail;
     if (phone !== undefined) updateData.phone = phone;
+    if (familyContact !== undefined) updateData.familyContact = familyContact;
     
     const resolvedLocalAddress = localAddress !== undefined ? localAddress : address;
     if (resolvedLocalAddress !== undefined) {
