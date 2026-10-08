@@ -148,18 +148,128 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
   const handleNav = (targetPath, options) => {
     if (!targetPath) return;
     let cleanPath = targetPath;
-    // Strip redundant leading activeRole prefix if running inside a scoped sub-app basename (e.g. /employee/notifications -> /notifications)
-    if (activeRole && cleanPath.startsWith(`/${activeRole}/`)) {
+    const hasRoleInUrl = location.pathname.startsWith(`/${activeRole}/`) || location.pathname === `/${activeRole}`;
+    // Strip redundant leading activeRole prefix if running inside a scoped sub-app basename without role prefix in URL
+    if (!hasRoleInUrl && activeRole && cleanPath.startsWith(`/${activeRole}/`)) {
       cleanPath = cleanPath.slice(activeRole.length + 1);
-    } else if (activeRole && cleanPath === `/${activeRole}`) {
+    } else if (!hasRoleInUrl && activeRole && cleanPath === `/${activeRole}`) {
       cleanPath = '/';
+    }
+    if (cleanPath && !cleanPath.startsWith('/')) {
+      cleanPath = '/' + cleanPath;
     }
     navigate(cleanPath, typeof options === 'object' && options !== null ? options : { state: options });
   };
 
   // Helper to determine target navigation path based on notification
   const getNotificationPath = (notif, targetRole) => {
-    return '/notifications';
+    if (!notif) return '/notifications';
+    if (notif.path && notif.path !== '/notifications' && notif.path !== `/${targetRole}/notifications`) {
+      return notif.path;
+    }
+
+    const type = String(notif.type || '').toLowerCase();
+    const text = String(notif.message || notif.text || '').toLowerCase();
+    const title = String(notif.title || '').toLowerCase();
+    const prefix = targetRole ? `/${targetRole}` : '';
+
+    // 1. Meeting & Offline Requests
+    if (
+      type.includes('meeting') ||
+      type.includes('offline') ||
+      text.includes('meeting request') ||
+      text.includes('meeting') ||
+      text.includes('offline request') ||
+      text.includes('offline time') ||
+      title.includes('meeting') ||
+      title.includes('offline')
+    ) {
+      return `${prefix}/attendance?tab=meetingRequests`;
+    }
+
+    // 2. Attendance / Timer / Overtime / Clock-in / Check-in
+    if (
+      type.includes('attendance') ||
+      type.includes('timer') ||
+      text.includes('attendance') ||
+      text.includes('check-in') ||
+      text.includes('checked in') ||
+      text.includes('check in') ||
+      text.includes('check-out') ||
+      text.includes('checked out') ||
+      text.includes('check out') ||
+      text.includes('clock in') ||
+      text.includes('clock out') ||
+      text.includes('overtime') ||
+      text.includes('late mark') ||
+      text.includes('half day')
+    ) {
+      return `${prefix}/attendance`;
+    }
+
+    // 3. Leave Management
+    if (
+      type.includes('leave') ||
+      text.includes('leave') ||
+      text.includes('vacation') ||
+      text.includes('time off') ||
+      title.includes('leave')
+    ) {
+      return `${prefix}/leave`;
+    }
+
+    // 4. Daily Report
+    if (
+      type.includes('daily_report') ||
+      type.includes('report') ||
+      text.includes('daily report') ||
+      text.includes('edit access') ||
+      title.includes('daily report') ||
+      title.includes('report')
+    ) {
+      return `${prefix}/daily-report`;
+    }
+
+    // 5. Screenshots
+    if (
+      type.includes('screenshot') ||
+      text.includes('screenshot') ||
+      title.includes('screenshot')
+    ) {
+      return `${prefix}/screenshots`;
+    }
+
+    // 6. Employees
+    if (
+      type.includes('employee') ||
+      text.includes('new employee') ||
+      text.includes('employee registered')
+    ) {
+      return `${prefix}/employees`;
+    }
+
+    // 7. Tasks (Smart check: only if task route is available in sidebar for this user/role)
+    if (
+      type.includes('task') ||
+      text.includes('task') ||
+      text.includes('assigned to you') ||
+      title.includes('task')
+    ) {
+      const candidatePaths = [`${prefix}/tasks`, `${prefix}/task-management`, '/tasks', '/task-management'];
+      const matched = candidatePaths.find(p => isPathInSidebar(p));
+      if (matched) return matched;
+      return `${prefix}/notifications`;
+    }
+
+    // 8. Profile
+    if (
+      type.includes('profile') ||
+      text.includes('profile')
+    ) {
+      return `${prefix}/profile`;
+    }
+
+    return `${prefix}/notifications`;
   };
 
   // 🎨 Helper to determine notification color (from custom color or derived from type/urgency)
@@ -675,7 +785,9 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
         color: data.color || null,
         time: 'Just Now',
         read: false,
-        path: data.type === 'task' ? `/${activeRole}/task-management` : (data.path || getNotificationPath(data, activeRole))
+        path: (data.path && data.path !== '/notifications' && data.path !== `/${activeRole}/notifications`)
+          ? data.path
+          : getNotificationPath(data, activeRole)
       };
       setLiveNotifications(prev => [newAlert, ...prev.filter(x => x.id !== newAlert.id)].slice(0, 50));
       toast(data.message, { icon: '🔔', style: { borderRadius: '5px', background: '#201515', color: '#fff', fontWeight: 900, fontSize: '12px' } });
@@ -972,10 +1084,18 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
                                   console.error('Failed to mark notification as read:', err);
                                 }
                               }
-                              const targetPath = n.path || getNotificationPath(n, activeRole);
+                              const targetPath = (n.path && n.path !== '/notifications' && n.path !== `/${activeRole}/notifications`)
+                                ? n.path
+                                : getNotificationPath(n, activeRole);
                               // 🛡️ SMART NAVIGATION: Only navigate if page is visible in active sidebar menu or notifications!
                               if (isPathInSidebar(targetPath) || targetPath.includes('/notifications')) {
-                                handleNav(targetPath, { state: { highlightedNotificationId: n.id, notification: n } });
+                                handleNav(targetPath, {
+                                  state: {
+                                    highlightedNotificationId: n.id,
+                                    notification: n,
+                                    tab: targetPath.includes('tab=meetingRequests') ? 'meetingRequests' : undefined
+                                  }
+                                });
                               }
                               setIsNotificationsOpen(false);
                             }}

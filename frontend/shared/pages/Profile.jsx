@@ -21,6 +21,7 @@ const Profile = () => {
   const [uploadingDocType, setUploadingDocType] = useState(null);
   const [syncing, setSyncing] = useState(!userData);
   const [viewingDoc, setViewingDoc] = useState(null);
+  const [sameAsLocal, setSameAsLocal] = useState(false);
 
   const token = sessionStorage.getItem('token');
   const location = useLocation();
@@ -111,15 +112,60 @@ const Profile = () => {
 
   const initials = fullName ? fullName.split(' ').filter(Boolean).map(n => n[0]).join('').toUpperCase().substring(0, 2) : '';
 
-  const reportingManagerName = safeUserData.reportingManager
-    ? (typeof safeUserData.reportingManager === 'object'
-      ? (safeUserData.reportingManager.name || safeUserData.reportingManager.fullName || '')
-      : safeUserData.reportingManager)
-    : (safeUserData.managerId
-      ? (typeof safeUserData.managerId === 'object'
-        ? (safeUserData.managerId.name || safeUserData.managerId.fullName || '')
-        : safeUserData.managerId)
-      : '');
+  const [resolvedManagerName, setResolvedManagerName] = useState('');
+
+  useEffect(() => {
+    const rawMgr = safeUserData.reportingManager || safeUserData.managerId;
+    if (!rawMgr) {
+      setResolvedManagerName('');
+      return;
+    }
+    if (typeof rawMgr === 'object') {
+      const name = rawMgr.name || rawMgr.fullName || '';
+      setResolvedManagerName(name);
+      return;
+    }
+    if (typeof rawMgr === 'string') {
+      const trimmed = rawMgr.trim();
+      const isObjectId = /^[0-9a-fA-F]{24}$/.test(trimmed);
+      if (isObjectId) {
+        // Asynchronously resolve raw MongoDB ObjectId against personnel API
+        axios.get('/api/personnel/all', {
+          headers: { Authorization: `Bearer ${token}` }
+        }).then(res => {
+          if (Array.isArray(res.data)) {
+            const found = res.data.find(u => u._id === trimmed);
+            if (found) {
+              setResolvedManagerName(found.name || found.fullName || 'Not assigned');
+              return;
+            }
+          }
+          // Fallback: check /api/employees
+          axios.get('/api/employees', {
+            headers: { Authorization: `Bearer ${token}` }
+          }).then(empRes => {
+            if (Array.isArray(empRes.data)) {
+              const empFound = empRes.data.find(e => e._id === trimmed || e.userId?._id === trimmed || e.userId === trimmed);
+              if (empFound) {
+                setResolvedManagerName(empFound.fullName || empFound.name || 'Not assigned');
+                return;
+              }
+            }
+            setResolvedManagerName('Not assigned');
+          }).catch(() => setResolvedManagerName('Not assigned'));
+        }).catch(() => setResolvedManagerName('Not assigned'));
+      } else {
+        setResolvedManagerName(trimmed);
+      }
+    }
+  }, [safeUserData.reportingManager, safeUserData.managerId, token]);
+
+  const rawMgrCandidate = safeUserData.reportingManager || safeUserData.managerId;
+  const initialMgrName = typeof rawMgrCandidate === 'object'
+    ? (rawMgrCandidate?.name || rawMgrCandidate?.fullName || '')
+    : (typeof rawMgrCandidate === 'string' && !/^[0-9a-fA-F]{24}$/.test(rawMgrCandidate.trim()) ? rawMgrCandidate : '');
+
+  const reportingManagerName = resolvedManagerName || initialMgrName || 'Not assigned';
 
   const handleDocumentUpload = async (type, file) => {
     if (!file) return;
@@ -269,6 +315,8 @@ const Profile = () => {
   };
 
   const handleEditClick = () => {
+    const isSame = !!(localAddress && permanentAddress && localAddress.trim() === permanentAddress.trim());
+    setSameAsLocal(isSame);
     setEditForm({
       fullName: fullName || '',
       personalEmail: personalEmail || '',
@@ -279,6 +327,17 @@ const Profile = () => {
       profileImage: null,
     });
     setIsEditing(true);
+  };
+
+  const handleSameAsLocalToggle = (e) => {
+    const checked = e.target.checked;
+    setSameAsLocal(checked);
+    if (checked) {
+      setEditForm(prev => ({
+        ...prev,
+        permanentAddress: prev.localAddress || ''
+      }));
+    }
   };
 
 
@@ -586,14 +645,60 @@ const Profile = () => {
                   <label style={{ fontSize: 11, fontWeight: 700, color: isDark ? '#a3b3af' : '#939084', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                     Local Address <span className="text-red-500" style={{ color: '#ef4444', marginLeft: 4 }}>*</span>
                   </label>
-                  <input type="text" maxLength="250" readOnly={!isEditing} value={isEditing ? editForm.localAddress : localAddress} onChange={e => setEditForm({...editForm, localAddress: e.target.value.replace(/[^a-zA-Z0-9\s,.\-/#]/g, '')})} className="verdant-input" style={{ backgroundColor: isEditing ? (isDark ? '#162722' : '#fff') : undefined }} />
+                  <input
+                    type="text"
+                    maxLength="250"
+                    readOnly={!isEditing}
+                    value={isEditing ? editForm.localAddress : localAddress}
+                    onChange={e => {
+                      const val = e.target.value.replace(/[^a-zA-Z0-9\s,.\-/#]/g, '');
+                      setEditForm(prev => ({
+                        ...prev,
+                        localAddress: val,
+                        ...(sameAsLocal ? { permanentAddress: val } : {})
+                      }));
+                    }}
+                    className="verdant-input"
+                    style={{ backgroundColor: isEditing ? (isDark ? '#162722' : '#fff') : undefined }}
+                  />
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <label style={{ fontSize: 11, fontWeight: 700, color: isDark ? '#a3b3af' : '#939084', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: isDark ? '#a3b3af' : '#939084', textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 }}>
                     Permanent Address <span className="text-red-500" style={{ color: '#ef4444', marginLeft: 4 }}>*</span>
                   </label>
-                  <input type="text" maxLength="250" readOnly={!isEditing} value={isEditing ? editForm.permanentAddress : permanentAddress} onChange={e => setEditForm({...editForm, permanentAddress: e.target.value.replace(/[^a-zA-Z0-9\s,.\-/#]/g, '')})} className="verdant-input" style={{ backgroundColor: isEditing ? (isDark ? '#162722' : '#fff') : undefined }} />
+                  <input
+                    type="text"
+                    maxLength="250"
+                    readOnly={!isEditing || sameAsLocal}
+                    value={isEditing ? editForm.permanentAddress : permanentAddress}
+                    onChange={e => {
+                      if (sameAsLocal) setSameAsLocal(false);
+                      setEditForm({ ...editForm, permanentAddress: e.target.value.replace(/[^a-zA-Z0-9\s,.\-/#]/g, '') });
+                    }}
+                    className="verdant-input"
+                    style={{
+                      backgroundColor: isEditing
+                        ? (sameAsLocal ? (isDark ? '#141e1a' : '#f1f5f3') : (isDark ? '#162722' : '#fff'))
+                        : undefined,
+                      cursor: (isEditing && sameAsLocal) ? 'not-allowed' : undefined,
+                      opacity: (isEditing && sameAsLocal) ? 0.85 : 1
+                    }}
+                    placeholder={sameAsLocal ? "Same as local address" : undefined}
+                  />
+                  {isEditing && (
+                    <div style={{ display: 'flex', alignItems: 'center', marginTop: 2 }}>
+                      <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 700, color: isDark ? '#34d399' : '#00a76b', cursor: 'pointer', userSelect: 'none' }}>
+                        <input
+                          type="checkbox"
+                          checked={sameAsLocal}
+                          onChange={handleSameAsLocalToggle}
+                          style={{ width: 14, height: 14, accentColor: '#00a76b', cursor: 'pointer' }}
+                        />
+                        <span>Same as Local</span>
+                      </label>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

@@ -448,9 +448,94 @@ const Notifications = ({ userRole }) => {
     finally { setSending(false); }
   };
 
+  /* ── TARGET ROUTE RESOLVER ── */
+  const getNotificationTargetPath = (notif) => {
+    if (!notif) return null;
+    const type = String(notif.type || '').toLowerCase();
+    const text = String(notif.message || notif.text || '').toLowerCase();
+    const title = String(notif.title || '').toLowerCase();
+    const prefix = role ? `/${role}` : '';
+
+    // Meeting & Offline Requests
+    if (
+      type.includes('meeting') ||
+      type.includes('offline') ||
+      text.includes('meeting request') ||
+      text.includes('meeting') ||
+      text.includes('offline request') ||
+      text.includes('offline time') ||
+      title.includes('meeting') ||
+      title.includes('offline')
+    ) {
+      return `${prefix}/attendance?tab=meetingRequests`;
+    }
+
+    // Attendance / Timer
+    if (
+      type.includes('attendance') ||
+      type.includes('timer') ||
+      text.includes('attendance') ||
+      text.includes('clock') ||
+      text.includes('check-in') ||
+      text.includes('check-out') ||
+      text.includes('overtime')
+    ) {
+      return `${prefix}/attendance`;
+    }
+
+    // Leave
+    if (
+      type.includes('leave') ||
+      text.includes('leave') ||
+      text.includes('vacation') ||
+      text.includes('time off')
+    ) {
+      return `${prefix}/leave`;
+    }
+
+    // Daily Report
+    if (
+      type.includes('daily_report') ||
+      type.includes('report') ||
+      text.includes('daily report') ||
+      text.includes('edit access')
+    ) {
+      return `${prefix}/daily-report`;
+    }
+
+    // Screenshots
+    if (type.includes('screenshot') || text.includes('screenshot')) {
+      return `${prefix}/screenshots`;
+    }
+
+    // Employees
+    if (type.includes('employee') || text.includes('new employee')) {
+      return `${prefix}/employees`;
+    }
+
+    // Tasks (only if role has tasks)
+    if (type.includes('task') || text.includes('task') || text.includes('assigned to you')) {
+      if (['manager', 'admin'].includes(role)) {
+        return `${prefix}/tasks`;
+      }
+    }
+
+    // Profile
+    if (type.includes('profile') || text.includes('profile')) {
+      return `${prefix}/profile`;
+    }
+
+    return null;
+  };
+
   /* ── NOTIFICATION CLICK ── */
   const handleNotificationClick = (notif) => {
-    setSelectedNotif(notif);
+    const target = getNotificationTargetPath(notif);
+    if (target) {
+      navigate(target);
+    } else {
+      setSelectedNotif(notif);
+    }
   };
 
   /* ══ RENDER ══════════════════════════════════════════════ */
@@ -1074,6 +1159,33 @@ const Notifications = ({ userRole }) => {
                   </div>
                 </div>
               </div>
+
+              {/* Direct Link to target page if available */}
+              {getNotificationTargetPath(selectedNotif) && (
+                <div className="pt-2">
+                  <button
+                    onClick={() => {
+                      const target = getNotificationTargetPath(selectedNotif);
+                      setSelectedNotif(null);
+                      navigate(target);
+                    }}
+                    className="w-full py-3 px-4 bg-[#00a76b] hover:bg-[#00915c] text-white rounded-[12px] font-extrabold text-[13px] flex items-center justify-center gap-2 shadow-lg shadow-[#00a76b]/20 transition-all cursor-pointer border-none"
+                  >
+                    <span>
+                      {selectedNotif.type?.toLowerCase().includes('meeting') || selectedNotif.message?.toLowerCase().includes('meeting')
+                        ? 'Open Meeting & Offline Requests'
+                        : selectedNotif.type?.toLowerCase().includes('task')
+                          ? 'Open in Tasks'
+                          : selectedNotif.type?.toLowerCase().includes('leave')
+                            ? 'Open in Leave Management'
+                            : selectedNotif.type?.toLowerCase().includes('report')
+                              ? 'Open in Daily Report'
+                              : 'Open in Attendance'}
+                    </span>
+                    <ExternalLink size={15} />
+                  </button>
+                </div>
+              )}
             </div>
 
 

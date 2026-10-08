@@ -53,6 +53,18 @@ const AllNotifications = () => {
     const type = (notif?.type || '').toLowerCase();
     const text = (notif?.message || '').toLowerCase();
 
+    if (
+      type.includes('meeting') ||
+      type.includes('offline') ||
+      text.includes('meeting request') ||
+      text.includes('meeting') ||
+      text.includes('offline request') ||
+      text.includes('offline time')
+    ) {
+      navigate('/attendance?tab=meetingRequests');
+      return;
+    }
+
     if (type.includes('leave') || text.includes('leave') || text.includes('vacation') || text.includes('time off')) {
       navigate('/leave');
       return;

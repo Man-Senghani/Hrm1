@@ -67,13 +67,12 @@ const CustomSelectDropdown = ({ label, value, options, onChange }) => {
 const ViewHolidaysDrawer = ({ isOpen, onClose, holidays: initialHolidays }) => {
   const [rawHolidays, setRawHolidays] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const currentYear = new Date().getFullYear();
   const [selectedMonth, setSelectedMonth] = useState('all');
   const token = sessionStorage.getItem('token');
 
   useEffect(() => {
     if (!isOpen) return;
-    setSelectedYear(new Date().getFullYear());
 
     const fetchHolidays = async () => {
       try {
@@ -100,18 +99,6 @@ const ViewHolidaysDrawer = ({ isOpen, onClose, holidays: initialHolidays }) => {
 
   if (!isOpen) return null;
 
-  const currentYearNum = new Date().getFullYear();
-  // Show years up to current year starting from 2026.
-  // In 2026: only 2026 is displayed (future years 2027 & 2028 are removed).
-  // When year 2027 starts, 2027 will automatically appear in the filter.
-  const yearsList = [];
-  for (let yr = currentYearNum; yr >= 2026; yr--) {
-    yearsList.push({ value: yr, label: String(yr) });
-  }
-  if (yearsList.length === 0) {
-    yearsList.push({ value: currentYearNum, label: String(currentYearNum) });
-  }
-
   const monthsList = [
     { value: 'all', label: 'All Months' },
     { value: '0', label: 'January' },
@@ -133,7 +120,7 @@ const ViewHolidaysDrawer = ({ isOpen, onClose, holidays: initialHolidays }) => {
       if (!h || !h.date || h.isActive === false) return false;
       const hDate = new Date(h.date);
       if (isNaN(hDate.getTime())) return false;
-      if (hDate.getFullYear() !== Number(selectedYear)) return false;
+      if (hDate.getFullYear() !== currentYear) return false;
       if (selectedMonth !== 'all' && hDate.getMonth() !== Number(selectedMonth)) return false;
       return true;
     })
@@ -146,7 +133,7 @@ const ViewHolidaysDrawer = ({ isOpen, onClose, holidays: initialHolidays }) => {
         <div className="flex items-center justify-between pb-3 border-b border-gray-150 dark:border-gray-800 mb-4 shrink-0">
           <div>
             <h2 className="text-lg font-bold text-gray-900 dark:text-white">Upcoming Holidays</h2>
-            <p className="text-[10px] text-gray-400 font-semibold">{selectedYear} Holiday List</p>
+            <p className="text-[10px] text-gray-400 font-semibold">{currentYear} Holiday List</p>
           </div>
           <button type="button" onClick={onClose} className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded-full transition-colors cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800">
             <X size={20} />
@@ -155,12 +142,14 @@ const ViewHolidaysDrawer = ({ isOpen, onClose, holidays: initialHolidays }) => {
 
         {/* Filter Controls Header */}
         <div className="grid grid-cols-2 gap-2.5 mb-4 shrink-0 bg-slate-50 dark:bg-slate-900/50 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800">
-          <CustomSelectDropdown
-            label="Year"
-            value={selectedYear}
-            options={yearsList}
-            onChange={(val) => setSelectedYear(Number(val))}
-          />
+          <div className="w-full">
+            <label className="block text-[10px] font-extrabold text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wider">
+              Year
+            </label>
+            <div className="w-full bg-white dark:bg-[#0b1120] border border-gray-200 dark:border-gray-700/80 rounded-xl px-3 py-1.5 text-xs font-bold text-gray-800 dark:text-gray-200 flex items-center shadow-sm select-none">
+              <span>{currentYear}</span>
+            </div>
+          </div>
           <CustomSelectDropdown
             label="Month"
             value={selectedMonth}

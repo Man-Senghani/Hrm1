@@ -34,18 +34,25 @@ import EditableSelect from '@shared/components/EditableSelect';
 import { resolveRole, resolveRoleFromDesignation, getRoleAccessMetadata, getDesignationsForDepartment } from '@shared/utils/roleResolver';
 
 // ─── Premium Custom Dropdown ──────────────────────────────────────────────────
-const StyledSelect = ({ name, value, onChange, options, placeholder, required, error }) => {
+const StyledSelect = ({ name, value, onChange, options, placeholder, required, error, disabled }) => {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
-  const selectedLabel = options.find(o => o.value === value)?.label || '';
+  const selectedOption = options.find(o => !o.isHeader && o.value === value);
+  const selectedLabel = selectedOption?.label || selectedOption?.displayName || '';
 
   useEffect(() => {
     const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    const keyHandler = (e) => { if (e.key === 'Escape') setOpen(false); };
     document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
+    window.addEventListener('keydown', keyHandler);
+    return () => {
+      document.removeEventListener('mousedown', handler);
+      window.removeEventListener('keydown', keyHandler);
+    };
   }, []);
 
   const handleSelect = (val) => {
+    if (disabled) return;
     onChange({ target: { name, value: val } });
     setOpen(false);
   };
@@ -54,12 +61,14 @@ const StyledSelect = ({ name, value, onChange, options, placeholder, required, e
     <div className="relative" ref={ref}>
       <button
         type="button"
-        onClick={() => setOpen(p => !p)}
+        disabled={disabled}
+        onClick={() => !disabled && setOpen(p => !p)}
         className={`w-full h-11 px-3.5 pr-9 flex items-center justify-between rounded-xl border text-xs font-bold transition-all cursor-pointer
           bg-white dark:bg-[#1a1714]
           ${open ? 'border-[#00a76b] ring-1 ring-[#00a76b]/30 shadow-[0_0_0_3px_rgba(0,167,107,0.08)]' : 'border-slate-200 dark:border-[#38352e] hover:border-[#00a76b]/50'}
           ${value ? 'text-slate-900 dark:text-white' : 'text-slate-400 dark:text-slate-500'}
-          ${error ? 'border-red-400 ring-1 ring-red-300' : ''}`}
+          ${error ? 'border-red-400 ring-1 ring-red-300' : ''}
+          ${disabled ? 'opacity-50 cursor-not-allowed bg-slate-50 dark:bg-[#14120f]' : 'cursor-pointer'}`}
       >
         <span className="truncate">{selectedLabel || placeholder || 'Select…'}</span>
         <ChevronDown
@@ -70,23 +79,44 @@ const StyledSelect = ({ name, value, onChange, options, placeholder, required, e
 
       {open && (
         <div className="absolute z-[9999] left-0 right-0 mt-1.5 bg-white dark:bg-[#1e1b16] border border-slate-200 dark:border-[#38352e] rounded-xl shadow-xl overflow-hidden animate-in fade-in slide-in-from-top-1 duration-150">
-          <div className="max-h-52 overflow-y-auto py-1 scrollbar-thin scrollbar-thumb-slate-200 dark:scrollbar-thumb-[#38352e]">
-            {options.map(opt => (
-              <div
-                key={opt.value}
-                onClick={() => handleSelect(opt.value)}
-                className={`px-3.5 py-2.5 flex items-center gap-2.5 text-xs font-semibold cursor-pointer transition-all
-                  ${value === opt.value
-                    ? 'bg-[#00a76b]/10 text-[#00a76b] dark:bg-[#00a76b]/15'
-                    : 'text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-[#2a261f]'}`}
-              >
-                {value === opt.value && (
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#00a76b] flex-shrink-0" />
-                )}
-                {value !== opt.value && <span className="w-1.5 h-1.5 flex-shrink-0" />}
-                {opt.label}
-              </div>
-            ))}
+          <div className="max-h-60 overflow-y-auto py-1 scrollbar-thin scrollbar-thumb-slate-200 dark:scrollbar-thumb-[#38352e]">
+            {options.map((opt, idx) => {
+              if (opt.isHeader) {
+                return (
+                  <div
+                    key={`header-${idx}-${opt.label}`}
+                    className="px-3.5 py-2 text-[11px] font-black uppercase text-slate-800 dark:text-slate-200 tracking-wider bg-slate-100/90 dark:bg-[#25211b] select-none border-y border-slate-200/50 dark:border-white/5 sticky top-0 z-10"
+                  >
+                    {opt.label}
+                  </div>
+                );
+              }
+              const isSelected = value === opt.value;
+              return (
+                <div
+                  key={`${opt.value}-${idx}`}
+                  onClick={() => handleSelect(opt.value)}
+                  className={`px-3.5 py-2.5 flex items-center justify-between text-xs font-semibold cursor-pointer transition-all
+                    ${isSelected
+                      ? 'bg-[#00a76b]/10 text-[#00a76b] dark:bg-[#00a76b]/15 font-bold'
+                      : 'text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-[#2a261f]'}`}
+                >
+                  <div className="flex items-center gap-2.5 truncate">
+                    {isSelected ? (
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#00a76b] flex-shrink-0" />
+                    ) : (
+                      <span className="w-1.5 h-1.5 flex-shrink-0" />
+                    )}
+                    <span className="truncate">{opt.displayName || opt.label}</span>
+                  </div>
+                  {opt.sublabel && (
+                    <span className="text-[10px] text-slate-400 font-normal ml-2 flex-shrink-0">
+                      {opt.sublabel}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
@@ -149,6 +179,7 @@ const CreateUser = () => {
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
   const [isManagerChecked, setIsManagerChecked] = useState(false);
+  const [sameAsLocal, setSameAsLocal] = useState(false);
 
   const defaultDepartments = [
     'Admin',
@@ -188,24 +219,58 @@ const CreateUser = () => {
   const isDeptAdmin = (formData.department || '').trim().toLowerCase() === 'admin' || (formData.role || '').trim().toLowerCase() === 'admin';
 
   const filteredManagerOptions = useMemo(() => {
-    if (isDeptAdmin) {
-      const adminList = managers.filter(m => (m.role || '').toLowerCase() === 'admin');
-      return adminList.map(m => ({
-        value: m._id,
-        label: `${m.name || m.fullName} (Admin)`
-      }));
-    } else {
-      const allowedRoles = ['admin', 'hr', 'manager'];
-      const targetList = managers.filter(m => allowedRoles.includes((m.role || '').toLowerCase()));
-      return targetList.map(m => {
-        const roleLabel = (m.role || '').toLowerCase() === 'admin' ? 'Admin' : (m.role || '').toLowerCase() === 'hr' ? 'HR' : 'Manager';
-        return {
+    const validList = Array.isArray(managers) ? managers.filter(m => m && (m.name || m.fullName)) : [];
+
+    const managerList = validList.filter(m => (m.role || '').toLowerCase() === 'manager');
+    const hrList = validList.filter(m => (m.role || '').toLowerCase() === 'hr');
+    const adminList = validList.filter(m => (m.role || '').toLowerCase() === 'admin');
+
+    const options = [];
+
+    // 1. Managers
+    if (managerList.length > 0) {
+      options.push({ isHeader: true, label: 'Managers' });
+      managerList.forEach(m => {
+        const name = m.name || m.fullName || 'Manager';
+        options.push({
           value: m._id,
-          label: `${m.name || m.fullName} (${roleLabel})`
-        };
+          label: `${name} (Manager)`,
+          displayName: name,
+          role: 'Manager'
+        });
       });
     }
-  }, [isDeptAdmin, managers]);
+
+    // 2. HR
+    if (hrList.length > 0) {
+      options.push({ isHeader: true, label: 'HR' });
+      hrList.forEach(m => {
+        const name = m.name || m.fullName || 'HR';
+        options.push({
+          value: m._id,
+          label: `${name} (HR)`,
+          displayName: name,
+          role: 'HR'
+        });
+      });
+    }
+
+    // 3. Admin
+    if (adminList.length > 0) {
+      options.push({ isHeader: true, label: 'Admin' });
+      adminList.forEach(m => {
+        const name = m.name || m.fullName || 'Admin';
+        options.push({
+          value: m._id,
+          label: `${name} (Admin)`,
+          displayName: name,
+          role: 'Admin'
+        });
+      });
+    }
+
+    return options;
+  }, [managers]);
 
   const handleManagerToggle = (checked) => {
     setIsManagerChecked(checked);
@@ -506,8 +571,34 @@ const CreateUser = () => {
       return;
     }
 
+    if (name === 'address' && sameAsLocal) {
+      setErrors(newErrors);
+      setFormData({ ...formData, address: value, permanentAddress: value });
+      return;
+    }
+
+    if (name === 'permanentAddress' && sameAsLocal) {
+      setSameAsLocal(false);
+    }
+
     setErrors(newErrors);
     setFormData({ ...formData, [name]: value });
+  };
+
+  const handleSameAsLocalToggle = (e) => {
+    const checked = e.target.checked;
+    setSameAsLocal(checked);
+    if (checked) {
+      const localVal = formData.address || '';
+      setFormData(prev => ({ ...prev, permanentAddress: localVal }));
+      if (localVal) {
+        setErrors(prev => {
+          const updated = { ...prev };
+          delete updated.permanentAddress;
+          return updated;
+        });
+      }
+    }
   };
 
   const handleFileChange = (e) => {
@@ -600,11 +691,8 @@ const CreateUser = () => {
     }
 
     if (!formData.reportingManager) {
-      if (isDeptAdmin) {
-        if (filteredManagerOptions.length > 0) {
-          newErrors.reportingManager = 'Reporting Admin is required.';
-        }
-      } else {
+      const hasSelectableManagers = filteredManagerOptions.some(o => !o.isHeader);
+      if (hasSelectableManagers) {
         newErrors.reportingManager = 'Reporting Manager is required.';
       }
     }
@@ -898,7 +986,7 @@ const CreateUser = () => {
 
                 <div className="flex justify-between items-center text-xs">
                   <span className="font-semibold text-slate-500 dark:text-slate-400">
-                    {isDeptAdmin ? 'Reporting Admin' : 'Reporting Manager'}
+                    Reporting Manager
                   </span>
                   <span className="font-bold text-slate-800 dark:text-slate-200 truncate max-w-[160px]">
                     {managers.find(m => m._id === formData.reportingManager)?.name ||
@@ -1239,16 +1327,16 @@ const CreateUser = () => {
                 </div>
               </div>
 
-              {/* Reporting Manager / Reporting Admin */}
+              {/* Reporting Manager */}
               <div className="space-y-1.5 max-w-md">
                 <label className="text-[11px] font-extrabold text-slate-600 dark:text-slate-300 uppercase tracking-wider">
-                  {isDeptAdmin ? 'Reporting Admin' : 'Reporting Manager'} <span className="text-red-500">*</span>
+                  Reporting Manager <span className="text-red-500">*</span>
                 </label>
                 <StyledSelect
                   name="reportingManager"
                   value={formData.reportingManager}
                   onChange={handleChange}
-                  placeholder={isDeptAdmin ? "Select Admin" : "Select Manager"}
+                  placeholder="Select Reporting Manager"
                   error={errors.reportingManager}
                   options={filteredManagerOptions}
                 />
@@ -1274,14 +1362,36 @@ const CreateUser = () => {
                 {/* 2. Permanent Address */}
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
-                    <label className="text-[11px] font-extrabold text-slate-600 dark:text-slate-300 uppercase tracking-wider">2. Permanent Address <span className="text-red-500">*</span></label>
+                    <label className="text-[11px] font-extrabold text-slate-600 dark:text-slate-300 uppercase tracking-wider">
+                      2. Permanent Address <span className="text-red-500">*</span>
+                    </label>
                     <span className="text-[10px] font-bold text-slate-400 font-mono">{(formData.permanentAddress || '').length}/250</span>
                   </div>
                   <textarea
-                    required name="permanentAddress" value={formData.permanentAddress} onChange={handleChange} maxLength="250" rows="3"
-                    className="w-full p-3 bg-white dark:bg-[#1a1714] border border-slate-200 dark:border-[#38352e] rounded-xl text-xs font-semibold text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-[#00a76b] focus:ring-1 focus:ring-[#00a76b] transition-all resize-none"
-                    placeholder="Permanent home address..."
+                    required
+                    name="permanentAddress"
+                    value={formData.permanentAddress}
+                    onChange={(e) => {
+                      if (sameAsLocal) setSameAsLocal(false);
+                      handleChange(e);
+                    }}
+                    readOnly={sameAsLocal}
+                    maxLength="250"
+                    rows="3"
+                    className={`w-full p-3 border border-slate-200 dark:border-[#38352e] rounded-xl text-xs font-semibold text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-[#00a76b] focus:ring-1 focus:ring-[#00a76b] transition-all resize-none ${sameAsLocal ? 'bg-slate-100/70 dark:bg-[#151310] cursor-not-allowed opacity-80' : 'bg-white dark:bg-[#1a1714]'}`}
+                    placeholder={sameAsLocal ? "Same as local residential address" : "Permanent home address..."}
                   />
+                  <div className="flex items-center justify-between pt-0.5">
+                    <label className="inline-flex items-center gap-1.5 text-[11px] font-bold text-slate-500 dark:text-slate-400 cursor-pointer select-none hover:text-[#00a76b] transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={sameAsLocal}
+                        onChange={handleSameAsLocalToggle}
+                        className="w-3.5 h-3.5 rounded border-slate-300 text-[#00a76b] focus:ring-[#00a76b] accent-[#00a76b] cursor-pointer"
+                      />
+                      <span>Same as Local</span>
+                    </label>
+                  </div>
                   {errors.permanentAddress && <p className="text-red-500 text-[10px] font-semibold">{errors.permanentAddress}</p>}
                 </div>
               </div>

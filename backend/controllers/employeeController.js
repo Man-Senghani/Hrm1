@@ -14,7 +14,7 @@ exports.getEmployees = async (req, res) => {
 
     let employees = await Employee.find(query)
       .populate('userId', 'name email status role')
-      .populate('managerId', 'name email')
+      .populate('managerId reportingManager', 'name fullName email role')
       .lean();
 
     // Exclude orphaned records whose user document was deleted
@@ -79,31 +79,31 @@ exports.getEmployeeById = async (req, res) => {
     if (isObjectId) {
       employee = await Employee.findById(rawId)
         .populate('userId', 'name email status role')
-        .populate('managerId', 'name email');
+        .populate('managerId reportingManager', 'name fullName email role');
 
       if (!employee) {
         employee = await Employee.findOne({ userId: rawId })
           .populate('userId', 'name email status role')
-          .populate('managerId', 'name email');
+          .populate('managerId reportingManager', 'name fullName email role');
       }
     }
 
     if (!employee && isSanitizedObjectId) {
       employee = await Employee.findById(sanitizedId)
         .populate('userId', 'name email status role')
-        .populate('managerId', 'name email');
+        .populate('managerId reportingManager', 'name fullName email role');
 
       if (!employee) {
         employee = await Employee.findOne({ userId: sanitizedId })
           .populate('userId', 'name email status role')
-          .populate('managerId', 'name email');
+          .populate('managerId reportingManager', 'name fullName email role');
       }
     }
 
     if (!employee) {
       employee = await Employee.findOne({ employeeId: rawId })
         .populate('userId', 'name email status role')
-        .populate('managerId', 'name email');
+        .populate('managerId reportingManager', 'name fullName email role');
     }
 
     if (!employee && rawId.length >= 10) {
@@ -113,7 +113,7 @@ exports.getEmployeeById = async (req, res) => {
       if (isPrefixHex) {
         employee = await Employee.findOne({ _id: { $regex: new RegExp(`^${prefix}`) } })
           .populate('userId', 'name email status role')
-          .populate('managerId', 'name email');
+          .populate('managerId reportingManager', 'name fullName email role');
       }
     }
 

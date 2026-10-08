@@ -1086,9 +1086,25 @@ const Attendance = () => {
     try {
       const p = new URLSearchParams(window.location.search);
       if (p.get('action') === 'new-offline-request' || p.get('tab') === 'meetingRequests') return 'meetingRequests';
+      if (p.get('tab') === 'weeklyHours') return 'weeklyHours';
     } catch (_) {}
     return 'history';
   });
+
+  useEffect(() => {
+    try {
+      const p = new URLSearchParams(location.search);
+      const tab = p.get('tab') || location.state?.tab;
+      const action = p.get('action') || location.state?.action;
+      if (action === 'new-offline-request' || tab === 'meetingRequests') {
+        setAttendanceSubTab('meetingRequests');
+      } else if (tab === 'weeklyHours') {
+        setAttendanceSubTab('weeklyHours');
+      } else if (tab === 'history') {
+        setAttendanceSubTab('history');
+      }
+    } catch (_) {}
+  }, [location.search, location.state]);
   const [viewMode, setViewMode] = useState('all'); // all | daily | weekly | monthly
   const [sortField, setSortField] = useState('date');
   const [sortDir, setSortDir] = useState('desc');
