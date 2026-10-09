@@ -33,6 +33,12 @@ let lastAppliedInactive = 0;
 let lastAppliedTime = 0;
 let isSessionRunning = false;
 let idleStartTime = null;
+let lastPauseReason = null;      // tracks why session was paused (manual, inactivity, stale_heartbeat)
+let isNetworkOffline = false;    // true when browser detects network loss (VPN/WiFi disconnect)
+let wasActiveBeforeDisconnect = false; // remembers if session was running before network dropped
+let networkAutoResuming = false; // prevents duplicate auto-resume attempts
+let offlineStartTime = null;     // timestamp when network was lost
+let offlineMaxSystemIdle = 0;    // maximum system idle seconds observed while offline
 
 // Local clock loop for smooth UI ticking using real elapsed timestamps
 setInterval(() => {
@@ -139,6 +145,9 @@ async function autoResumeFromIdle() {
 if (window.electronAPI?.onSystemIdleStatus) {
   window.electronAPI.onSystemIdleStatus(({ idleSeconds, isIdle: systemIsIdle }) => {
     lastSystemIdleSeconds = idleSeconds;
+    if (isNetworkOffline && idleSeconds > offlineMaxSystemIdle) {
+      offlineMaxSystemIdle = idleSeconds;
+    }
 
     // Case 1: Currently ACTIVE — check if user has gone idle (no activity for 10 minutes = 600s)
     if (status === 'ACTIVE' && isSessionRunning) {
@@ -157,7 +166,7 @@ if (window.electronAPI?.onSystemIdleStatus) {
 // Track last known system idle seconds (for heartbeat type decision)
 let lastSystemIdleSeconds = 0;
 
-let currentAppVersion = '1.4.4';
+let currentAppVersion = '1.5.0';
 
 function updateEnvironmentBadge() {
   const isStaging = isStagingApp || BACKEND_HOST.includes('staging');
@@ -237,7 +246,7 @@ loadSession();
 // 📡 POLL /status — apply backend values directly, no local math
 // ============================================================
 async function pollSessionStatus() {
-  if (!authToken) return;
+  if (!authToken || isNetworkOffline) return;
   try {
     const res = await fetch(`${API_BASE}/status`, {
       headers: { Authorization: `Bearer ${authToken}` }
@@ -367,6 +376,7 @@ function applyServerState(data) {
     status = 'PAUSED';
     isIdle = false;
     isSessionRunning = false;
+    lastPauseReason = data.pauseReason || null;
     if (data.activeTime !== undefined) activeSeconds = data.activeTime;
     if (data.idleTime !== undefined) inactiveSeconds = data.idleTime;
     lastAppliedActive = activeSeconds;
@@ -382,7 +392,7 @@ function applyServerState(data) {
 // 💓 HEARTBEAT — sends activity type to backend every 10s
 // ============================================================
 async function sendHeartbeat() {
-  if (!authToken || status !== 'ACTIVE') return;
+  if (!authToken || status !== 'ACTIVE' || isNetworkOffline) return;
   // Use system idle seconds from powerMonitor to decide type
   const type = lastSystemIdleSeconds === 0 ? 'heartbeat' : 'active';
   try {
@@ -448,6 +458,9 @@ async function triggerIdle(idleSeconds = 600) {
 // ============================================================
 async function startSession() {
   if (!authToken) return alert('Please login first.');
+  if (isNetworkOffline || (typeof navigator !== 'undefined' && navigator.onLine === false)) {
+    return alert('Cannot start session: No internet connection detected. Please connect to your network or VPN first.');
+  }
   const startBtn = document.getElementById('start-btn');
   const originalHtml = startBtn ? startBtn.innerHTML : '';
   if (startBtn) {
@@ -761,6 +774,163 @@ function startHeartbeat() {
 function stopHeartbeat() {
   if (heartbeatInterval) { clearInterval(heartbeatInterval); heartbeatInterval = null; }
 }
+
+// ============================================================
+// 🌐 NETWORK RESILIENCE — VPN/WiFi Drop & Reconnect Handler
+// ============================================================
+// When network drops (VPN disconnect), the server's Dead-Man's
+// Switch will auto-pause the session after 25s of no heartbeats.
+// When network restores, this handler auto-resumes the session
+// so idle time doesn't accumulate from a network issue.
+// ============================================================
+
+window.addEventListener('offline', () => {
+  console.warn('⚠️ [NETWORK] Connection LOST (VPN/WiFi disconnected)');
+  isNetworkOffline = true;
+  offlineStartTime = Date.now();
+  offlineMaxSystemIdle = 0;
+  wasActiveBeforeDisconnect = (status === 'ACTIVE' && isSessionRunning);
+
+  // Stop sending heartbeats & polls — they will all fail anyway
+  stopHeartbeat();
+  stopPolling();
+
+  // Show visual network-down indicator on the alert banner
+  const alertEl = document.getElementById('desktop-alert');
+  if (alertEl) {
+    const titleEl = alertEl.querySelector('.alert-title');
+    const textEl = alertEl.querySelector('.alert-text');
+    if (titleEl) titleEl.innerText = 'Network Disconnected';
+    if (textEl) textEl.innerText = 'VPN / WiFi lost. Timer will auto-resume when connection is restored.';
+    alertEl.style.display = 'flex';
+  }
+
+  notifyDesktop('Network Disconnected', 'VPN / WiFi connection lost. Timer will auto-resume when restored.').catch(() => {});
+});
+
+window.addEventListener('online', async () => {
+  console.log('✅ [NETWORK] Connection RESTORED (VPN/WiFi reconnected)');
+  isNetworkOffline = false;
+
+  // Hide the network-down banner immediately
+  const alertEl = document.getElementById('desktop-alert');
+  if (alertEl && alertEl.style.display !== 'none') {
+    const titleEl = alertEl.querySelector('.alert-title');
+    if (titleEl && titleEl.innerText === 'Network Disconnected') {
+      alertEl.style.display = 'none';
+    }
+  }
+
+  // Only auto-resume if we were actively tracking before the disconnect
+  if (wasActiveBeforeDisconnect && authToken && !networkAutoResuming) {
+    networkAutoResuming = true;
+    console.log('🔄 [NETWORK AUTO-RESUME] Session was active before disconnect — auto-resuming...');
+
+    try {
+      // Small delay to let the network stack stabilize
+      await new Promise(r => setTimeout(r, 1500));
+
+      // First poll to see what state the server is in
+      const statusRes = await fetch(`${API_BASE}/status`, {
+        headers: { Authorization: `Bearer ${authToken}` }
+      });
+
+      if (statusRes.ok) {
+        const statusData = await statusRes.json();
+
+        // If the server paused us due to stale heartbeat (network loss), auto-resume
+        if (statusData.status === 'paused' && 
+            (statusData.pauseReason === 'stale_heartbeat' || statusData.pauseReason === 'network_disconnect')) {
+          console.log('🚀 [NETWORK AUTO-RESUME] Server confirms stale_heartbeat pause — sending resume...');
+
+          // Calculate how many active work seconds elapsed while offline
+          let offlineActiveSeconds = 0;
+          if (offlineStartTime) {
+            const elapsedOffline = Math.max(0, Math.floor((Date.now() - offlineStartTime) / 1000));
+            // If the user was active on the PC throughout the network drop (< 600s idle), credit as active work
+            if (offlineMaxSystemIdle < 600) {
+              offlineActiveSeconds = elapsedOffline;
+            }
+          }
+
+          const resumeRes = await fetch(`${API_BASE}/resume`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${authToken}`
+            },
+            body: JSON.stringify({
+              isNetworkAutoResume: true,
+              offlineActiveSeconds: offlineActiveSeconds
+            })
+          });
+
+          if (resumeRes.ok) {
+            const resumeData = await resumeRes.json().catch(() => ({}));
+
+            status = 'ACTIVE';
+            isIdle = false;
+            isSessionRunning = true;
+            idleNotificationSent = false;
+            lastStartOrResumeTime = Date.now();
+            lastPauseReason = null;
+
+            if (resumeData?.session) {
+              applyServerState(resumeData.session);
+            }
+
+            stopIdleReminderLoop();
+            startPolling();
+            startHeartbeat();
+            initScreenshotLoop(true);
+
+            notifyDesktop('Session Auto-Resumed', 'Network restored. Your tracking session has been automatically resumed.').catch(() => {});
+            console.log('✅ [NETWORK AUTO-RESUME] Session successfully auto-resumed!');
+          } else {
+            console.warn('[NETWORK AUTO-RESUME] Resume API call failed, starting polling for manual recovery');
+            startPolling();
+            startHeartbeat();
+          }
+        } else if (statusData.status === 'active' && statusData.isRunning) {
+          // Server somehow still considers us active — just restart polling
+          console.log('[NETWORK RECONNECT] Server says session still active — restoring polling');
+          applyServerState(statusData);
+          startPolling();
+          startHeartbeat();
+          if (!screenshotTimeout) initScreenshotLoop(true);
+        } else {
+          // Paused for other reason (manual/inactivity) — don't auto-resume, just restore polling
+          console.log(`[NETWORK RECONNECT] Session paused for reason: ${statusData.pauseReason || 'unknown'} — not auto-resuming`);
+          applyServerState(statusData);
+          startPolling();
+          startHeartbeat();
+        }
+      } else {
+        console.warn('[NETWORK RECONNECT] Status check failed — starting polling anyway');
+        startPolling();
+        startHeartbeat();
+      }
+    } catch (err) {
+      console.error('[NETWORK AUTO-RESUME ERROR]', err);
+      // Even on error, restart polling so the app doesn't stay frozen
+      startPolling();
+      startHeartbeat();
+    } finally {
+      networkAutoResuming = false;
+      wasActiveBeforeDisconnect = false;
+      offlineStartTime = null;
+      offlineMaxSystemIdle = 0;
+    }
+  } else {
+    // Wasn't tracking before disconnect — just restore polling
+    wasActiveBeforeDisconnect = false;
+    if (authToken) {
+      startPolling();
+      startHeartbeat();
+      await pollSessionStatus();
+    }
+  }
+});
 
 // ============================================================
 // 🔔 NOTIFICATIONS

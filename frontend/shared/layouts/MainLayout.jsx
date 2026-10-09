@@ -28,6 +28,8 @@ import {
   MessageSquare,
   AlertCircle,
   Play,
+  Pause,
+  Square,
   Camera,
   PlusCircle,
   User,
@@ -89,9 +91,6 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
   const searchRef = React.useRef(null);
   const triggerRef = React.useRef(null);
   const dropdownRef = React.useRef(null);
-  const quickActionRef = React.useRef(null);
-
-  const [isQuickActionOpen, setIsQuickActionOpen] = useState(false);
 
   useEffect(() => {
     // Reserved for location.pathname based side effects
@@ -388,9 +387,6 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
         setIsProfileDropdownOpen(false);
       }
 
-      if (quickActionRef.current && !quickActionRef.current.contains(event.target)) {
-        setIsQuickActionOpen(false);
-      }
       if (chatRef.current && !chatRef.current.contains(event.target)) {
         setIsChatPopupOpen(false);
       }
@@ -956,58 +952,33 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
 
           {/* Right Controls */}
           <div className="flex items-center h-full gap-3 md:gap-5 shrink-0 ml-auto">
-            {/* Quick Action button */}
-            <div className="relative" ref={quickActionRef}>
-              <button
-                onClick={() => setIsQuickActionOpen(!isQuickActionOpen)}
-                className="flex items-center justify-center gap-1.5 px-3 py-2 sm:px-4 sm:py-2 bg-[#00a76b] hover:bg-[#00915c] text-white rounded-full font-bold text-xs transition-all cursor-pointer border-none shadow-sm shrink-0"
-              >
-                <Plus size={15} strokeWidth={2.8} />
-                <span className="hidden sm:inline">Quick action</span>
-              </button>
 
-              {isQuickActionOpen && (
-                <div className="absolute top-[45px] left-4 w-56 bg-white dark:bg-[#0c1512] border border-[#eceae3] dark:border-[#1a2d29] rounded-[20px] shadow-[0_20px_50px_rgba(0,0,0,0.15)] overflow-hidden z-[110] p-2 flex flex-col">
-                  {['admin', 'hr'].includes(activeRole) && (
-                    <>
-                      <button onClick={() => { setIsQuickActionOpen(false); handleNav('/create-user'); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-[#162722] text-xs font-bold text-gray-700 dark:text-slate-300 rounded-xl transition-colors border-none bg-transparent cursor-pointer">
-                        Add Employee
-                      </button>
-                      <button onClick={() => { setIsQuickActionOpen(false); handleNav('/notifications'); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-[#162722] text-xs font-bold text-gray-700 dark:text-slate-300 rounded-xl transition-colors border-none bg-transparent cursor-pointer">
-                        Create Announcement
-                      </button>
-                    </>
-                  )}
-
-                  {activeRole === 'manager' && (
-                    <>
-                      <button onClick={() => { setIsQuickActionOpen(false); handleNav('/notifications'); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-[#162722] text-xs font-bold text-gray-700 dark:text-slate-300 rounded-xl transition-colors border-none bg-transparent cursor-pointer">
-                        Create Announcement
-                      </button>
-                    </>
-                  )}
-
-                  {activeRole === 'employee' && (
-                    <>
-                      <button onClick={() => { setIsQuickActionOpen(false); handleNav('/attendance'); }} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-[#162722] text-xs font-bold text-gray-700 dark:text-slate-300 rounded-xl transition-colors border-none bg-transparent cursor-pointer">
-                        Time Tracker
-                      </button>
-                    </>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* ⏱️ GLOBAL INACTIVITY TRACKER STATUS (TEXT ONLY) */}
+            {/* ⏱️ GLOBAL INACTIVITY TRACKER STATUS (WITH ACCURATE ICONS) */}
             {isTrackingActive ? (
-              <span className="text-xs font-bold text-[#00a76b] dark:text-[#34d399] flex items-center gap-1.5 select-none">
-                <span className="w-2 h-2 rounded-full bg-[#00a76b] animate-pulse"></span>
-                <span>Active</span>
+              <span className="text-xs font-bold text-emerald-700 dark:text-emerald-300 flex items-center gap-1.5 select-none px-2.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-700 shadow-xs">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                </span>
+                <Play size={10} className="fill-emerald-600 dark:fill-emerald-400" />
+                <span>Running</span>
+              </span>
+            ) : trackerRawStatus === 'paused' ? (
+              <span className="text-xs font-bold text-amber-800 dark:text-amber-300 flex items-center gap-1.5 select-none px-2.5 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-700 shadow-xs">
+                <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
+                <Pause size={10} className="fill-amber-600 dark:fill-amber-400" />
+                <span>Paused</span>
+              </span>
+            ) : trackerRawStatus === 'idle' ? (
+              <span className="text-xs font-bold text-orange-800 dark:text-orange-300 flex items-center gap-1.5 select-none px-2.5 py-0.5 rounded-full bg-orange-50 dark:bg-orange-950/60 border border-orange-300 dark:border-orange-700 shadow-xs">
+                <span className="w-2 h-2 rounded-full bg-orange-500 animate-ping"></span>
+                <AlertCircle size={10} className="text-orange-600 dark:text-orange-400" />
+                <span>Idle</span>
               </span>
             ) : (
-              <span className="text-xs font-bold text-amber-600 dark:text-amber-400 flex items-center gap-1.5 select-none">
-                <span className="w-2 h-2 rounded-full bg-amber-500"></span>
-                <span>Paused</span>
+              <span className="text-xs font-bold text-slate-600 dark:text-slate-400 flex items-center gap-1.5 select-none px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-[#25221c] border border-slate-200 dark:border-[#38352e]">
+                <Square size={8} className="fill-slate-400 text-slate-400" />
+                <span>Stopped</span>
               </span>
             )}
 

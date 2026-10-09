@@ -457,7 +457,13 @@ exports.getMyReports = async (req, res) => {
   try {
     const { startDate, endDate, projectName, status, search, page = 1, limit = 10 } = req.query;
 
-    const query = { user: req.user.id };
+    const employeeDoc = await Employee.findOne({ userId: req.user.id });
+    const userMatch = [{ user: req.user.id }];
+    if (employeeDoc?._id) {
+      userMatch.push({ employee: employeeDoc._id });
+    }
+
+    const query = { $or: userMatch };
 
     if (projectName && projectName !== 'all') {
       query.projectName = new RegExp(projectName.trim(), 'i');
@@ -475,10 +481,14 @@ exports.getMyReports = async (req, res) => {
 
     if (search && search.trim()) {
       const regex = new RegExp(search.trim(), 'i');
-      query.$or = [
-        { projectName: regex },
-        { workDescription: regex },
-        { status: regex }
+      query.$and = [
+        {
+          $or: [
+            { projectName: regex },
+            { workDescription: regex },
+            { status: regex }
+          ]
+        }
       ];
     }
 
@@ -525,23 +535,39 @@ exports.getAllReports = async (req, res) => {
 
     let baseQuery = {};
 
-    // Manager Scoping: only show reports for employees managed by this manager
-    if (userRole === 'manager') {
-      const managedEmployees = await Employee.find({
-        $or: [
-          { managerId: req.user.id },
-          { reportingManager: req.user.id }
-        ]
-      }, 'userId').lean();
-
-      const managedUserIds = managedEmployees.map(e => e.userId).filter(Boolean);
-      managedUserIds.push(req.user.id); // allow manager to see their own reports as well
-      baseQuery.user = { $in: managedUserIds };
+    // 🛡️ Resolve logged-in user & employee IDs to hide self from Team / All Employee Reports
+    const employeeDoc = await Employee.findOne({ userId: req.user.id });
+    const excludeUserIds = [req.user.id];
+    if (employeeDoc?._id) {
+      excludeUserIds.push(employeeDoc._id.toString());
     }
 
-    // Filter by specific Employee User ID
+    // Filter by specific Employee User ID (if explicitly selected by higher authority)
     if (employeeId && employeeId !== 'all') {
       baseQuery.user = employeeId;
+    } else {
+      // By default: Hide the logged-in user's own reports in Team / All Employee Reports
+      if (userRole === 'manager') {
+        const managedEmployees = await Employee.find({
+          $or: [
+            { managerId: req.user.id },
+            { reportingManager: req.user.id }
+          ]
+        }, 'userId').lean();
+
+        const managedUserIds = managedEmployees
+          .map(e => e.userId?.toString())
+          .filter(Boolean)
+          .filter(id => !excludeUserIds.includes(id));
+
+        baseQuery.user = { $in: managedUserIds };
+      } else {
+        // Admin & HR: Exclude logged-in user's own reports
+        baseQuery.user = { $nin: excludeUserIds };
+        if (employeeDoc?._id) {
+          baseQuery.employee = { $ne: employeeDoc._id };
+        }
+      }
     }
 
     // Filter by Department
@@ -593,10 +619,14 @@ exports.getAllReports = async (req, res) => {
     if (search && search.trim()) {
       const regex = new RegExp(search.trim(), 'i');
       
-      // Search matching users/employees
-      const matchingUsers = await User.find({
+      // Search matching users/employees (excluding self if viewing all employees)
+      const userSearchFilter = {
         $or: [{ name: regex }, { email: regex }, { employeeId: regex }]
-      }, '_id').lean();
+      };
+      if (!employeeId || employeeId === 'all') {
+        userSearchFilter._id = { $nin: excludeUserIds };
+      }
+      const matchingUsers = await User.find(userSearchFilter, '_id').lean();
       const matchingUserIds = matchingUsers.map(u => u._id);
 
       baseQuery.$or = [

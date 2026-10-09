@@ -208,6 +208,7 @@ exports.startTracking = async (req, res) => {
       session.segmentStart = now;       // start of THIS active segment
       session.lastHeartbeat = now;
       session.idleApplied = false;
+      session.pauseReason = null;
       session.sessions.push({ start: now });
     } else {
       session = new TimeTrack({
@@ -307,6 +308,7 @@ exports.pauseTracking = async (req, res) => {
     session.isRunning = false;
     session.lastHeartbeat = now;
     session.idleApplied = false;
+    session.pauseReason = 'manual';
 
     const lastIdx = session.sessions.length - 1;
     if (lastIdx >= 0) {
@@ -376,10 +378,21 @@ exports.resumeTracking = async (req, res) => {
       return res.json({ message: 'Tracking already active', session: buildPayload(session) });
     }
 
-    // 🕒 Finalize accumulated idle duration into idleTime
+    // 🕒 Finalize accumulated idle duration: credit back active work time if reconnecting from network/VPN drop
     if (session.idleStart) {
       const idleDuration = Math.floor((now - new Date(session.idleStart)) / 1000);
-      session.idleTime += Math.max(0, idleDuration);
+      const requestedActive = parseInt(req.body?.offlineActiveSeconds, 10) || 0;
+
+      if ((session.pauseReason === 'stale_heartbeat' || session.pauseReason === 'network_disconnect' || req.body?.isNetworkAutoResume) && requestedActive > 0) {
+        // Cap credited active time to actual elapsed idle duration so time cannot be artificially inflated
+        const creditedActive = Math.min(idleDuration, Math.max(0, requestedActive));
+        session.activeTime = (session.activeTime || 0) + creditedActive;
+        const remainingIdle = Math.max(0, idleDuration - creditedActive);
+        session.idleTime = (session.idleTime || 0) + remainingIdle;
+        console.log(`[NETWORK AUTO-RESUME] Employee ${id}: credited ${creditedActive}s active time, ${remainingIdle}s idle time`);
+      } else {
+        session.idleTime += Math.max(0, idleDuration);
+      }
       session.idleStart = null;
     }
 
@@ -388,6 +401,7 @@ exports.resumeTracking = async (req, res) => {
     session.segmentStart = now;
     session.lastHeartbeat = now;
     session.idleApplied = false;
+    session.pauseReason = null;
 
     session.sessions.push({ resume: now });
 
@@ -568,6 +582,7 @@ exports.updateActivity = async (req, res) => {
           session.idleStart = now; // 🕒 Ongoing idle time accumulates from now
           session.inactivityCount += 1;
           session.idleApplied = true;
+          session.pauseReason = 'inactivity';
 
           const lastIdx = session.sessions.length - 1;
           if (lastIdx >= 0 && !session.sessions[lastIdx].pause && !session.sessions[lastIdx].end) {
@@ -709,6 +724,7 @@ exports.getSessionStatus = async (req, res) => {
         session.idleStart = pauseTime;
         session.status = 'paused';
         session.isRunning = false;
+        session.pauseReason = 'stale_heartbeat';
 
         const lastIdx = (session.sessions || []).length - 1;
         if (lastIdx >= 0 && !session.sessions[lastIdx].pause && !session.sessions[lastIdx].end) {
@@ -1651,6 +1667,7 @@ function buildPayload(session) {
     inactivityCount: session.inactivityCount || 0,
     startTime: session.startTime,
     lastHeartbeat: session.lastHeartbeat,
-    segmentStart: session.segmentStart
+    segmentStart: session.segmentStart,
+    pauseReason: session.pauseReason || null
   };
 }

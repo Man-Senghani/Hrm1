@@ -940,7 +940,7 @@ const MeetingRequestsTable = ({
                         <input
                           type="number"
                           min="1"
-                          max={selectedRequest.recordedInactiveMinutes || 480}
+                          max={selectedRequest.recordedInactiveMinutes || undefined}
                           value={finalMinutesInput}
                           onChange={(e) => setFinalMinutesInput(e.target.value)}
                           className="w-full px-3 py-2.5 text-sm font-bold rounded-xl border border-[#cbd5e1] dark:border-[#133029] bg-white dark:bg-[#071e17] text-slate-800 dark:text-white focus:ring-2 focus:ring-emerald-500/30 outline-none"
@@ -1112,7 +1112,7 @@ const MeetingRequestsTable = ({
                       <input
                         type="number"
                         min="1"
-                        max={480}
+                        max={availableInactiveMins !== null && availableInactiveMins > 0 ? availableInactiveMins : undefined}
                         placeholder="e.g. 30"
                         value={newMinutes}
                         onChange={(e) => setNewMinutes(e.target.value)}

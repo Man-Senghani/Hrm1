@@ -7,7 +7,7 @@ import {
   Clock, Calendar, Users, CheckCircle, XCircle, AlertTriangle,
   Search, Filter, Download, RefreshCw, ChevronLeft, ChevronRight, ChevronDown, ChevronUp,
   LogIn, LogOut, Timer, TrendingUp, ArrowUpRight, ArrowDownRight,
-  Sun, Moon, Coffee, MoreVertical, Square, Activity, Zap, CalendarRange
+  Sun, Moon, Coffee, MoreVertical, Square, Activity, Zap, CalendarRange, Eye
 } from 'lucide-react';
 import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -17,6 +17,7 @@ import TimeTrackerWidget from '@shared/components/TimeTrackerWidget';
 import ViewHolidaysDrawer from '../components/modals/ViewHolidaysDrawer';
 import CheckInButton from '../components/CheckInButton';
 import AttendanceSessionDetailModal from '@shared/components/AttendanceSessionDetailModal';
+import EmployeeAttendanceDetailPage from '@shared/pages/EmployeeAttendanceDetailPage';
 import ExportFilterModal from '@shared/components/ExportFilterModal';
 import MeetingRequestsTable from '@shared/components/MeetingRequestsTable';
 import WeeklyHoursTable from '@shared/components/WeeklyHoursTable';
@@ -1068,6 +1069,27 @@ const Attendance = () => {
   const myUserId = currentLoggedInUser?._id || currentLoggedInUser?.id || sessionStorage.getItem('userId') || '';
   const [hoveredWeeklySlice, setHoveredWeeklySlice] = useState(null);
   const [selectedSessionRecord, setSelectedSessionRecord] = useState(null);
+  const [selectedDetailPageRecord, setSelectedDetailPageRecord] = useState(null);
+
+  const openDetailPageForRecord = useCallback((record) => {
+    if (!record) return;
+    const enriched = {
+      ...record,
+      name: record.user?.name || record.name || record.employeeName || currentLoggedInUser?.name || 'Employee',
+      employeeName: record.user?.name || record.name || record.employeeName || currentLoggedInUser?.name || 'Employee',
+      department: record.department || record.user?.role || currentLoggedInUser?.role || 'hr',
+      user: typeof record.user === 'object' && record.user !== null ? record.user : {
+        _id: record.user || currentLoggedInUser?._id,
+        name: record.user?.name || currentLoggedInUser?.name || 'Employee',
+        role: record.user?.role || currentLoggedInUser?.role || 'hr'
+      }
+    };
+    setSelectedDetailPageRecord(enriched);
+  }, [currentLoggedInUser]);
+
+  const openSessionModalForRecord = useCallback((record) => {
+    openDetailPageForRecord(record);
+  }, [openDetailPageForRecord]);
   const [hoveredStatusSlice, setHoveredStatusSlice] = useState(null);
   const [hoveredLegendStatus, setHoveredLegendStatus] = useState(null);
 
@@ -2502,6 +2524,18 @@ const Attendance = () => {
     );
   }
 
+  if (selectedDetailPageRecord) {
+    return (
+      <div className="space-y-6 pb-10">
+        <EmployeeAttendanceDetailPage
+          record={selectedDetailPageRecord}
+          allRecords={allCombinedRecords}
+          onBack={() => setSelectedDetailPageRecord(null)}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 pb-10">
       {/* ── HEADER ── */}
@@ -3105,6 +3139,9 @@ const Attendance = () => {
           weeklyTargetHours={42.5}
           isLive={liveSessionStatus?.hasActiveSession && liveSessionStatus?.status === 'active'}
           isRunning={liveSessionStatus?.isRunning}
+          sessionStatus={liveSessionStatus?.status}
+          hasActiveSession={liveSessionStatus?.hasActiveSession}
+          idleSeconds={liveIdleSeconds}
           onRefresh={handleRefresh}
           isRefreshing={isRefreshing}
         />
@@ -3124,6 +3161,20 @@ const Attendance = () => {
                 placeholder="dd-mm-yyyy"
                 allowRange={false}
               />
+              <button
+                type="button"
+                onClick={() => {
+                  const todayRec = filteredRecords[0] || {
+                    date: dailyActivityDate || getLocalYYYYMMDD(new Date()),
+                    user: currentLoggedInUser
+                  };
+                  openSessionModalForRecord(todayRec);
+                }}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 dark:bg-[#133029] text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-[#1a4037] border border-emerald-200 dark:border-[#1e483c] text-xs font-bold transition-all shadow-xs cursor-pointer"
+              >
+                <Eye size={12} />
+                <span>View in Popup</span>
+              </button>
             </div>
           </div>
 
@@ -3139,23 +3190,25 @@ const Attendance = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#e2eae7] dark:divide-[#133029]">
-                {dailyActivityRows.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} className="py-8 text-center text-slate-400 dark:text-[#829e92] font-semibold text-xs">
-                      No daily activity recorded for this date.
-                    </td>
+                {dailyActivityRows.map((row, idx) => (
+                  <tr
+                    key={idx}
+                    onClick={() => {
+                      const todayRec = filteredRecords[0] || {
+                        date: dailyActivityDate || getLocalYYYYMMDD(new Date()),
+                        user: currentLoggedInUser
+                      };
+                      openSessionModalForRecord(todayRec);
+                    }}
+                    className="hover:bg-slate-50/80 dark:hover:bg-[#0d2a22]/60 transition-colors cursor-pointer"
+                  >
+                    <td className="px-4 py-2.5 font-bold text-slate-800 dark:text-white">{row.checkin}</td>
+                    <td className="px-4 py-2.5 text-center font-bold text-slate-600 dark:text-slate-300">{row.pauseNo}</td>
+                    <td className="px-4 py-2.5 font-bold text-slate-700 dark:text-slate-200">{row.resumeTime}</td>
+                    <td className="px-4 py-2.5 font-bold text-slate-700 dark:text-slate-200">{row.pauseTime}</td>
+                    <td className="px-4 py-2.5 text-right font-black text-emerald-600 dark:text-emerald-400">{row.totalTime}</td>
                   </tr>
-                ) : (
-                  dailyActivityRows.map((row, idx) => (
-                    <tr key={idx} className="hover:bg-slate-50/60 dark:hover:bg-[#0d2a22]/50 transition-colors">
-                      <td className="px-4 py-2.5 font-bold text-slate-800 dark:text-white">{row.checkin}</td>
-                      <td className="px-4 py-2.5 text-center font-bold text-slate-600 dark:text-slate-300">{row.pauseNo}</td>
-                      <td className="px-4 py-2.5 font-bold text-slate-700 dark:text-slate-200">{row.resumeTime}</td>
-                      <td className="px-4 py-2.5 font-bold text-slate-700 dark:text-slate-200">{row.pauseTime}</td>
-                      <td className="px-4 py-2.5 text-right font-black text-emerald-600 dark:text-emerald-400">{row.totalTime}</td>
-                    </tr>
-                  ))
-                )}
+                ))}
               </tbody>
             </table>
           </div>
@@ -3279,7 +3332,7 @@ const Attendance = () => {
                   { key: 'hours', label: 'Working Hours' },
                   { key: 'inactive', label: 'Inactive Time' },
                   { key: 'total', label: 'Total Hours' },
-                  ...(viewContext !== 'employee' && userRole !== 'employee' ? [{ key: 'actions', label: 'Action' }] : [])
+                  { key: 'actions', label: 'Action' }
                 ].map(col => (
                   <th key={col.key}
                     onClick={() => col.key !== 'hours' && col.key !== 'inactive' && col.key !== 'total' && col.key !== 'clockOut' && col.key !== 'actions' && handleSort(col.key)}
@@ -3298,7 +3351,7 @@ const Attendance = () => {
             <tbody className="divide-y divide-[#e2eae7] dark:divide-[#133029]">
               {paginatedRecords.length === 0 ? (
                 <tr>
-                  <td colSpan={viewContext !== 'employee' && userRole !== 'employee' ? 9 : 8} className="py-8 text-center">
+                  <td colSpan={9} className="py-8 text-center">
                     <div className="flex flex-col items-center gap-2">
                       <Calendar size={28} className="text-slate-300 dark:text-slate-600" />
                       <p className="text-xs font-semibold text-slate-400 dark:text-slate-500">No attendance records found</p>
@@ -3347,8 +3400,8 @@ const Attendance = () => {
                 return (
                   <tr
                     key={record._id || i}
-                    onClick={viewContext !== 'employee' ? () => setSelectedSessionRecord(record) : undefined}
-                    className={viewContext !== 'employee' ? "hover:bg-emerald-50/60 dark:hover:bg-[#112d26] transition-colors cursor-pointer group" : "transition-colors group"}
+                    onClick={() => openSessionModalForRecord(record)}
+                    className="hover:bg-emerald-50/60 dark:hover:bg-[#112d26] transition-colors cursor-pointer group"
                   >
                     <td className="px-3 py-1.5 border-r border-[#e2eae7] dark:border-[#133029] w-[180px] max-w-[180px]">
                       <div className="flex items-center gap-2 overflow-hidden">
@@ -3427,10 +3480,11 @@ const Attendance = () => {
                         })()}
                       </span>
                     </td>
-                    {viewContext !== 'employee' && userRole !== 'employee' && (
-                      <td className="px-3 py-1.5">
-                        {isToday && hasCheckedOut ? (
+                    <td className="px-3 py-1.5">
+                      <div className="flex items-center gap-1.5">
+                        {isToday && hasCheckedOut && userRole !== 'employee' && (
                           <button
+                            type="button"
                             onClick={(e) => { e.stopPropagation(); handleOverrideCheckout(record); }}
                             title="Reopen accidental checkout"
                             className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-500/10 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400 hover:bg-amber-500 hover:text-white dark:hover:bg-amber-500 dark:hover:text-white border border-amber-500/30 text-[10.5px] font-bold transition-all shadow-xs cursor-pointer"
@@ -3438,11 +3492,18 @@ const Attendance = () => {
                             <Zap size={11} />
                             <span>Override</span>
                           </button>
-                        ) : (
-                          <span className="text-slate-400 dark:text-slate-600 text-[11px] font-mono">--</span>
                         )}
-                      </td>
-                    )}
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); openSessionModalForRecord(record); }}
+                          title="View Daily Activity Breakdown"
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-slate-100 hover:bg-emerald-50 dark:bg-[#133029] dark:hover:bg-[#1a4037] text-slate-700 hover:text-emerald-600 dark:text-slate-300 dark:hover:text-emerald-400 border border-slate-200 dark:border-[#1e483c] text-[10.5px] font-bold transition-all shadow-xs cursor-pointer"
+                        >
+                          <Eye size={11} />
+                          <span>View</span>
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 );
               })}
@@ -3574,6 +3635,11 @@ const Attendance = () => {
         isOpen={!!selectedSessionRecord}
         onClose={() => setSelectedSessionRecord(null)}
         record={selectedSessionRecord}
+        allRecords={baseAttendanceRecords}
+        onOpenFullPage={(rec) => {
+          setSelectedSessionRecord(null);
+          openDetailPageForRecord(rec);
+        }}
       />
 
       {/* ── EXPORT FILTER MODAL ── */}

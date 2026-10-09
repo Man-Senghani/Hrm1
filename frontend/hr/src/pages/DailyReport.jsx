@@ -13,6 +13,7 @@ import CustomSelect from '@shared/components/CustomSelect';
 import MultiProjectSelect from '@shared/components/MultiProjectSelect';
 import StatusSelect from '@shared/components/StatusSelect';
 import ExportFilterModal from '@shared/components/ExportFilterModal';
+import AttendanceSessionDetailModal from '@shared/components/AttendanceSessionDetailModal';
 
 const STATUS_ICONS = {
   'Completed': <CheckCircle2 size={15} className="text-emerald-500 shrink-0" />,
@@ -56,6 +57,15 @@ const getTodayStr = () => {
 const getMinAllowedDate = () => {
   const d = new Date();
   d.setDate(d.getDate() - 7);
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+};
+
+const getLast7DaysStr = () => {
+  const d = new Date();
+  d.setDate(d.getDate() - 6);
   const yyyy = d.getFullYear();
   const mm = String(d.getMonth() + 1).padStart(2, '0');
   const dd = String(d.getDate()).padStart(2, '0');
@@ -112,6 +122,7 @@ const DailyReportHR = () => {
 
   const [loading, setLoading] = useState(true);
   const [selectedReport, setSelectedReport] = useState(null);
+  const [selectedAttendanceModalRecord, setSelectedAttendanceModalRecord] = useState(null);
   const [selectedEntries, setSelectedEntries] = useState({});
   const [expandedTasks, setExpandedTasks] = useState({});
   const [hoveredReportId, setHoveredReportId] = useState(null);
@@ -356,7 +367,7 @@ const DailyReportHR = () => {
   const [mySearch, setMySearch] = useState('');
   const [myProjectFilter, setMyProjectFilter] = useState('all');
   const [myStatusFilter, setMyStatusFilter] = useState('all');
-  const [myStartDateFilter, setMyStartDateFilter] = useState(getTodayStr);
+  const [myStartDateFilter, setMyStartDateFilter] = useState(getLast7DaysStr);
   const [myEndDateFilter, setMyEndDateFilter] = useState(getTodayStr);
 
   // Pagination
@@ -388,7 +399,12 @@ const DailyReportHR = () => {
       }
       if (Array.isArray(empRes.data?.employees || empRes.data)) {
         const emps = empRes.data.employees || empRes.data;
-        setEmployeeOptions(emps);
+        const activeUid = String(currentUser?._id || currentUser?.id || '');
+        const filteredEmps = emps.filter(e => {
+          const uId = String(e.userId?._id || e.userId || e._id || '');
+          return uId !== activeUid;
+        });
+        setEmployeeOptions(filteredEmps);
       }
     } catch (e) {
       console.warn('Filter meta load error', e);
@@ -696,11 +712,8 @@ const DailyReportHR = () => {
         setIsFormDrawerOpen(false);
         setEditingReport(null);
         
-        if (viewTab === 'team') {
-          fetchDailyReports();
-        } else {
-          fetchMyReports();
-        }
+        fetchDailyReports();
+        fetchMyReports();
       }
     } catch (err) {
       console.error('Submit report error:', err);
@@ -922,17 +935,27 @@ const DailyReportHR = () => {
   const myInProgressCount = filteredMyReports.filter(r => r.status === 'In Progress').length;
   const myTotalHours = filteredMyReports.reduce((acc, curr) => acc + (curr.hoursSpent || 0), 0);
 
+  // Filter out logged-in user's own reports from the Team / All Employee list
+  const teamReports = useMemo(() => {
+    const activeUid = String(currentUser?._id || currentUser?.id || '');
+    if (!activeUid) return reports;
+    return reports.filter(r => {
+      const repUserId = String(r.user?._id || r.user || r.employee?.userId || r.employee?._id || r.employee || '');
+      return repUserId !== activeUid;
+    });
+  }, [reports, currentUser]);
+
   // Calculate team total target hours (8.5 hrs * 5 days = 42.5 hrs per employee)
   const teamTargetHours = useMemo(() => {
     const empSet = new Set();
-    reports.forEach(r => {
+    teamReports.forEach(r => {
       const id = r.user?._id || r.user || r.employee?._id || r.employee || r.user?.name || r.employeeName;
       if (id) empSet.add(String(id));
     });
     const count = empSet.size > 0 ? empSet.size : 1;
     const total = count * 42.5;
     return Number.isInteger(total) ? total : total.toFixed(1);
-  }, [reports]);
+  }, [teamReports]);
 
   return (
     <div className="space-y-4 pb-8">
@@ -1436,7 +1459,7 @@ const DailyReportHR = () => {
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
                     <h4 className="font-extrabold text-xs sm:text-sm text-amber-950 dark:text-amber-100">
-                      {reports.filter(r => r.editRequest?.status === 'pending').length} Pending Daily Report Edit {reports.filter(r => r.editRequest?.status === 'pending').length === 1 ? 'Request' : 'Requests'}
+                      {teamReports.filter(r => r.editRequest?.status === 'pending').length} Pending Daily Report Edit {teamReports.filter(r => r.editRequest?.status === 'pending').length === 1 ? 'Request' : 'Requests'}
                     </h4>
                     <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-200/90 dark:bg-amber-900/80 text-amber-900 dark:text-amber-200 uppercase tracking-wider animate-pulse">
                       Action Needed
@@ -1452,7 +1475,7 @@ const DailyReportHR = () => {
                 <button
                   type="button"
                   onClick={() => {
-                    const firstPending = reports.find(r => r.editRequest?.status === 'pending');
+                    const firstPending = teamReports.find(r => r.editRequest?.status === 'pending');
                     if (firstPending) {
                       setSelectedReport(firstPending);
                       setExpandedTasks({});
@@ -1726,7 +1749,7 @@ const DailyReportHR = () => {
                   <RefreshCw className="animate-spin mx-auto mb-3 text-emerald-500" size={28} />
                   <p className="text-xs font-semibold">Loading daily reports registry...</p>
                 </div>
-              ) : reports.length === 0 ? (
+              ) : teamReports.length === 0 ? (
                 <div className="py-16 text-center text-slate-400 dark:text-slate-500 bg-slate-50/50 dark:bg-[#111c18]/50 rounded-2xl border border-dashed border-slate-200 dark:border-[#1a2d29]">
                   <FileText className="mx-auto mb-2 opacity-50 text-slate-400" size={36} />
                   <p className="text-sm font-bold text-slate-700 dark:text-slate-300">No daily reports matching criteria</p>
@@ -1746,7 +1769,7 @@ const DailyReportHR = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-[#1a2d29] text-xs font-medium text-slate-700 dark:text-slate-200">
-                    {reports.map((rep) => {
+                    {teamReports.map((rep) => {
                       const empName = rep.user?.name || rep.employee?.fullName || 'Employee';
                       const empEmail = rep.user?.email || rep.employee?.email || '';
                       const dept = rep.department || rep.employee?.position || 'General';
@@ -1803,7 +1826,21 @@ const DailyReportHR = () => {
                                       }`}
                                     >
                                       <div>
-                                        <p className="font-bold text-slate-900 dark:text-white">{empName}</p>
+                                        <p
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setSelectedAttendanceModalRecord({
+                                              user: rep.user || rep.employee,
+                                              date: rep.reportDate,
+                                              name: empName,
+                                              department: dept
+                                            });
+                                          }}
+                                          className="font-bold text-slate-900 dark:text-white hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors cursor-pointer hover:underline underline-offset-2"
+                                          title={`Click to view attendance & total hours breakdown for ${empName}`}
+                                        >
+                                          {empName}
+                                        </p>
                                         <p className="text-[11px] text-slate-400 dark:text-slate-500">{empEmail}</p>
                                       </div>
                                     </td>
@@ -2706,6 +2743,13 @@ const DailyReportHR = () => {
         columns={dailyReportExportColumns}
         customFilters={dailyReportExportFilters}
         defaultFilename={`daily_reports_${viewTab}`}
+      />
+
+      {/* ── ATTENDANCE & TOTAL HOURS BREAKDOWN MODAL ── */}
+      <AttendanceSessionDetailModal
+        isOpen={!!selectedAttendanceModalRecord}
+        onClose={() => setSelectedAttendanceModalRecord(null)}
+        record={selectedAttendanceModalRecord}
       />
     </div>
   );

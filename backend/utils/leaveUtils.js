@@ -21,6 +21,32 @@ const isLeaveDatePassed = (startDate, endDate, leaveType = '') => {
   const lType = String(leaveType || '').toLowerCase();
   const isSick = lType === 'sick' || lType === 'sl' || lType.includes('sick');
 
+  // Check 6:00 PM cutoff for requests covering today (IST / Asia/Kolkata)
+  try {
+    const formatter = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Kolkata',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      hour12: false
+    });
+    const parts = formatter.formatToParts(now);
+    const getPart = type => parts.find(p => p.type === type)?.value;
+    const todayStr = `${getPart('year')}-${getPart('month')}-${getPart('day')}`;
+    const hours = parseInt(getPart('hour') || String(now.getHours()), 10);
+
+    const pad = n => String(n).padStart(2, '0');
+    const sStr = startDate ? (typeof startDate === 'string' ? startDate.split('T')[0] : `${startDate.getFullYear()}-${pad(startDate.getMonth() + 1)}-${pad(startDate.getDate())}`) : '';
+    const eStr = endDate ? (typeof endDate === 'string' ? endDate.split('T')[0] : `${endDate.getFullYear()}-${pad(endDate.getMonth() + 1)}-${pad(endDate.getDate())}`) : sStr;
+
+    if (hours >= 18 && sStr && eStr) {
+      if (sStr <= todayStr && eStr >= todayStr) {
+        return { passed: true, error: 'Leave requests for today cannot be submitted after 6:00 PM.' };
+      }
+    }
+  } catch (err) {}
+
   if (isSick) {
     const oneMonthAgo = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate(), 0, 0, 0, 0);
     if (oneMonthAgo.getMonth() === now.getMonth()) {

@@ -22,6 +22,7 @@ import {
   ChevronRight,
   Filter
 } from 'lucide-react';
+import AttendanceSessionDetailModal from './AttendanceSessionDetailModal';
 
 const formatSecondsToHM = (totalSecs) => {
   if (!totalSecs || isNaN(totalSecs) || totalSecs <= 0) return '0h 0m';
@@ -67,13 +68,15 @@ const WeeklyHoursTable = ({
   records = [],
   teamLiveSessions = [],
   userRole = 'employee',
-  currentUserId = ''
+  currentUserId = '',
+  onEmployeeClick
 }) => {
   const [selectedWeekIndex, setSelectedWeekIndex] = useState(0); // 0 = Current, 1 = Previous, etc.
   const [teamSearchQuery, setTeamSearchQuery] = useState('');
   const [overtimeFilter, setOvertimeFilter] = useState('all'); // 'all' | 'overtime' | 'shortfall'
   const [expandedRowId, setExpandedRowId] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
+  const [selectedSessionRecord, setSelectedSessionRecord] = useState(null);
   const pageSize = 10;
 
   // Compute strictly the last 5 weeks: Current Week (0) + 4 Completed Previous Weeks (1, 2, 3, 4)
@@ -143,6 +146,89 @@ const WeeklyHoursTable = ({
 
   const selectedWeek = weeksList[selectedWeekIndex] || weeksList[0];
 
+  const handleOpenEmployeeModal = (item) => {
+    if (!item?.member) return;
+    const todayStr = getLocalYYYYMMDD(new Date());
+    const todayEntry = item.dailyBreakdown?.find(d => d.dateStr === todayStr && d.record);
+    const activeEntry = [...(item.dailyBreakdown || [])].reverse().find(d => d.record && d.activeSecs > 0);
+    const targetDate = todayEntry?.dateStr || activeEntry?.dateStr || selectedWeek?.startStr || todayStr;
+    const existingRec = todayEntry?.record || activeEntry?.record;
+
+    const modalRecord = existingRec ? {
+      ...existingRec,
+      user: item.member,
+      date: targetDate,
+      name: item.member.name,
+      department: item.member.role
+    } : {
+      user: item.member,
+      date: targetDate,
+      name: item.member.name,
+      department: item.member.role,
+      totalHours: activeEntry ? activeEntry.activeSecs / 3600 : 0,
+      activeTime: activeEntry?.activeSecs || 0,
+      idleTime: activeEntry?.idleSecs || 0,
+      clockIn: activeEntry?.clockIn || '--:--',
+      clockOut: activeEntry?.clockOut || '--:--'
+    };
+
+    setSelectedSessionRecord(modalRecord);
+    if (onEmployeeClick) onEmployeeClick(item, modalRecord);
+  };
+
+  const handleOpenDayModal = (item, day) => {
+    if (!item?.member || !day) return;
+    const modalRecord = day.record ? {
+      ...day.record,
+      user: item.member,
+      date: day.dateStr,
+      name: item.member.name,
+      department: item.member.role
+    } : {
+      user: item.member,
+      date: day.dateStr,
+      name: item.member.name,
+      department: item.member.role,
+      totalHours: day.activeSecs / 3600,
+      activeTime: day.activeSecs,
+      idleTime: day.idleSecs,
+      clockIn: day.clockIn,
+      clockOut: day.clockOut
+    };
+
+    setSelectedSessionRecord(modalRecord);
+    if (onEmployeeClick) onEmployeeClick(item, modalRecord);
+  };
+
+  const handleOpenPersonalDayModal = (day) => {
+    if (!day) return;
+    let userObj = { _id: currentUserId, name: 'Employee', role: userRole };
+    try {
+      const u = JSON.parse(sessionStorage.getItem('user') || '{}');
+      if (u._id || u.id) userObj = u;
+    } catch {}
+
+    const modalRecord = day.record ? {
+      ...day.record,
+      user: userObj,
+      date: day.dateStr,
+      name: userObj.name || 'Employee',
+      department: userObj.role || 'employee'
+    } : {
+      user: userObj,
+      date: day.dateStr,
+      name: userObj.name || 'Employee',
+      department: userObj.role || 'employee',
+      totalHours: day.activeSecs / 3600,
+      activeTime: day.activeSecs,
+      idleTime: day.idleSecs,
+      clockIn: day.clockIn,
+      clockOut: day.clockOut
+    };
+
+    setSelectedSessionRecord(modalRecord);
+  };
+
   // Helper to extract active seconds from record
   const getRecordActiveSeconds = (r) => {
     if (!r) return 0;
@@ -187,42 +273,6 @@ const WeeklyHoursTable = ({
       let clockIn = matchRec?.clockIn;
       let clockOut = matchRec?.clockOut;
 
-      // Realistic historical data for past workdays (Mon-Fri) if no manual record was logged
-      if (!matchRec && !week.isCurrent && !day.isFuture && dIdx < 5) {
-        let hash = 0;
-        const key = `${targetUid || currentUserId || 'u'}_${day.dateStr}`;
-        for (let i = 0; i < key.length; i++) {
-          hash = ((hash << 5) - hash) + key.charCodeAt(i);
-          hash |= 0;
-        }
-        const posHash = Math.abs(hash);
-        const typeRoll = posHash % 100;
-
-        if (typeRoll < 4) {
-          status = 'Leave';
-          activeSecs = 0;
-          idleSecs = 0;
-          clockIn = '--:--';
-          clockOut = '--:--';
-        } else {
-          // Mon-Fri hours averaging 8.5h (30600s) with realistic variation (-15m to +25m)
-          const minVar = (posHash % 41) - 15;
-          const totalWorkMins = 8 * 60 + 30 + minVar;
-          activeSecs = totalWorkMins * 60;
-          const idleMins = 12 + (posHash % 18);
-          idleSecs = idleMins * 60;
-
-          const inMin = posHash % 25;
-          const inHour = 9;
-          clockIn = `${String(inHour).padStart(2, '0')}:${String(inMin).padStart(2, '0')}`;
-
-          const outTotalM = inHour * 60 + inMin + totalWorkMins + idleMins;
-          const outH = Math.floor(outTotalM / 60);
-          const outM = outTotalM % 60;
-          clockOut = `${String(outH).padStart(2, '0')}:${String(outM).padStart(2, '0')}`;
-          status = typeRoll < 12 ? 'Late' : 'Present';
-        }
-      }
 
       weekActiveSecs += activeSecs;
       weekIdleSecs += idleSecs;
@@ -757,12 +807,19 @@ const WeeklyHoursTable = ({
                           }`}>
                             {/* Employee */}
                             <td className="px-3.5 py-3 whitespace-nowrap">
-                              <div className="flex items-center gap-2.5">
-                                <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 text-white font-black text-xs flex items-center justify-center shrink-0">
+                              <div
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleOpenEmployeeModal(item);
+                                }}
+                                className="flex items-center gap-2.5 cursor-pointer group/emp hover:opacity-90 select-none"
+                                title={`Click to view attendance & total hours breakdown for ${item.member.name}`}
+                              >
+                                <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 text-white font-black text-xs flex items-center justify-center shrink-0 shadow-xs group-hover/emp:scale-105 transition-transform">
                                   {item.member.name.charAt(0).toUpperCase()}
                                 </div>
                                 <div className="min-w-0">
-                                  <p className="font-extrabold text-slate-900 dark:text-white truncate">
+                                  <p className="font-extrabold text-slate-900 dark:text-white truncate group-hover/emp:text-emerald-600 dark:group-hover/emp:text-emerald-400 transition-colors hover:underline underline-offset-2">
                                     {item.member.name}
                                   </p>
                                   <p className="text-[10px] font-semibold text-slate-400 dark:text-[#888378] uppercase tracking-wider truncate">
@@ -774,7 +831,19 @@ const WeeklyHoursTable = ({
 
                             {/* Mon - Sat Days */}
                             {employeeVisibleDays.map((d, dIdx) => (
-                              <td key={dIdx} className="px-2.5 py-3 text-center whitespace-nowrap">
+                              <td
+                                key={dIdx}
+                                onClick={(e) => {
+                                  if (d.activeSecs > 0 || d.record) {
+                                    e.stopPropagation();
+                                    handleOpenDayModal(item, d);
+                                  }
+                                }}
+                                className={`px-2.5 py-3 text-center whitespace-nowrap ${
+                                  (d.activeSecs > 0 || d.record) ? 'cursor-pointer hover:bg-emerald-50/70 dark:hover:bg-emerald-950/40 transition-colors' : ''
+                                }`}
+                                title={d.activeSecs > 0 ? `Click to view activity breakdown for ${d.dayName} (${d.formattedDate})` : undefined}
+                              >
                                 {d.activeSecs > 0 ? (
                                   <div>
                                     <p className="font-mono font-bold text-slate-800 dark:text-slate-200">
@@ -803,7 +872,14 @@ const WeeklyHoursTable = ({
                             ))}
 
                             {/* Total Logged */}
-                            <td className="px-3 py-3 text-right whitespace-nowrap">
+                            <td
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenEmployeeModal(item);
+                              }}
+                              className="px-3 py-3 text-right whitespace-nowrap cursor-pointer hover:bg-emerald-50/70 dark:hover:bg-emerald-950/40 transition-colors"
+                              title={`Click to view full attendance & total hours breakdown for ${item.member.name}`}
+                            >
                               <span className="font-mono font-black text-purple-600 dark:text-purple-400 text-sm">
                                 {item.formattedTotal}
                               </span>
@@ -999,11 +1075,19 @@ const WeeklyHoursTable = ({
                   ).map((d, dIdx) => (
                     <tr
                       key={dIdx}
+                      onClick={() => {
+                        if (d.activeSecs > 0 || d.record) {
+                          handleOpenPersonalDayModal(d);
+                        }
+                      }}
                       className={`transition-colors ${
+                        (d.activeSecs > 0 || d.record) ? 'cursor-pointer hover:bg-emerald-50/60 dark:hover:bg-[#112d26]' : ''
+                      } ${
                         d.isToday
                           ? 'bg-emerald-50/40 dark:bg-emerald-950/20 font-bold'
                           : 'hover:bg-slate-50 dark:hover:bg-[#0d2a22]/50'
                       }`}
+                      title={d.activeSecs > 0 ? `Click to view activity breakdown for ${d.dayName} (${d.formattedDate})` : undefined}
                     >
                       {/* Day & Date */}
                       <td className="px-3.5 py-2.5 whitespace-nowrap">
@@ -1128,6 +1212,14 @@ const WeeklyHoursTable = ({
           </div>
           <span>Showing work cycle</span>
         </div>
+
+        {/* ── ATTENDANCE & TOTAL HOURS BREAKDOWN MODAL ── */}
+        <AttendanceSessionDetailModal
+          isOpen={!!selectedSessionRecord}
+          onClose={() => setSelectedSessionRecord(null)}
+          record={selectedSessionRecord}
+          allRecords={records}
+        />
       </div>
   );
 };

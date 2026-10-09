@@ -667,77 +667,6 @@ exports.getAttendance = async (req, res) => {
       }
     });
 
-    // Generate Absent records for users who did not check in or take leave on past working days
-    const User = require('../models/User');
-    let targetUsers = [];
-    if (role === 'admin') {
-      targetUsers = await User.find({ 
-        _id: { $ne: userId },
-        status: { $ne: 'inactive' }
-      }).select('_id name email role joinDate createdAt').lean();
-    } else if (role === 'hr') {
-      targetUsers = await User.find({ 
-        role: { $nin: ['admin', 'superadmin'] },
-        _id: { $ne: userId },
-        status: { $ne: 'inactive' }
-      }).select('_id name email role joinDate createdAt').lean();
-    } else if (role === 'manager') {
-      const empIds = await getManagerSubordinateUserIds(userId, false);
-      const filteredEmpIds = empIds.filter(id => id.toString() !== userId.toString());
-      targetUsers = await User.find({ 
-        _id: { $in: filteredEmpIds },
-        status: { $ne: 'inactive' }
-      }).select('_id name email role joinDate createdAt').lean();
-    }
-
-    const todayObj = new Date();
-    const absentLookbackDays = 60;
-    const absentRecords = [];
-
-    // Pre-index existing attendance & leaves for O(1) lookup
-    const existingAttSet = new Set();
-    for (const r of records) {
-      const rId = r.user?._id ? r.user._id.toString() : (typeof r.user === 'string' ? r.user : '');
-      if (rId && r.date) existingAttSet.add(`${rId}_${r.date}`);
-    }
-
-    const existingLeaveSet = new Set();
-    for (const r of leaveRecords) {
-      const rId = r.user?._id ? r.user._id.toString() : (typeof r.user === 'string' ? r.user : '');
-      if (rId && r.date) existingLeaveSet.add(`${rId}_${r.date}`);
-    }
-
-    targetUsers.forEach(u => {
-      const uId = u._id.toString();
-      let uJoinDate = u.joinDate || u.createdAt ? new Date(u.joinDate || u.createdAt) : null;
-
-      for (let i = 0; i <= absentLookbackDays; i++) {
-        const d = new Date(todayObj);
-        d.setDate(todayObj.getDate() - i);
-        const dStr = formatLocalDate(d);
-        const isWeekend = d.getDay() === 0 || d.getDay() === 6;
-
-        if (isWeekend) continue;
-        if (uJoinDate && d < new Date(new Date(uJoinDate).setHours(0, 0, 0, 0))) continue;
-
-        const userDateKey = `${uId}_${dStr}`;
-        const hasAtt = existingAttSet.has(userDateKey);
-        const hasLeave = existingLeaveSet.has(userDateKey);
-
-        if (!hasAtt && !hasLeave) {
-          absentRecords.push({
-            _id: `absent_${uId}_${dStr}`,
-            user: { _id: u._id, name: u.name, email: u.email, role: u.role },
-            date: dStr,
-            status: 'Absent',
-            clockIn: '--',
-            clockOut: '--',
-            totalHours: '--'
-          });
-        }
-      }
-    });
-
     const uniqueCombinedMap = new Map();
     for (const rec of records) {
       const uId = rec.user?._id ? rec.user._id.toString() : (rec.user ? rec.user.toString() : '');
@@ -747,13 +676,6 @@ exports.getAttendance = async (req, res) => {
       }
     }
     for (const rec of leaveRecords) {
-      const uId = rec.user?._id ? rec.user._id.toString() : (rec.user ? rec.user.toString() : '');
-      const key = `${uId}_${rec.date}`;
-      if (uId && !uniqueCombinedMap.has(key)) {
-        uniqueCombinedMap.set(key, rec);
-      }
-    }
-    for (const rec of absentRecords) {
       const uId = rec.user?._id ? rec.user._id.toString() : (rec.user ? rec.user.toString() : '');
       const key = `${uId}_${rec.date}`;
       if (uId && !uniqueCombinedMap.has(key)) {
@@ -1767,10 +1689,15 @@ exports.getTodayAttendance = async (req, res) => {
       }
     }
 
+    const hasCheckedIn = !!(attendance && attendance.checkInTime && attendance.status !== 'Leave' && attendance.clockIn && attendance.clockIn !== '--');
+    const isPast6PM = getTimeDetails(now).hours >= 18;
+
     res.json({
       attendance,
       isOnLeave: !!activeLeave,
-      leaveType: activeLeave?.leaveType
+      leaveType: activeLeave?.leaveType,
+      hasCheckedIn,
+      isPast6PM
     });
   } catch (error) {
     res.status(500).json({ message: error.message });

@@ -425,6 +425,7 @@ server.listen(PORT, '0.0.0.0', () => {
         session.idleStart = pauseTime;
         session.status = 'paused';
         session.isRunning = false;
+        session.pauseReason = 'stale_heartbeat';
 
         const lastIdx = (session.sessions || []).length - 1;
         if (lastIdx >= 0 && !session.sessions[lastIdx].pause && !session.sessions[lastIdx].end) {

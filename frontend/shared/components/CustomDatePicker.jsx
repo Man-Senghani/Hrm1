@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Calendar, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react';
 
-const CustomDatePicker = ({ name, value, onChange, minDate, maxDate, isDateDisabled, className = '', placeholder = 'Select Date', align = 'left' }) => {
+const CustomDatePicker = ({ name, value, onChange, minDate, maxDate, isDateDisabled, disabledTitle, className = '', placeholder = 'Select Date', align = 'left', disabled = false }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [viewMode, setViewMode] = useState('days'); // 'days' | 'months' | 'years'
 
@@ -149,12 +149,17 @@ const CustomDatePicker = ({ name, value, onChange, minDate, maxDate, isDateDisab
   return (
     <div className="relative w-full" ref={wrapperRef}>
       <div
-        className={`w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-[#111c18] border border-slate-200 dark:border-[#1a2d29] text-xs flex items-center justify-between cursor-pointer select-none transition-all hover:border-emerald-500 hover:shadow-xs ${className}`}
+        className={`w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-[#111c18] border border-slate-200 dark:border-[#1a2d29] text-xs flex items-center justify-between select-none transition-all ${
+          disabled 
+            ? 'opacity-60 cursor-not-allowed bg-slate-100 dark:bg-[#0c1512] text-slate-400' 
+            : 'cursor-pointer hover:border-emerald-500 hover:shadow-xs'
+        } ${className}`}
         onClick={() => {
+          if (disabled) return;
           setIsOpen(!isOpen);
           setViewMode('days');
         }}
-        tabIndex={0}
+        tabIndex={disabled ? -1 : 0}
       >
         <span className={`whitespace-nowrap ${displayValue ? "font-bold text-slate-900 dark:text-white" : "text-slate-400 dark:text-slate-500"}`}>
           {displayValue || placeholder}
@@ -326,7 +331,7 @@ const CustomDatePicker = ({ name, value, onChange, minDate, maxDate, isDateDisab
                         handleDateSelect(day);
                       }}
                       disabled={isDisabled}
-                      title={isCustomDisabled ? 'Max 2 reports already submitted for this date' : isDisabled ? 'Date not allowed' : ''}
+                      title={typeof disabledTitle === 'function' ? disabledTitle(dateString) : (disabledTitle || (isCustomDisabled ? 'Date not available' : isDisabled ? 'Date not allowed' : ''))}
                       className={`h-8 w-8 rounded-xl text-xs font-bold transition-all flex items-center justify-center cursor-pointer relative ${
                         isSelected
                           ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/20 scale-105'

@@ -71,6 +71,11 @@ const timeTrackSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  pauseReason: {
+    type: String,
+    enum: ['manual', 'inactivity', 'stale_heartbeat', 'network_disconnect', null],
+    default: null
+  },
   isAutoStop: {
     type: Boolean,
     default: false

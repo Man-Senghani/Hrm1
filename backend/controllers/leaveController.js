@@ -109,7 +109,7 @@ const getAppBaseUrl = (req) => {
   return `http://localhost:${port}`;
 };
 
-const syncApprovedLeaveEffects = async (userId, startDate, endDate, leaveType, io) => {
+const syncApprovedLeaveEffects = async (userId, startDate, endDate, leaveType, io, totalDays = 1) => {
   try {
     const formatLocalDate = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     const todayStr = formatLocalDate(new Date());
@@ -148,11 +148,13 @@ const syncApprovedLeaveEffects = async (userId, startDate, endDate, leaveType, i
       await session.save();
     }
 
-    // 2. Mark or create today's attendance record with status 'Leave'
+    // 2. Mark or create today's attendance record with status 'Leave' or 'Half Day'
     const Attendance = require('../models/Attendance');
     let att = await Attendance.findOne({ user: userId, date: todayStr });
+    const isHalfDay = Number(totalDays) === 0.5;
+    const targetStatus = isHalfDay ? 'Half Day' : 'Leave';
     if (att) {
-      att.status = 'Leave';
+      att.status = targetStatus;
       if (!att.checkOutTime) {
         att.checkOutTime = now;
         const hours = now.getHours();
@@ -164,12 +166,12 @@ const syncApprovedLeaveEffects = async (userId, startDate, endDate, leaveType, i
       await Attendance.create({
         user: userId,
         date: todayStr,
-        status: 'Leave',
+        status: targetStatus,
         checkInTime: now,
         checkOutTime: now,
         clockIn: '--',
         clockOut: '--',
-        totalHours: 0
+        totalHours: isHalfDay ? 4 : 0
       });
     }
 
@@ -533,7 +535,7 @@ const checkUserLeaveBalance = async (userId, leaveTypeInput, daysRequested, excl
 // @access  Private/Employee
 exports.applyLeave = async (req, res) => {
   try {
-    const { leaveType, startDate, endDate, reason, totalDays: inputTotalDays } = req.body;
+    const { leaveType, startDate, endDate, reason, totalDays: inputTotalDays, isHalfDay, halfDayType } = req.body;
 
     const calcDays = (sDate, eDate) => {
       if (!sDate || !eDate) return 1;
@@ -544,7 +546,7 @@ exports.applyLeave = async (req, res) => {
       return isNaN(diffDays) ? 1 : Math.max(1, diffDays);
     };
 
-    const totalDays = inputTotalDays || calcDays(startDate, endDate);
+    const totalDays = isHalfDay ? 0.5 : (inputTotalDays || calcDays(startDate, endDate));
     const isAdmin = req.user && req.user.role === 'admin';
 
     if (startDate && endDate && new Date(startDate) > new Date(endDate)) {
@@ -554,6 +556,57 @@ exports.applyLeave = async (req, res) => {
     const dateCheck = isLeaveDatePassed(startDate, endDate, leaveType);
     if (dateCheck && dateCheck.passed) {
       return res.status(400).json({ message: dateCheck.error || 'Cannot apply for leave for dates that have already passed.' });
+    }
+
+    // 🛡️ TODAY'S LEAVE VALIDATION (Login check & 6:00 PM Cutoff)
+    const now = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    let todayStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+    let currentHour = now.getHours();
+    try {
+      const formatter = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Kolkata',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        hour12: false
+      });
+      const parts = formatter.formatToParts(now);
+      const getPart = type => parts.find(p => p.type === type)?.value;
+      todayStr = `${getPart('year')}-${getPart('month')}-${getPart('day')}`;
+      currentHour = parseInt(getPart('hour') || String(now.getHours()), 10);
+    } catch (_) {}
+
+    const sStr = startDate ? (typeof startDate === 'string' ? startDate.split('T')[0] : `${startDate.getFullYear()}-${pad(startDate.getMonth() + 1)}-${pad(startDate.getDate())}`) : '';
+    const eStr = endDate ? (typeof endDate === 'string' ? endDate.split('T')[0] : `${endDate.getFullYear()}-${pad(endDate.getMonth() + 1)}-${pad(endDate.getDate())}`) : sStr;
+    const coversToday = (sStr <= todayStr && eStr >= todayStr);
+
+    if (coversToday) {
+      if (currentHour >= 18) {
+        return res.status(400).json({
+          message: "Leave requests for today cannot be submitted after 6:00 PM."
+        });
+      }
+
+      const Attendance = require('../models/Attendance');
+      const todayAttendance = await Attendance.findOne({
+        user: req.user.id,
+        date: todayStr
+      });
+
+      const hasCheckedIn = todayAttendance && (
+        (todayAttendance.checkInTime && todayAttendance.status !== 'Leave') ||
+        (todayAttendance.clockIn && todayAttendance.clockIn !== '--')
+      );
+
+      if (hasCheckedIn) {
+        if (Number(totalDays) > 0.5 || sStr !== eStr) {
+          return res.status(400).json({
+            message: "You have already logged in today. You can only request a Half Day leave for today."
+          });
+        }
+      }
     }
 
     // 🛡️ OVERLAP CHECK: Ensure user does not already have an active leave for the selected dates
@@ -608,7 +661,9 @@ exports.applyLeave = async (req, res) => {
       startDate,
       endDate,
       reason,
-      totalDays: totalDays || 1,
+      totalDays: (isHalfDay || Number(totalDays) === 0.5) ? 0.5 : (totalDays || 1),
+      isHalfDay: !!isHalfDay || Number(totalDays) === 0.5,
+      halfDayType: halfDayType || (isHalfDay ? 'first_half' : null),
       status: initialStatus
     });
 
@@ -631,7 +686,8 @@ exports.applyLeave = async (req, res) => {
         startDate,
         endDate,
         leaveType,
-        req.app?.get ? req.app.get('io') : null
+        req.app?.get ? req.app.get('io') : null,
+        totalDays || 1
       );
     }
 
@@ -787,7 +843,7 @@ exports.managerApprove = async (req, res) => {
     });
 
     await updateLeaveBalanceForUser(leave.user, new Date(leave.startDate));
-    await syncApprovedLeaveEffects(leave.user, leave.startDate, leave.endDate, leave.leaveType, req.app?.get ? req.app.get('io') : null);
+    await syncApprovedLeaveEffects(leave.user, leave.startDate, leave.endDate, leave.leaveType, req.app?.get ? req.app.get('io') : null, leave.totalDays || 1);
 
     const approvingUser = await User.findById(req.user.id);
     const leaveUser = await User.findById(leave.user);
@@ -889,7 +945,7 @@ exports.hrApprove = async (req, res) => {
 
     await updateLeaveBalanceForUser(leave.user, new Date(leave.startDate));
     if (leave.status === 'approved') {
-      await syncApprovedLeaveEffects(leave.user, leave.startDate, leave.endDate, leave.leaveType, req.app?.get ? req.app.get('io') : null);
+      await syncApprovedLeaveEffects(leave.user, leave.startDate, leave.endDate, leave.leaveType, req.app?.get ? req.app.get('io') : null, leave.totalDays || 1);
     }
 
     const approvingUser = await User.findById(req.user.id);
@@ -1755,7 +1811,7 @@ exports.bulkApproveLeaves = async (req, res) => {
       }
       leave.status = 'approved';
       await leave.save();
-      await syncApprovedLeaveEffects(leave.user, leave.startDate, leave.endDate, leave.leaveType, req.app?.get ? req.app.get('io') : null);
+      await syncApprovedLeaveEffects(leave.user, leave.startDate, leave.endDate, leave.leaveType, req.app?.get ? req.app.get('io') : null, leave.totalDays || 1);
     }
 
     res.json({ success: true, message: `${leaves.length} leaves approved` });
@@ -2043,7 +2099,7 @@ exports.hrOverride = async (req, res) => {
 
     await updateLeaveBalanceForUser(leave.user, new Date(leave.startDate));
     if (targetStatus === 'approved') {
-      await syncApprovedLeaveEffects(leave.user, leave.startDate, leave.endDate, leave.leaveType, req.app?.get ? req.app.get('io') : null);
+      await syncApprovedLeaveEffects(leave.user, leave.startDate, leave.endDate, leave.leaveType, req.app?.get ? req.app.get('io') : null, leave.totalDays || 1);
     }
 
     const actorUser = await User.findById(req.user.id);
@@ -2493,7 +2549,7 @@ exports.bulkApproveLeaves = async (req, res) => {
     );
 
     for (const l of leavesToApprove) {
-      await syncApprovedLeaveEffects(l.user, l.startDate, l.endDate, l.leaveType, req.app?.get ? req.app.get('io') : null);
+      await syncApprovedLeaveEffects(l.user, l.startDate, l.endDate, l.leaveType, req.app?.get ? req.app.get('io') : null, l.totalDays || 1);
     }
 
     res.json({ success: true, message: `${updated.modifiedCount} leave(s) approved successfully.` });

@@ -38,6 +38,15 @@ const getTodayStr = () => {
   return `${yyyy}-${mm}-${dd}`;
 };
 
+const getLast7DaysStr = () => {
+  const d = new Date();
+  d.setDate(d.getDate() - 6);
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+};
+
 const getMinAllowedDate = () => {
   const d = new Date();
   d.setDate(d.getDate() - 7);
@@ -331,7 +340,7 @@ const DailyReport = () => {
   // Filters
   const [filterProject, setFilterProject] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
-  const [filterStartDate, setFilterStartDate] = useState(getTodayStr);
+  const [filterStartDate, setFilterStartDate] = useState(getLast7DaysStr);
   const [filterEndDate, setFilterEndDate] = useState(getTodayStr);
   const [searchQuery, setSearchQuery] = useState('');
 

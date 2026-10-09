@@ -191,13 +191,6 @@ const ViewHolidaysDrawer = ({ isOpen, onClose, holidays: initialHolidays }) => {
             )}
           </div>
         </div>
-
-        {/* Footer */}
-        <div className="pt-4 border-t border-gray-200 dark:border-gray-800 flex justify-end mt-4 shrink-0">
-          <button type="button" onClick={onClose} className="w-full py-2.5 rounded-lg font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 text-xs transition-colors">
-            Close Panel
-          </button>
-        </div>
       </div>
     </div>,
     document.body

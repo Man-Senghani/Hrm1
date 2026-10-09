@@ -128,8 +128,11 @@ const LeaveManagement = ({ isChild = false }) => {
     leaveType: '',
     startDate: '',
     endDate: '',
-    reason: ''
+    reason: '',
+    isHalfDay: false,
+    halfDayType: 'first_half'
   });
+  const [todayAttendanceInfo, setTodayAttendanceInfo] = useState({ hasCheckedIn: false, isPast6PM: false });
   const [formErrors, setFormErrors] = useState({});
 
   // ─── DYNAMIC LEAVE DATE BOUNDS ─────────────────────────
@@ -145,6 +148,24 @@ const LeaveManagement = ({ isChild = false }) => {
     const now = new Date();
     const pad = (n) => String(n).padStart(2, '0');
     return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+  }, []);
+
+  const isPast6PM = useMemo(() => {
+    return new Date().getHours() >= 18 || !!todayAttendanceInfo.isPast6PM;
+  }, [todayAttendanceInfo.isPast6PM]);
+
+  const tomorrowStr = useMemo(() => {
+    const tom = new Date();
+    tom.setDate(tom.getDate() + 1);
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${tom.getFullYear()}-${pad(tom.getMonth() + 1)}-${pad(tom.getDate())}`;
+  }, []);
+
+  const yesterdayStr = useMemo(() => {
+    const yest = new Date();
+    yest.setDate(yest.getDate() - 1);
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${yest.getFullYear()}-${pad(yest.getMonth() + 1)}-${pad(yest.getDate())}`;
   }, []);
 
   const pastOneMonthDateStr = useMemo(() => {
@@ -164,10 +185,54 @@ const LeaveManagement = ({ isChild = false }) => {
     return `${future.getFullYear()}-${pad(future.getMonth() + 1)}-${pad(future.getDate())}`;
   }, []);
 
-  const minLeaveStartDate = isSickLeave ? pastOneMonthDateStr : todayStr;
-  const maxLeaveStartDate = isSickLeave ? todayStr : maxFutureDateStr;
+  // After 6:00 PM, today cannot be applied:
+  // For General/Casual: earliest selectable date is tomorrow
+  // For Sick: latest selectable date is yesterday
+  const minLeaveStartDate = isSickLeave 
+    ? pastOneMonthDateStr 
+    : (isPast6PM ? tomorrowStr : todayStr);
+
+  const maxLeaveStartDate = isSickLeave 
+    ? (isPast6PM ? yesterdayStr : todayStr) 
+    : maxFutureDateStr;
+
   const minLeaveEndDate = formData.startDate || minLeaveStartDate;
-  const maxLeaveEndDate = isSickLeave ? todayStr : maxFutureDateStr;
+
+  const maxLeaveEndDate = isSickLeave 
+    ? (isPast6PM ? yesterdayStr : todayStr) 
+    : maxFutureDateStr;
+
+  const isDateDisabled = (dateString) => {
+    if (isPast6PM && dateString === todayStr) {
+      return true;
+    }
+    const activeStatuses = ['pending', 'manager_approved', 'hr_approved', 'approved', 'cancellation_pending'];
+    const activeLeaves = (leaves || []).filter(l => activeStatuses.includes((l.status || '').toLowerCase()));
+    const hasExistingLeave = activeLeaves.some(l => {
+      const s = typeof l.startDate === 'string' ? l.startDate.split('T')[0] : (l.startDate ? new Date(l.startDate).toISOString().split('T')[0] : '');
+      const e = typeof l.endDate === 'string' ? l.endDate.split('T')[0] : (l.endDate ? new Date(l.endDate).toISOString().split('T')[0] : s);
+      return s && dateString >= s && dateString <= e;
+    });
+    return hasExistingLeave;
+  };
+
+  const getDisabledTitle = (dateString) => {
+    if (isPast6PM && dateString === todayStr) {
+      return "Today's leave cannot be applied after 6:00 PM";
+    }
+    const activeStatuses = ['pending', 'manager_approved', 'hr_approved', 'approved', 'cancellation_pending'];
+    const activeLeaves = (leaves || []).filter(l => activeStatuses.includes((l.status || '').toLowerCase()));
+    const existingLeave = activeLeaves.find(l => {
+      const s = typeof l.startDate === 'string' ? l.startDate.split('T')[0] : (l.startDate ? new Date(l.startDate).toISOString().split('T')[0] : '');
+      const e = typeof l.endDate === 'string' ? l.endDate.split('T')[0] : (l.endDate ? new Date(l.endDate).toISOString().split('T')[0] : s);
+      return s && dateString >= s && dateString <= e;
+    });
+    if (existingLeave) {
+      const type = existingLeave.leaveType ? existingLeave.leaveType.toUpperCase() : 'Leave';
+      return `Already applied for ${type} on this date`;
+    }
+    return '';
+  };
 
   const [filterType, setFilterType] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
@@ -233,14 +298,21 @@ const LeaveManagement = ({ isChild = false }) => {
   const fetchMyLeaves = async () => {
     try {
       setLoading(true);
-      const [leavesResponse, quotasResponse, holidaysResponse, policiesResponse, compOffResponse, onDutyResponse] = await Promise.all([
+      const [leavesResponse, quotasResponse, holidaysResponse, policiesResponse, compOffResponse, onDutyResponse, todayAttResponse] = await Promise.all([
         axios.get('/api/leaves/my', { headers: { Authorization: `Bearer ${token}` } }),
         axios.get('/api/leaves/my-quotas', { headers: { Authorization: `Bearer ${token}` } }),
         axios.get('/api/holidays', { headers: { Authorization: `Bearer ${token}` } }).catch(() => ({ data: [] })),
         axios.get('/api/leave-policies', { headers: { Authorization: `Bearer ${token}` } }).catch(() => ({ data: [] })),
         axios.get('/api/comp-off/my', { headers: { Authorization: `Bearer ${token}` } }).catch(() => ({ data: [] })),
-        axios.get('/api/on-duty/my', { headers: { Authorization: `Bearer ${token}` } }).catch(() => ({ data: [] }))
+        axios.get('/api/on-duty/my', { headers: { Authorization: `Bearer ${token}` } }).catch(() => ({ data: [] })),
+        axios.get('/api/attendance/today', { headers: { Authorization: `Bearer ${token}` } }).catch(() => ({ data: {} }))
       ]);
+      if (todayAttResponse?.data) {
+        setTodayAttendanceInfo({
+          hasCheckedIn: !!todayAttResponse.data.hasCheckedIn,
+          isPast6PM: !!todayAttResponse.data.isPast6PM
+        });
+      }
       const compOffItems = (compOffResponse.data || []).map(co => ({
         _id: co._id,
         user: user,
@@ -333,11 +405,27 @@ const LeaveManagement = ({ isChild = false }) => {
           errors.endDate = 'Sick leave can only be applied for dates within the past 1 month';
         }
       } else {
-        if (formData.startDate < todayStr) {
-          errors.startDate = 'Cannot apply for leave for dates that have already passed';
+        if (formData.startDate < (isPast6PM ? tomorrowStr : todayStr)) {
+          errors.startDate = isPast6PM 
+            ? "Today's leave cannot be applied after 6:00 PM"
+            : 'Cannot apply for leave for dates that have already passed';
         }
         if (formData.endDate > maxFutureDateStr) {
           errors.endDate = 'Leave cannot be applied more than 6 months in advance';
+        }
+      }
+
+      // Check if trying to apply for today after 6 PM
+      if (isPast6PM && (formData.startDate === todayStr || formData.endDate === todayStr)) {
+        errors.startDate = "Today's leave cannot be applied after 6:00 PM";
+        toast.error("Today's leave cannot be applied after 6:00 PM.");
+      }
+
+      // Check if user is already logged in today
+      if (todayAttendanceInfo.hasCheckedIn && (formData.startDate === todayStr || formData.endDate === todayStr)) {
+        if (!formData.isHalfDay) {
+          errors.startDate = 'You have already logged in today. Please request a Half Day leave.';
+          toast.error('You have already logged in today. You can only request a Half Day leave for today.');
         }
       }
 
@@ -395,14 +483,19 @@ const LeaveManagement = ({ isChild = false }) => {
 
     try {
       setIsSubmitting(true);
-      const days = calculateDays(formData.startDate, formData.endDate);
-      await axios.post('/api/leaves/apply', { ...formData, totalDays: days }, {
+      const days = formData.isHalfDay ? 0.5 : calculateDays(formData.startDate, formData.endDate);
+      await axios.post('/api/leaves/apply', { 
+        ...formData, 
+        totalDays: days,
+        isHalfDay: !!formData.isHalfDay,
+        halfDayType: formData.isHalfDay ? (formData.halfDayType || 'first_half') : null
+      }, {
         headers: { Authorization: `Bearer ${token}` }
       });
       setLastSubmittedLeaveType(formData.leaveType || 'casual');
       setSuccessMessage('Your leave request has been submitted successfully!');
       setShowSuccessScreen(true);
-      setFormData({ leaveType: '', startDate: '', endDate: '', reason: '' });
+      setFormData({ leaveType: '', startDate: '', endDate: '', reason: '', isHalfDay: false, halfDayType: 'first_half' });
       fetchMyLeaves();
     } catch (err) {
       console.error('Submit failed:', err);
@@ -1037,7 +1130,9 @@ const LeaveManagement = ({ isChild = false }) => {
                               </span>
                             </td>
                             <td className="py-3 px-3 whitespace-nowrap text-right">
-                              {lv.status === 'cancelled' || lv.status === 'rejected' ? (
+                              {(lv.status || '').toLowerCase() === 'rejected' ? (
+                                <span className="text-gray-300 dark:text-gray-600 font-mono text-xs pr-2 select-none">-</span>
+                              ) : (lv.status || '').toLowerCase() === 'cancelled' ? (
                                 <button
                                   type="button"
                                   title="View Details"
@@ -1431,10 +1526,20 @@ const LeaveManagement = ({ isChild = false }) => {
                           value={formData.startDate}
                           minDate={minLeaveStartDate}
                           maxDate={maxLeaveStartDate}
+                          isDateDisabled={isDateDisabled}
+                          disabledTitle={getDisabledTitle}
                           onChange={e => {
                             const newStart = e.target.value;
                             setFormData(prev => {
-                              const updated = { ...prev, startDate: newStart };
+                              const isToday = newStart === todayStr;
+                              const forceHalfDay = isToday && todayAttendanceInfo.hasCheckedIn;
+                              const nextHalfDay = forceHalfDay ? true : prev.isHalfDay;
+                              const updated = {
+                                ...prev,
+                                startDate: newStart,
+                                endDate: (nextHalfDay || forceHalfDay) ? newStart : prev.endDate,
+                                isHalfDay: nextHalfDay
+                              };
                               if (newStart && updated.endDate && new Date(newStart) > new Date(updated.endDate)) {
                                 setFormErrors(errs => ({
                                   ...errs,
@@ -1463,9 +1568,12 @@ const LeaveManagement = ({ isChild = false }) => {
                         </label>
                         <CustomDatePicker
                           name="endDate"
-                          value={formData.endDate}
+                          value={formData.isHalfDay ? formData.startDate : formData.endDate}
                           minDate={minLeaveEndDate}
                           maxDate={maxLeaveEndDate}
+                          isDateDisabled={isDateDisabled}
+                          disabledTitle={getDisabledTitle}
+                          disabled={formData.isHalfDay}
                           onChange={e => {
                             const newEnd = e.target.value;
                             setFormData(prev => {
@@ -1490,9 +1598,84 @@ const LeaveManagement = ({ isChild = false }) => {
                           <p className="text-[#ff4f00] text-[10px] font-bold leading-none mt-1">{formErrors.endDate}</p>
                         )}
                         <p className="text-[9.5px] font-medium text-slate-400 dark:text-slate-500">
-                          {isSickLeave ? 'Past 1 month up to today' : 'Up to 6 months in advance'}
+                          {formData.isHalfDay ? 'Locked to single date for Half Day' : (isSickLeave ? 'Past 1 month up to today' : 'Up to 6 months in advance')}
                         </p>
                       </div>
+                    </div>
+
+                    {/* Leave Duration (Full Day vs Half Day) */}
+                    <div className="flex flex-col gap-2 p-3 rounded-xl bg-slate-50 dark:bg-[#0e1726]/60 border border-slate-200 dark:border-slate-800">
+                      <div>
+                        <label className="text-xs font-bold text-gray-800 dark:text-gray-200 block">
+                          Leave Duration
+                        </label>
+                        <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">
+                          {formData.startDate === todayStr && todayAttendanceInfo.hasCheckedIn 
+                            ? 'Logged in today: Only Half Day leave is permitted' 
+                            : 'Select Full Day or Half Day (0.5 day)'}
+                        </p>
+                      </div>
+                      <div className="grid grid-cols-2 gap-1.5 bg-gray-200 dark:bg-gray-800 p-1 rounded-lg">
+                        <button
+                          type="button"
+                          disabled={formData.startDate === todayStr && todayAttendanceInfo.hasCheckedIn}
+                          onClick={() => {
+                            if (formData.startDate === todayStr && todayAttendanceInfo.hasCheckedIn) return;
+                            setFormData(prev => ({ ...prev, isHalfDay: false }));
+                          }}
+                          className={`w-full py-2 text-xs font-bold rounded-md transition-all text-center cursor-pointer ${
+                            !formData.isHalfDay
+                              ? 'bg-white dark:bg-blue-600 text-blue-600 dark:text-white shadow-xs'
+                              : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white disabled:opacity-40 disabled:cursor-not-allowed'
+                          }`}
+                        >
+                          Full Day
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setFormData(prev => ({ ...prev, isHalfDay: true, endDate: prev.startDate || prev.endDate }))}
+                          className={`w-full py-2 text-xs font-bold rounded-md transition-all text-center cursor-pointer ${
+                            formData.isHalfDay
+                              ? 'bg-white dark:bg-blue-600 text-blue-600 dark:text-white shadow-xs'
+                              : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                          }`}
+                        >
+                          Half Day
+                        </button>
+                      </div>
+
+                      {/* If Half Day selected, session selector */}
+                      {formData.isHalfDay && (
+                        <div className="flex flex-col gap-1.5 mt-2 pt-2 border-t border-slate-200 dark:border-slate-800">
+                          <label className="text-xs font-semibold text-gray-700 dark:text-gray-300">
+                            Session Period
+                          </label>
+                          <div className="grid grid-cols-2 gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setFormData(prev => ({ ...prev, halfDayType: 'first_half' }))}
+                              className={`py-1.5 px-3 rounded-lg text-xs font-semibold border transition-all text-center ${
+                                (formData.halfDayType || 'first_half') === 'first_half'
+                                  ? 'bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 border-blue-500 shadow-xs'
+                                  : 'bg-white dark:bg-[#111c18] text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700 hover:bg-gray-50'
+                              }`}
+                            >
+                              First Half (Morning)
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setFormData(prev => ({ ...prev, halfDayType: 'second_half' }))}
+                              className={`py-1.5 px-3 rounded-lg text-xs font-semibold border transition-all text-center ${
+                                formData.halfDayType === 'second_half'
+                                  ? 'bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 border-blue-500 shadow-xs'
+                                  : 'bg-white dark:bg-[#111c18] text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700 hover:bg-gray-50'
+                              }`}
+                            >
+                              Second Half (Afternoon)
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     <div className="flex flex-col gap-2">
@@ -1512,11 +1695,8 @@ const LeaveManagement = ({ isChild = false }) => {
                     </div>
                   </div>
 
-                  <div className="pt-4 border-t border-gray-200 dark:border-gray-800 flex justify-end gap-3 mt-4">
-                    <button type="button" onClick={() => setIsRequestModalOpen(false)} className="px-4 py-2 rounded-lg font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 text-xs">
-                      Cancel
-                    </button>
-                    <button type="submit" disabled={isSubmitting} className="px-5 py-2.5 rounded-lg font-bold text-white bg-blue-600 hover:bg-blue-700 text-xs disabled:opacity-50 disabled:cursor-not-allowed">
+                  <div className="pt-4 border-t border-gray-200 dark:border-gray-800 flex justify-end mt-4">
+                    <button type="submit" disabled={isSubmitting} className="w-full sm:w-auto px-6 py-2.5 rounded-lg font-bold text-white bg-blue-600 hover:bg-blue-700 text-xs disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer">
                       {isSubmitting ? 'Submitting...' : 'Submit Request'}
                     </button>
                   </div>
@@ -1717,7 +1897,9 @@ const LeaveManagement = ({ isChild = false }) => {
                       </div>
                       <div>
                         <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Total Days</label>
-                        <p className="text-xs font-bold text-gray-900 dark:text-white mt-1">{selectedLeave.totalDays} day(s)</p>
+                        <p className="text-xs font-bold text-gray-900 dark:text-white mt-1">
+                          {selectedLeave.totalDays} day(s) {selectedLeave.isHalfDay || selectedLeave.totalDays === 0.5 ? `(${selectedLeave.halfDayType === 'second_half' ? 'Second Half' : 'First Half'})` : ''}
+                        </p>
                       </div>
                       <div>
                         <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Status</label>
