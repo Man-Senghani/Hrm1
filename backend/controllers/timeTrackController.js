@@ -1137,7 +1137,9 @@ exports.getDailyData = async (req, res) => {
       totalPauseDuration: Math.floor((track.idleTime || 0) / 60),
       pauseEvents: track.sessions ? track.sessions.filter(s => s.pause) : [],
       sessions: track.sessions || [],
-      isAutoStop: track.isAutoStop || false
+      isAutoStop: track.isAutoStop || false,
+      status: track.status || 'active',
+      isRunning: track.isRunning || false
     });
   } catch (err) {
     res.status(500).json({ message: 'Daily data failed', error: err.message });

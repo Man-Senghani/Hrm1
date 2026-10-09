@@ -3369,11 +3369,12 @@ const Attendance = () => {
                 // Show override ONLY if the user was present, checked in, and has completed checkout today
                 const hasCheckedOut = !isAbsentOrLeave && hasCheckedIn && hasCheckedOutTime && !isSessionRunning;
 
+                const isMyAttendance = viewContext === 'employee';
                 return (
                   <tr
                     key={record._id || i}
-                    onClick={() => openSessionModalForRecord(record)}
-                    className="hover:bg-emerald-50/60 dark:hover:bg-[#112d26] transition-colors cursor-pointer group"
+                    onClick={isMyAttendance ? undefined : () => openSessionModalForRecord(record)}
+                    className={`hover:bg-emerald-50/60 dark:hover:bg-[#112d26] transition-colors group ${isMyAttendance ? 'cursor-default' : 'cursor-pointer'}`}
                   >
                     <td className="px-3 py-1.5 border-r border-[#e2eae7] dark:border-[#133029] w-[180px] max-w-[180px]">
                       <div className="flex items-center gap-2 overflow-hidden">
@@ -3465,15 +3466,20 @@ const Attendance = () => {
                             <span>Override</span>
                           </button>
                         )}
-                        <button
-                          type="button"
-                          onClick={(e) => { e.stopPropagation(); openSessionModalForRecord(record); }}
-                          title="View Daily Activity Breakdown"
-                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-slate-100 hover:bg-emerald-50 dark:bg-[#133029] dark:hover:bg-[#1a4037] text-slate-700 hover:text-emerald-600 dark:text-slate-300 dark:hover:text-emerald-400 border border-slate-200 dark:border-[#1e483c] text-[10.5px] font-bold transition-all shadow-xs cursor-pointer"
-                        >
-                          <Eye size={11} />
-                          <span>View</span>
-                        </button>
+                        {!isMyAttendance && (
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); openSessionModalForRecord(record); }}
+                            title="View Daily Activity Breakdown"
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-slate-100 hover:bg-emerald-50 dark:bg-[#133029] dark:hover:bg-[#1a4037] text-slate-700 hover:text-emerald-600 dark:text-slate-300 dark:hover:text-emerald-400 border border-slate-200 dark:border-[#1e483c] text-[10.5px] font-bold transition-all shadow-xs cursor-pointer"
+                          >
+                            <Eye size={11} />
+                            <span>View</span>
+                          </button>
+                        )}
+                        {isMyAttendance && !(isToday && hasCheckedOut && userRole !== 'employee') && (
+                          <span className="text-slate-400 dark:text-[#829e92] font-semibold text-[11px] px-1">--</span>
+                        )}
                       </div>
                     </td>
                   </tr>

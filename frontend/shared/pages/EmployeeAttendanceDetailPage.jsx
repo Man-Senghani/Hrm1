@@ -548,8 +548,8 @@ const EmployeeAttendanceDetailPage = ({
               clockOut: dailyRes.data.endTime,
               activeTime: dailyRes.data.totalWorkedDuration ? dailyRes.data.totalWorkedDuration * 60 : undefined,
               idleTime: dailyRes.data.totalPauseDuration ? dailyRes.data.totalPauseDuration * 60 : undefined,
-              sessions: dailyRes.data.sessions || dailyRes.data.pauseEvents || [],
-              status: 'Present'
+              status: dailyRes.data.status || 'Present',
+              isRunning: dailyRes.data.isRunning ?? (dailyRes.data.status === 'active')
             }));
             return;
           }
@@ -878,14 +878,23 @@ const EmployeeAttendanceDetailPage = ({
 
   // Status for Current Session card
   const isSelectedDateToday = selectedDate === todayStr;
-  const isRunning = isSelectedDateToday && (selectedDayRecord?.status === 'active' || selectedDayRecord?.isRunning);
+  const isCheckedOut = isPresentDay && checkOutDisplay && checkOutDisplay !== '--:--';
+  const hasActiveProgress = isPresentDay && (dayActiveSeconds > 0 || (checkInDisplay && checkInDisplay !== '--:--'));
+
+  const isRunning = isSelectedDateToday && (
+    selectedDayRecord?.status === 'active' ||
+    selectedDayRecord?.isRunning ||
+    (hasActiveProgress && !isCheckedOut && selectedDayRecord?.status !== 'paused' && selectedDayRecord?.status !== 'idle')
+  );
   const isPaused = isSelectedDateToday && (selectedDayRecord?.status === 'paused' || selectedDayRecord?.status === 'idle');
 
   const sessionStatusText = isRunning
     ? 'WORKING'
     : isPaused
     ? 'ON BREAK'
-    : isSelectedDateToday
+    : isCheckedOut
+    ? 'COMPLETED'
+    : isSelectedDateToday && !hasActiveProgress
     ? 'NOT STARTED'
     : isPresentDay
     ? 'COMPLETED'
@@ -899,6 +908,10 @@ const EmployeeAttendanceDetailPage = ({
     ? 'bg-emerald-500 animate-pulse'
     : isPaused
     ? 'bg-amber-500'
+    : isCheckedOut
+    ? 'bg-blue-500'
+    : isSelectedDateToday && !hasActiveProgress
+    ? 'bg-slate-400'
     : isPresentDay
     ? 'bg-emerald-500'
     : isLeaveDay
