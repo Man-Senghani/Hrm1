@@ -2916,20 +2916,6 @@ const Attendance = () => {
                 placeholder="dd-mm-yyyy"
                 allowRange={false}
               />
-              <button
-                type="button"
-                onClick={() => {
-                  const todayRec = filteredRecords[0] || {
-                    date: dailyActivityDate || getLocalYYYYMMDD(new Date()),
-                    user: currentLoggedInUser
-                  };
-                  openSessionModalForRecord(todayRec);
-                }}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 dark:bg-[#133029] text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-[#1a4037] border border-emerald-200 dark:border-[#1e483c] text-xs font-bold transition-all shadow-xs cursor-pointer"
-              >
-                <Eye size={12} />
-                <span>View in Popup</span>
-              </button>
             </div>
           </div>
 

@@ -405,10 +405,10 @@ server.listen(PORT, '0.0.0.0', () => {
   // Initialize Cron Jobs
   initCronJobs();
 
-  // 💓 Background Dead-Man's Switch: Auto-pause active sessions if laptop stops sending heartbeats for > 25 seconds
+  // 💓 Background Dead-Man's Switch: Auto-pause active sessions if laptop stops sending heartbeats for > 60 seconds (accommodates VPN handshakes & network switches)
   setInterval(async () => {
     try {
-      const staleThreshold = new Date(Date.now() - 25000);
+      const staleThreshold = new Date(Date.now() - 60000);
       const TimeTrack = require('./models/TimeTrack');
       const staleSessions = await TimeTrack.find({
         status: 'active',

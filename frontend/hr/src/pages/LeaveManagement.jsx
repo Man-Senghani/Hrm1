@@ -661,9 +661,8 @@ const Leaves = () => {
             </div>
           </div>
 
-          {/* 5. 3-Column Grid: Holiday Management, Company Shutdowns, Leave Allocation Summary - Row 4 */}
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 mb-8">
-            <div className="h-auto overflow-hidden"><HolidayManagement refreshTrigger={refreshTrigger} /></div>
+          {/* 5. Company Shutdowns & Leave Allocation Summary */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
             <div className="h-auto overflow-hidden"><CompanyShutdowns /></div>
             <div className="h-auto overflow-hidden"><LeaveAllocationSummary refreshTrigger={refreshTrigger} /></div>
           </div>

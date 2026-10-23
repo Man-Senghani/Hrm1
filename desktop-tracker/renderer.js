@@ -16,6 +16,23 @@
  * ============================================================
  */
 
+// 🛡️ GLOBAL ERROR BOUNDARIES — Prevent background exceptions from crashing the renderer process
+window.addEventListener('error', (event) => {
+  console.error('[UNCAUGHT RENDERER ERROR SUPPRESSED]', event.error || event.message);
+  event.preventDefault();
+});
+
+window.addEventListener('unhandledrejection', (event) => {
+  console.warn('[UNHANDLED PROMISE REJECTION SUPPRESSED]', event.reason);
+  event.preventDefault();
+});
+
+// 🚀 SAFE FETCH: Aborts hung TCP sockets automatically (essential for VPN switching)
+async function safeFetch(url, options = {}, timeoutMs = 6000) {
+  const signal = options.signal || (typeof AbortSignal !== 'undefined' && AbortSignal.timeout ? AbortSignal.timeout(timeoutMs) : undefined);
+  return fetch(url, { ...options, signal });
+}
+
 // ── Display state (set by backend only) ───────────────────
 let activeSeconds = 0;
 let inactiveSeconds = 0;
@@ -248,9 +265,9 @@ loadSession();
 async function pollSessionStatus() {
   if (!authToken || isNetworkOffline) return;
   try {
-    const res = await fetch(`${API_BASE}/status`, {
+    const res = await safeFetch(`${API_BASE}/status`, {
       headers: { Authorization: `Bearer ${authToken}` }
-    });
+    }, 4000);
     if (res.status === 401) {
       const errData = await res.json().catch(() => ({}));
       if (errData.code === 'SESSION_TERMINATED') {
@@ -397,11 +414,11 @@ async function sendHeartbeat() {
   const type = lastSystemIdleSeconds === 0 ? 'heartbeat' : 'active';
   try {
     syncIndicator?.classList.add('online');
-    await fetch(`${API_BASE}/activity`, {
+    await safeFetch(`${API_BASE}/activity`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
       body: JSON.stringify({ type })
-    });
+    }, 5000);
     setTimeout(() => syncIndicator?.classList.remove('online'), 2000);
   } catch (err) {
     console.error('[HEARTBEAT ERROR]', err.message);
@@ -784,6 +801,34 @@ function stopHeartbeat() {
 // so idle time doesn't accumulate from a network issue.
 // ============================================================
 
+let offlinePingInterval = null;
+
+function startOfflinePing() {
+  if (offlinePingInterval) return;
+  console.log('📡 [ACTIVE PING] Started background server reachability watcher (every 3s)...');
+  offlinePingInterval = setInterval(async () => {
+    try {
+      const res = await safeFetch(`${API_BASE}/status`, {
+        headers: { Authorization: `Bearer ${authToken}` }
+      }, 3000);
+      if (res && (res.ok || res.status === 401)) {
+        console.log('✅ [ACTIVE PING] Server reached over new network/VPN tunnel! Triggering online recovery...');
+        stopOfflinePing();
+        handleNetworkRestored();
+      }
+    } catch (_) {
+      // Waiting for VPN tunnel/adapter to bind
+    }
+  }, 3000);
+}
+
+function stopOfflinePing() {
+  if (offlinePingInterval) {
+    clearInterval(offlinePingInterval);
+    offlinePingInterval = null;
+  }
+}
+
 window.addEventListener('offline', () => {
   console.warn('⚠️ [NETWORK] Connection LOST (VPN/WiFi disconnected)');
   isNetworkOffline = true;
@@ -791,7 +836,7 @@ window.addEventListener('offline', () => {
   offlineMaxSystemIdle = 0;
   wasActiveBeforeDisconnect = (status === 'ACTIVE' && isSessionRunning);
 
-  // Stop sending heartbeats & polls — they will all fail anyway
+  // Stop sending heartbeats & polls temporarily
   stopHeartbeat();
   stopPolling();
 
@@ -801,14 +846,18 @@ window.addEventListener('offline', () => {
     const titleEl = alertEl.querySelector('.alert-title');
     const textEl = alertEl.querySelector('.alert-text');
     if (titleEl) titleEl.innerText = 'Network Disconnected';
-    if (textEl) textEl.innerText = 'VPN / WiFi lost. Timer will auto-resume when connection is restored.';
+    if (textEl) textEl.innerText = 'VPN / WiFi switching. Timer will auto-resume when connection is restored.';
     alertEl.style.display = 'flex';
   }
 
-  notifyDesktop('Network Disconnected', 'VPN / WiFi connection lost. Timer will auto-resume when restored.').catch(() => {});
+  // 🚀 Start active ping so we recover immediately even if Windows fails to fire 'online'
+  startOfflinePing();
+  notifyDesktop('Network Disconnected', 'VPN / WiFi connection switching. Timer will auto-resume when restored.').catch(() => {});
 });
 
-window.addEventListener('online', async () => {
+async function handleNetworkRestored() {
+  stopOfflinePing();
+  if (!isNetworkOffline && !networkAutoResuming) return;
   console.log('✅ [NETWORK] Connection RESTORED (VPN/WiFi reconnected)');
   isNetworkOffline = false;
 
@@ -824,16 +873,16 @@ window.addEventListener('online', async () => {
   // Only auto-resume if we were actively tracking before the disconnect
   if (wasActiveBeforeDisconnect && authToken && !networkAutoResuming) {
     networkAutoResuming = true;
-    console.log('🔄 [NETWORK AUTO-RESUME] Session was active before disconnect — auto-resuming...');
+    console.log('🔄 [NETWORK AUTO-RESUME] Session was active before disconnect — checking server status...');
 
     try {
-      // Small delay to let the network stack stabilize
-      await new Promise(r => setTimeout(r, 1500));
+      // Small delay to let the VPN network stack stabilize
+      await new Promise(r => setTimeout(r, 1200));
 
       // First poll to see what state the server is in
-      const statusRes = await fetch(`${API_BASE}/status`, {
+      const statusRes = await safeFetch(`${API_BASE}/status`, {
         headers: { Authorization: `Bearer ${authToken}` }
-      });
+      }, 5000);
 
       if (statusRes.ok) {
         const statusData = await statusRes.json();
@@ -853,7 +902,7 @@ window.addEventListener('online', async () => {
             }
           }
 
-          const resumeRes = await fetch(`${API_BASE}/resume`, {
+          const resumeRes = await safeFetch(`${API_BASE}/resume`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -863,7 +912,7 @@ window.addEventListener('online', async () => {
               isNetworkAutoResume: true,
               offlineActiveSeconds: offlineActiveSeconds
             })
-          });
+          }, 6000);
 
           if (resumeRes.ok) {
             const resumeData = await resumeRes.json().catch(() => ({}));
@@ -892,8 +941,8 @@ window.addEventListener('online', async () => {
             startHeartbeat();
           }
         } else if (statusData.status === 'active' && statusData.isRunning) {
-          // Server somehow still considers us active — just restart polling
-          console.log('[NETWORK RECONNECT] Server says session still active — restoring polling');
+          // Server grace period kept session active! Seamlessly resume polling and heartbeats
+          console.log('✅ [NETWORK RECONNECT] Server session remained ACTIVE during VPN switch — restoring heartbeats seamlessly');
           applyServerState(statusData);
           startPolling();
           startHeartbeat();
@@ -927,9 +976,13 @@ window.addEventListener('online', async () => {
     if (authToken) {
       startPolling();
       startHeartbeat();
-      await pollSessionStatus();
+      await pollSessionStatus().catch(() => {});
     }
   }
+}
+
+window.addEventListener('online', () => {
+  handleNetworkRestored();
 });
 
 // ============================================================

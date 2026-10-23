@@ -99,10 +99,8 @@ const Leaves = () => {
         </div>
       </div>
 
-      {/* 4. ROW 2: Holiday Management + Shutdown Days */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-        <HolidayManagement />
-        
+      {/* 4. ROW 2: Shutdown Days */}
+      <div className="w-full mb-8">
         {/* Placeholder for Company Shutdown Days */}
         <div className="bg-white dark:bg-[#1e293b] rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 p-6 flex flex-col">
           <div className="flex justify-between items-center mb-6">

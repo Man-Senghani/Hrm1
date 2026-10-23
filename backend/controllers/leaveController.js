@@ -589,6 +589,23 @@ exports.applyLeave = async (req, res) => {
         });
       }
 
+      // 🛡️ AFTER 1:00 PM CUTOFF RULES:
+      // 1. Casual leave cannot be applied for today after 1:00 PM (Only Sick Leave is allowed for today).
+      // 2. Sick leave applied for today after 1:00 PM can only be for Half Day (0.5 day).
+      const isSick = (leaveType || '').toLowerCase() === 'sick' || (leaveType || '').toLowerCase() === 'sl';
+      if (currentHour >= 13) {
+        if (!isSick) {
+          return res.status(400).json({
+            message: "Casual leave cannot be applied for today after 1:00 PM. Only Sick Leave can be applied for today."
+          });
+        }
+        if (!isHalfDay || Number(totalDays) > 0.5 || sStr !== eStr) {
+          return res.status(400).json({
+            message: "Sick leave applied for today after 1:00 PM can only be for Half Day."
+          });
+        }
+      }
+
       const Attendance = require('../models/Attendance');
       const todayAttendance = await Attendance.findOne({
         user: req.user.id,
@@ -628,7 +645,17 @@ exports.applyLeave = async (req, res) => {
       const lEnd = new Date(l.endDate || l.startDate);
       lEnd.setHours(23, 59, 59, 999);
 
-      return lStart <= reqEnd && lEnd >= reqStart;
+      if (lStart <= reqEnd && lEnd >= reqStart) {
+        // If both existing leave and new request are single-day half days on the exact same date
+        if (l.isHalfDay && isHalfDay && sStr === eStr) {
+          const lDateStr = lStart.toISOString().split('T')[0];
+          if (lDateStr === sStr && l.halfDayType && halfDayType && l.halfDayType !== halfDayType) {
+            return false; // One is first_half and the other is second_half -> Allowed!
+          }
+        }
+        return true;
+      }
+      return false;
     });
 
     if (hasOverlap) {

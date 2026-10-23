@@ -118,14 +118,19 @@ const MeetingRequestsTable = ({
   const [newMinutes, setNewMinutes] = useState('');
   const [newDate, setNewDate] = useState(new Date().toISOString().split('T')[0]);
   const [availableInactiveMins, setAvailableInactiveMins] = useState(null);
+  const [requestType, setRequestType] = useState('idle_conversion'); // 'idle_conversion' | 'manual_time'
   const [newSubmitting, setNewSubmitting] = useState(false);
   const submittingRef = useRef(false);
   const reviewSubmittingRef = useRef(false);
   const rejectSubmittingRef = useRef(false);
 
-  const isInactiveZero = availableInactiveMins !== null && availableInactiveMins <= 0;
-  const isOverInactive = availableInactiveMins !== null && availableInactiveMins > 0 && Number(newMinutes) > availableInactiveMins;
-  const isSubmitDisabled = newSubmitting || availableInactiveMins === null || isInactiveZero || isOverInactive || !newMinutes || !newReason.trim() || Number(newMinutes) <= 0;
+  const isManualMode = requestType === 'manual_time';
+  const isInactiveZero = !isManualMode && availableInactiveMins !== null && availableInactiveMins <= 0;
+  const isOverInactive = !isManualMode && availableInactiveMins !== null && availableInactiveMins > 0 && Number(newMinutes) > availableInactiveMins;
+  const isOver12Hours = isManualMode && Number(newMinutes) > 720;
+  const isSubmitDisabled = newSubmitting || !newMinutes || !newReason.trim() || Number(newMinutes) <= 0 ||
+    (!isManualMode && (availableInactiveMins === null || isInactiveZero || isOverInactive)) ||
+    (isManualMode && isOver12Hours);
 
   const sessionUser = (() => {
     try {
@@ -250,6 +255,7 @@ const MeetingRequestsTable = ({
     setNewDate(today);
     setNewReason('');
     setNewMinutes('');
+    setRequestType('idle_conversion');
     fetchTodayInactiveCap(today);
     setIsNewRequestOpen(true);
   };
@@ -258,19 +264,23 @@ const MeetingRequestsTable = ({
     if (e && e.preventDefault) e.preventDefault();
     if (submittingRef.current || newSubmitting) return;
 
-    if (isInactiveZero || (availableInactiveMins !== null && availableInactiveMins <= 0)) {
-      return toast.error('Inactive time is 0 mins. You cannot submit a meeting request without recorded inactive time.');
+    if (!isManualMode && (isInactiveZero || (availableInactiveMins !== null && availableInactiveMins <= 0))) {
+      return toast.error('Inactive time is 0 mins. Switch to "Forgot Timer (12h)" mode to request work time.');
     }
 
     if (!newReason.trim()) {
-      return toast.error('Meeting reason is required.');
+      return toast.error(isManualMode ? 'Reason for missed timer is required.' : 'Meeting reason is required.');
     }
     const mins = parseInt(newMinutes, 10);
     if (isNaN(mins) || mins <= 0) {
       return toast.error('Duration in minutes is required and must be greater than 0.');
     }
 
-    if (availableInactiveMins !== null && mins > availableInactiveMins) {
+    if (isManualMode && mins > 720) {
+      return toast.error('Manual time request cannot exceed 12 hours (720 mins) per day.');
+    }
+
+    if (!isManualMode && availableInactiveMins !== null && mins > availableInactiveMins) {
       return toast.error(`Inactive time is not sufficient for this request. Maximum allowed duration is ${availableInactiveMins} mins.`);
     }
 
@@ -281,12 +291,13 @@ const MeetingRequestsTable = ({
       await axios.post('/api/time/offline-request', {
         reason: newReason.trim(),
         durationMinutes: mins,
-        date: newDate
+        date: newDate,
+        requestType
       }, {
         headers: { Authorization: `Bearer ${token}` }
       });
 
-      toast.success('Meeting request submitted successfully!');
+      toast.success(isManualMode ? 'Missed timer / work time request submitted successfully!' : 'Meeting request submitted successfully!');
       setIsNewRequestOpen(false);
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to submit request');
@@ -351,10 +362,17 @@ const MeetingRequestsTable = ({
       return toast.error('Approved duration must be at least 1 minute');
     }
 
-    // Inactive Time Ceiling check
-    const maxAllowed = selectedRequest.recordedInactiveMinutes || 0;
-    if (maxAllowed > 0 && finalMins > maxAllowed) {
-      return toast.error(`Final approved time (${finalMins} mins) cannot exceed recorded inactive time (${maxAllowed} mins). You can approve a lower number.`);
+    // Ceiling check
+    const isReqManual = selectedRequest.requestType === 'manual_time';
+    if (isReqManual) {
+      if (finalMins > 720) {
+        return toast.error('Final approved time cannot exceed 12 hours (720 mins).');
+      }
+    } else {
+      const maxAllowed = selectedRequest.recordedInactiveMinutes || 0;
+      if (maxAllowed > 0 && finalMins > maxAllowed) {
+        return toast.error(`Final approved time (${finalMins} mins) cannot exceed recorded inactive time (${maxAllowed} mins). You can approve a lower number.`);
+      }
     }
     reviewSubmittingRef.current = true;
     setReviewSubmitting(true);
@@ -368,7 +386,7 @@ const MeetingRequestsTable = ({
         headers: { Authorization: `Bearer ${token}` }
       });
 
-      toast.success(`Meeting request approved for ${finalMins} minutes!`);
+      toast.success(`${isReqManual ? 'Missed timer' : 'Meeting'} request approved for ${finalMins} minutes!`);
       setSelectedRequest(null);
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to approve request');
@@ -527,8 +545,11 @@ const MeetingRequestsTable = ({
               <th className="px-3.5 py-2.5 text-[10px] font-bold text-slate-500 dark:text-[#829e92] uppercase tracking-wider">
                 Reason / Details
               </th>
+              <th className="px-3.5 py-2.5 text-[10px] font-bold text-slate-500 dark:text-[#829e92] uppercase tracking-wider">
+                Approved By
+              </th>
               <th className="px-3.5 py-2.5 text-[10px] font-bold text-slate-500 dark:text-[#829e92] uppercase tracking-wider text-center">
-                Inactive Time Cap
+                Allowance / Cap
               </th>
               <th className="px-3.5 py-2.5 text-[10px] font-bold text-slate-500 dark:text-[#829e92] uppercase tracking-wider text-center">
                 Requested
@@ -547,7 +568,7 @@ const MeetingRequestsTable = ({
           <tbody className="divide-y divide-[#e2eae7] dark:divide-[#133029]">
             {loading ? (
               <tr>
-                <td colSpan={isReviewer ? 8 : 7} className="py-10 text-center text-slate-400 dark:text-[#829e92]">
+                <td colSpan={isReviewer ? 9 : 8} className="py-10 text-center text-slate-400 dark:text-[#829e92]">
                   <div className="flex items-center justify-center gap-2">
                     <RefreshCw size={16} className="animate-spin text-emerald-500" />
                     <span className="font-semibold">Loading requests...</span>
@@ -556,7 +577,7 @@ const MeetingRequestsTable = ({
               </tr>
             ) : requests.length === 0 ? (
               <tr>
-                <td colSpan={isReviewer ? 8 : 7} className="py-10 text-center">
+                <td colSpan={isReviewer ? 9 : 8} className="py-10 text-center">
                   <div className="flex flex-col items-center justify-center gap-2">
                     <Timer size={28} className="text-slate-300 dark:text-slate-600" />
                     <p className="text-xs font-bold text-slate-500 dark:text-slate-400">No meeting requests found</p>
@@ -610,6 +631,17 @@ const MeetingRequestsTable = ({
 
                     {/* Reason */}
                     <td className="px-3.5 py-2.5 text-slate-700 dark:text-slate-300 max-w-[220px]">
+                      <div className="flex items-center gap-1.5 mb-1">
+                        {item.requestType === 'manual_time' ? (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9.5px] font-extrabold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800/60">
+                            Missed Timer
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9.5px] font-extrabold bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-800/60">
+                            Inactive Convert
+                          </span>
+                        )}
+                      </div>
                       <ReasonCell reason={item.reason} />
                       {item.reviewRemarks && (
                         <p className="text-[10px] text-slate-400 dark:text-[#829e92] mt-0.5 italic">
@@ -618,11 +650,44 @@ const MeetingRequestsTable = ({
                       )}
                     </td>
 
-                    {/* Recorded Inactive Time (Ceiling) */}
+                    {/* Approver / Approved By Column */}
+                    <td className="px-3.5 py-2.5 whitespace-nowrap">
+                      {item.status === 'approved' ? (
+                        <div className="flex items-center">
+                          <span className="font-extrabold text-slate-800 dark:text-white flex items-center gap-1.5">
+                            <UserCheck size={13} className="text-emerald-500 shrink-0" />
+                            {item.reviewerName || item.reviewedBy?.name || item.managerName || (typeof item.managerId === 'object' ? item.managerId?.name : '') || (targetRole === 'hr' ? 'Admin' : (targetRole === 'manager' ? 'HR / Admin' : 'Reporting Manager'))}
+                          </span>
+                        </div>
+                      ) : item.status === 'rejected' ? (
+                        <div className="flex items-center">
+                          <span className="font-extrabold text-slate-800 dark:text-white flex items-center gap-1.5">
+                            <XCircle size={13} className="text-rose-500 shrink-0" />
+                            {item.reviewerName || item.reviewedBy?.name || item.managerName || (typeof item.managerId === 'object' ? item.managerId?.name : '') || (targetRole === 'hr' ? 'Admin' : (targetRole === 'manager' ? 'HR / Admin' : 'Reporting Manager'))}
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col">
+                          <span className="font-extrabold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
+                            <Users size={13} className="text-amber-500 shrink-0" />
+                            {item.managerName || (typeof item.managerId === 'object' ? item.managerId?.name : '') || (targetRole === 'hr' ? 'Admin' : (targetRole === 'manager' ? 'HR / Admin' : 'Reporting Manager'))}
+                          </span>
+                          <span className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold">
+                            Can Approve
+                          </span>
+                        </div>
+                      )}
+                    </td>
+
+                    {/* Recorded Inactive Time (Ceiling) / Allowance */}
                     <td className="px-3.5 py-2.5 text-center font-bold text-slate-500 dark:text-slate-400 whitespace-nowrap">
-                      <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-[#0d2a22] font-mono text-[11px]">
-                        {item.recordedInactiveMinutes || 0}m
-                      </span>
+                      {item.requestType === 'manual_time' ? (
+                        <span className="text-slate-400 dark:text-slate-500 font-semibold">--</span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-[#0d2a22] font-mono text-[11px]">
+                          {item.recordedInactiveMinutes || 0}m
+                        </span>
+                      )}
                     </td>
 
                     {/* Requested Duration */}
@@ -847,6 +912,28 @@ const MeetingRequestsTable = ({
                         reviewMode === 'reject' || selectedRequest.status === 'rejected'
                           ? 'bg-rose-50/60 dark:bg-rose-950/20'
                           : 'bg-slate-50 dark:bg-[#071e17]'
+                      }`}>Type:</td>
+                      <td className="px-3.5 py-2.5 font-bold text-right">
+                        {selectedRequest.requestType === 'manual_time' ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-black bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800/60">
+                            Missed Timer
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-black bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-800/60">
+                            Convert Inactive Time
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                    <tr className={`border-b ${
+                      reviewMode === 'reject' || selectedRequest.status === 'rejected'
+                        ? 'border-rose-200 dark:border-rose-900/50'
+                        : 'border-[#e2eae7] dark:border-[#133029]'
+                    }`}>
+                      <td className={`px-3.5 py-2.5 text-slate-400 dark:text-[#829e92] font-semibold ${
+                        reviewMode === 'reject' || selectedRequest.status === 'rejected'
+                          ? 'bg-rose-50/60 dark:bg-rose-950/20'
+                          : 'bg-slate-50 dark:bg-[#071e17]'
                       }`}>Date:</td>
                       <td className="px-3.5 py-2.5 font-bold text-slate-800 dark:text-white text-right">{selectedRequest.date}</td>
                     </tr>
@@ -873,9 +960,29 @@ const MeetingRequestsTable = ({
                         reviewMode === 'reject' || selectedRequest.status === 'rejected'
                           ? 'bg-rose-50/60 dark:bg-rose-950/20'
                           : 'bg-slate-50 dark:bg-[#071e17]'
-                      }`}>Recorded Inactive:</td>
+                      }`}>
+                        {selectedRequest.status === 'approved' ? 'Approved By:' : selectedRequest.status === 'rejected' ? 'Rejected By:' : 'Approver:'}
+                      </td>
+                      <td className="px-3.5 py-2.5 font-bold text-slate-800 dark:text-white text-right">
+                        {selectedRequest.status === 'approved' || selectedRequest.status === 'rejected'
+                          ? (selectedRequest.reviewerName || selectedRequest.reviewedBy?.name || selectedRequest.managerName || (typeof selectedRequest.managerId === 'object' ? selectedRequest.managerId?.name : '') || 'Manager / HR')
+                          : (selectedRequest.managerName || (typeof selectedRequest.managerId === 'object' ? selectedRequest.managerId?.name : '') || 'Reporting Manager / HR')}
+                      </td>
+                    </tr>
+                    <tr className={`border-b ${
+                      reviewMode === 'reject' || selectedRequest.status === 'rejected'
+                        ? 'border-rose-200 dark:border-rose-900/50'
+                        : 'border-[#e2eae7] dark:border-[#133029]'
+                    }`}>
+                      <td className={`px-3.5 py-2.5 text-slate-400 dark:text-[#829e92] font-semibold ${
+                        reviewMode === 'reject' || selectedRequest.status === 'rejected'
+                          ? 'bg-rose-50/60 dark:bg-rose-950/20'
+                          : 'bg-slate-50 dark:bg-[#071e17]'
+                      }`}>
+                        {selectedRequest.requestType === 'manual_time' ? 'Allowance / Cap:' : 'Recorded Inactive:'}
+                      </td>
                       <td className="px-3.5 py-2.5 font-mono font-bold text-slate-600 dark:text-slate-300 text-right">
-                        {selectedRequest.recordedInactiveMinutes || 0} mins
+                        {selectedRequest.requestType === 'manual_time' ? '--' : `${selectedRequest.recordedInactiveMinutes || 0} mins`}
                       </td>
                     </tr>
                     <tr className={selectedRequest.status !== 'pending' ? `border-b ${
@@ -940,13 +1047,15 @@ const MeetingRequestsTable = ({
                         <input
                           type="number"
                           min="1"
-                          max={selectedRequest.recordedInactiveMinutes || undefined}
+                          max={selectedRequest.requestType === 'manual_time' ? 720 : (selectedRequest.recordedInactiveMinutes || undefined)}
                           value={finalMinutesInput}
                           onChange={(e) => setFinalMinutesInput(e.target.value)}
                           className="w-full px-3 py-2.5 text-sm font-bold rounded-xl border border-[#cbd5e1] dark:border-[#133029] bg-white dark:bg-[#071e17] text-slate-800 dark:text-white focus:ring-2 focus:ring-emerald-500/30 outline-none"
                         />
                         <p className="text-[10px] text-slate-400 dark:text-[#829e92] mt-1">
-                          Max {selectedRequest.recordedInactiveMinutes || 0} mins (cannot exceed recorded inactive time).
+                          {selectedRequest.requestType === 'manual_time'
+                            ? 'Max 720 mins (12 hours daily ceiling for missed timer addition).'
+                            : `Max ${selectedRequest.recordedInactiveMinutes || 0} mins (cannot exceed recorded inactive time).`}
                         </p>
                       </div>
                       <div>
@@ -1027,8 +1136,8 @@ const MeetingRequestsTable = ({
                     <Timer size={20} />
                   </div>
                   <div>
-                    <h3 className="text-base font-extrabold text-slate-900 dark:text-white">New Offline / Meeting Request</h3>
-                    <p className="text-[11px] text-slate-500 dark:text-[#829e92]">Convert recorded inactive time to work time</p>
+                    <h3 className="text-base font-extrabold text-slate-900 dark:text-white">New Work Time / Offline Request</h3>
+                    <p className="text-[11px] text-slate-500 dark:text-[#829e92]">Convert inactive time or add missed timer work time</p>
                   </div>
                 </div>
                 <button
@@ -1040,10 +1149,44 @@ const MeetingRequestsTable = ({
                 </button>
               </div>
 
-              <form onSubmit={handleSubmitNewRequest} id="offline-request-form" className="space-y-4 my-5">
+              {/* ── Request Type Toggle ── */}
+              <div className="grid grid-cols-2 p-1 bg-slate-100 dark:bg-[#071e17] rounded-xl border border-[#e2eae7] dark:border-[#133029] mt-4 mb-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRequestType('idle_conversion');
+                    setNewMinutes('');
+                  }}
+                  className={`py-2 px-3 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                    requestType === 'idle_conversion'
+                      ? 'bg-white dark:bg-[#0d2a22] text-slate-900 dark:text-white shadow-xs'
+                      : 'text-slate-500 dark:text-[#829e92] hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                >
+                  <Clock size={14} />
+                  <span>Convert Inactive</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRequestType('manual_time');
+                    setNewMinutes('');
+                  }}
+                  className={`py-2 px-3 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                    requestType === 'manual_time'
+                      ? 'bg-white dark:bg-[#0d2a22] text-indigo-600 dark:text-indigo-400 shadow-xs'
+                      : 'text-slate-500 dark:text-[#829e92] hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                >
+                  <AlertTriangle size={14} />
+                  <span>Forgot Timer (12h)</span>
+                </button>
+              </div>
+
+              <form onSubmit={handleSubmitNewRequest} id="offline-request-form" className="space-y-4 my-4">
                 <div>
                   <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-200 mb-1.5">
-                    Meeting Date <span className="text-rose-500 font-bold ml-0.5">*</span>
+                    {isManualMode ? 'Work Date' : 'Meeting Date'} <span className="text-rose-500 font-bold ml-0.5">*</span>
                   </label>
                   <div className="relative">
                     <CustomDatePicker
@@ -1054,43 +1197,72 @@ const MeetingRequestsTable = ({
                         setNewDate(val);
                         fetchTodayInactiveCap(val);
                       }}
-                      placeholder="Select Meeting Date"
+                      placeholder="Select Date"
                       className="w-full"
                       maxDate={new Date().toISOString().split('T')[0]}
                     />
                   </div>
                 </div>
 
-                {/* Inactive Time Banner (Mockup Style) */}
-                <div className="p-3.5 rounded-xl bg-amber-50/80 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-800/50 flex items-center justify-between text-xs">
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-                    <span className="font-bold text-amber-800 dark:text-amber-300">Recorded Inactive Time:</span>
-                  </div>
-                  <span className="font-mono font-black text-amber-700 dark:text-amber-400 text-sm">
-                    {availableInactiveMins !== null ? `${availableInactiveMins} Mins` : 'Calculating...'}
-                  </span>
-                </div>
-
-                {isInactiveZero ? (
-                  <div className="p-4 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/50 flex items-start gap-3 text-xs text-rose-700 dark:text-rose-300 animate-in fade-in slide-in-from-top-1">
-                    <AlertTriangle size={18} className="text-rose-500 shrink-0 mt-0.5" />
-                    <div>
-                      <p className="font-bold text-[13px]">Your inactive time is 0 mins</p>
-                      <p className="text-xs text-rose-600/90 dark:text-rose-400/90 mt-1 leading-relaxed">
-                        Your inactive time is 0 so you can't able to make request.
-                      </p>
+                {/* Banner based on Request Type */}
+                {isManualMode ? (
+                  <div className="p-3.5 rounded-xl bg-indigo-50/80 dark:bg-indigo-950/30 border border-indigo-200/80 dark:border-indigo-800/50 flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse" />
+                      <span className="font-bold text-indigo-900 dark:text-indigo-300">Daily Maximum Allowance:</span>
                     </div>
+                    <span className="font-mono font-black text-indigo-700 dark:text-indigo-400 text-sm">
+                      720 Mins (12h)
+                    </span>
+                  </div>
+                ) : (
+                  <div className="p-3.5 rounded-xl bg-amber-50/80 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-800/50 flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                      <span className="font-bold text-amber-800 dark:text-amber-300">Recorded Inactive Time:</span>
+                    </div>
+                    <span className="font-mono font-black text-amber-700 dark:text-amber-400 text-sm">
+                      {availableInactiveMins !== null ? `${availableInactiveMins} Mins` : 'Calculating...'}
+                    </span>
+                  </div>
+                )}
+
+                {/* Inactive Zero Warning when in idle_conversion */}
+                {!isManualMode && isInactiveZero ? (
+                  <div className="p-4 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/50 flex flex-col gap-2.5 text-xs text-rose-700 dark:text-rose-300 animate-in fade-in slide-in-from-top-1">
+                    <div className="flex items-start gap-2.5">
+                      <AlertTriangle size={18} className="text-rose-500 shrink-0 mt-0.5" />
+                      <div>
+                        <p className="font-bold text-[13px]">Your inactive time is 0 mins</p>
+                        <p className="text-xs text-rose-600/90 dark:text-rose-400/90 mt-0.5 leading-relaxed">
+                          You don't have recorded inactive time on this date to convert.
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setRequestType('manual_time');
+                        setNewMinutes('');
+                      }}
+                      className="mt-1 w-full py-2 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-xs transition-all"
+                    >
+                      <span>Forgot Timer in Morning? Switch to "Forgot Timer (12h)"</span>
+                    </button>
                   </div>
                 ) : (
                   <>
                     <div>
                       <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-200 mb-1.5">
-                        Meeting Reason <span className="text-rose-500 font-bold ml-0.5">*</span>
+                        {isManualMode ? 'Reason for Missed Timer' : 'Meeting Reason'} <span className="text-rose-500 font-bold ml-0.5">*</span>
                       </label>
                       <textarea
                         rows={3}
-                        placeholder="e.g. Client Call on Zoom, Product Architecture Discussion"
+                        placeholder={
+                          isManualMode
+                            ? 'e.g. Forgot to start timer in morning while working on tasks'
+                            : 'e.g. Client Call on Zoom, Product Architecture Discussion'
+                        }
                         value={newReason}
                         onChange={(e) => setNewReason(e.target.value)}
                         required
@@ -1103,66 +1275,106 @@ const MeetingRequestsTable = ({
                         <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-200">
                           Duration in Minutes <span className="text-rose-500 font-bold ml-0.5">*</span>
                         </label>
-                        {availableInactiveMins !== null && availableInactiveMins > 0 && (
-                          <span className="text-[10.5px] font-bold text-amber-700 dark:text-amber-400">
-                            Max: {availableInactiveMins} mins
+                        {isManualMode ? (
+                          <span className="text-[10.5px] font-bold text-indigo-700 dark:text-indigo-400">
+                            Max: 720 mins (12h)
                           </span>
+                        ) : (
+                          availableInactiveMins !== null && availableInactiveMins > 0 && (
+                            <span className="text-[10.5px] font-bold text-amber-700 dark:text-amber-400">
+                              Max: {availableInactiveMins} mins
+                            </span>
+                          )
                         )}
                       </div>
                       <input
                         type="number"
                         min="1"
-                        max={availableInactiveMins !== null && availableInactiveMins > 0 ? availableInactiveMins : undefined}
-                        placeholder="e.g. 30"
+                        max={isManualMode ? 720 : (availableInactiveMins !== null && availableInactiveMins > 0 ? availableInactiveMins : undefined)}
+                        placeholder="e.g. 60"
                         value={newMinutes}
                         onChange={(e) => setNewMinutes(e.target.value)}
                         className={`w-full px-3.5 py-2.5 text-xs rounded-xl border transition-all outline-none font-semibold ${
-                          isOverInactive
+                          (isManualMode ? isOver12Hours : isOverInactive)
                             ? 'border-rose-500 ring-2 ring-rose-500/20 bg-rose-50/20 dark:bg-rose-950/20 text-rose-700 dark:text-rose-300'
                             : 'border-[#cbd5e1] dark:border-[#133029] bg-white dark:bg-[#071e17] text-slate-800 dark:text-white focus:ring-2 focus:ring-emerald-500/30'
                         }`}
                       />
 
                       {/* 🚀 Quick Fill Preset Buttons */}
-                      {availableInactiveMins !== null && availableInactiveMins > 0 && (
+                      {isManualMode ? (
                         <div className="flex flex-wrap items-center gap-1.5 mt-2">
                           <span className="text-[10.5px] font-semibold text-slate-400 dark:text-[#829e92]">Quick Fill:</span>
-                          {[15, 30, 45, 60].filter(m => m <= availableInactiveMins).map(m => (
+                          {[30, 60, 120, 240, 480].map(m => (
                             <button
                               key={m}
                               type="button"
                               onClick={() => setNewMinutes(String(m))}
                               className={`px-2.5 py-1 text-[11px] font-bold rounded-lg border transition-all cursor-pointer ${
                                 Number(newMinutes) === m
-                                  ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
-                                  : 'bg-slate-100 dark:bg-[#133029] text-slate-700 dark:text-slate-300 border-[#cbd5e1] dark:border-[#1a3d34] hover:border-emerald-500'
+                                  ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                                  : 'bg-slate-100 dark:bg-[#133029] text-slate-700 dark:text-slate-300 border-[#cbd5e1] dark:border-[#1a3d34] hover:border-indigo-500'
                               }`}
                             >
-                              {m}m
+                              {m >= 60 ? `${m / 60}h` : `${m}m`}
                             </button>
                           ))}
-                          <button
-                            type="button"
-                            onClick={() => setNewMinutes(String(availableInactiveMins))}
-                            className={`px-2.5 py-1 text-[11px] font-bold rounded-lg border transition-all cursor-pointer ${
-                              Number(newMinutes) === availableInactiveMins
-                                ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
-                                : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800/60 hover:bg-emerald-100'
-                            }`}
-                          >
-                            Full ({availableInactiveMins}m)
-                          </button>
                         </div>
+                      ) : (
+                        availableInactiveMins !== null && availableInactiveMins > 0 && (
+                          <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                            <span className="text-[10.5px] font-semibold text-slate-400 dark:text-[#829e92]">Quick Fill:</span>
+                            {[15, 30, 45, 60].filter(m => m <= availableInactiveMins).map(m => (
+                              <button
+                                key={m}
+                                type="button"
+                                onClick={() => setNewMinutes(String(m))}
+                                className={`px-2.5 py-1 text-[11px] font-bold rounded-lg border transition-all cursor-pointer ${
+                                  Number(newMinutes) === m
+                                    ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                                    : 'bg-slate-100 dark:bg-[#133029] text-slate-700 dark:text-slate-300 border-[#cbd5e1] dark:border-[#1a3d34] hover:border-emerald-500'
+                                }`}
+                              >
+                                {m}m
+                              </button>
+                            ))}
+                            <button
+                              type="button"
+                              onClick={() => setNewMinutes(String(availableInactiveMins))}
+                              className={`px-2.5 py-1 text-[11px] font-bold rounded-lg border transition-all cursor-pointer ${
+                                Number(newMinutes) === availableInactiveMins
+                                  ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                                  : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800/60 hover:bg-emerald-100'
+                              }`}
+                            >
+                              Full ({availableInactiveMins}m)
+                            </button>
+                          </div>
+                        )
                       )}
 
                       <p className="text-[11px] text-slate-400 dark:text-[#829e92] mt-1.5">
-                        {availableInactiveMins !== null && availableInactiveMins > 0
-                          ? `Cannot exceed your recorded inactive time (${availableInactiveMins} mins).`
-                          : 'Capped at your recorded inactive time.'}
+                        {isManualMode
+                          ? 'Maximum allowed manual work time is 720 mins (12 hours) per day.'
+                          : availableInactiveMins !== null && availableInactiveMins > 0
+                            ? `Cannot exceed your recorded inactive time (${availableInactiveMins} mins).`
+                            : 'Capped at your recorded inactive time.'}
                       </p>
 
-                      {/* 🛑 Inactive Time Insufficient Error Messages */}
-                      {isOverInactive && (
+                      {/* 🛑 Validation Error Messages */}
+                      {isManualMode && isOver12Hours && (
+                        <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/50 flex items-start gap-2.5 text-xs text-rose-700 dark:text-rose-300 mt-2.5 animate-in fade-in slide-in-from-top-1">
+                          <AlertTriangle size={16} className="text-rose-500 shrink-0 mt-0.5" />
+                          <div>
+                            <p className="font-bold">Exceeds 12-hour limit.</p>
+                            <p className="text-[11px] text-rose-600/90 dark:text-rose-400/90 mt-0.5">
+                              You cannot request more than 12 hours (720 minutes) for a single day.
+                            </p>
+                          </div>
+                        </div>
+                      )}
+
+                      {!isManualMode && isOverInactive && (
                         <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/50 flex items-start gap-2.5 text-xs text-rose-700 dark:text-rose-300 mt-2.5 animate-in fade-in slide-in-from-top-1">
                           <AlertTriangle size={16} className="text-rose-500 shrink-0 mt-0.5" />
                           <div>
@@ -1187,11 +1399,13 @@ const MeetingRequestsTable = ({
                 className={`w-full py-2.5 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-2 select-none ${
                   isSubmitDisabled
                     ? 'bg-slate-200 dark:bg-[#133029] text-slate-400 dark:text-[#829e92] cursor-not-allowed shadow-none'
-                    : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-600/20 cursor-pointer active:scale-[0.99]'
+                    : isManualMode
+                      ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-md shadow-indigo-600/20 cursor-pointer active:scale-[0.99]'
+                      : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-600/20 cursor-pointer active:scale-[0.99]'
                 }`}
               >
                 <Check size={15} />
-                <span>{newSubmitting ? 'Submitting...' : 'Submit Request'}</span>
+                <span>{newSubmitting ? 'Submitting...' : isManualMode ? 'Submit Work Time Request' : 'Submit Meeting Request'}</span>
               </button>
             </div>
           </div>

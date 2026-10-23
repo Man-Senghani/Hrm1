@@ -1691,13 +1691,15 @@ exports.getTodayAttendance = async (req, res) => {
 
     const hasCheckedIn = !!(attendance && attendance.checkInTime && attendance.status !== 'Leave' && attendance.clockIn && attendance.clockIn !== '--');
     const isPast6PM = getTimeDetails(now).hours >= 18;
+    const isPast1PM = getTimeDetails(now).hours >= 13;
 
     res.json({
       attendance,
       isOnLeave: !!activeLeave,
       leaveType: activeLeave?.leaveType,
       hasCheckedIn,
-      isPast6PM
+      isPast6PM,
+      isPast1PM
     });
   } catch (error) {
     res.status(500).json({ message: error.message });

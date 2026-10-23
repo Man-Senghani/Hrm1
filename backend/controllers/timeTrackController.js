@@ -1264,10 +1264,15 @@ exports.getDailySummaryLogs = async (req, res) => {
  */
 exports.submitOfflineRequest = async (req, res) => {
   try {
-    const { reason, durationMinutes, date } = req.body;
+    const { reason, durationMinutes, date, requestType = 'idle_conversion' } = req.body;
+    const isManual = requestType === 'manual_time';
 
     if (!reason || !reason.trim()) {
-      return res.status(400).json({ message: 'Reason for meeting / offline activity is required.' });
+      return res.status(400).json({
+        message: isManual
+          ? 'Reason for missed timer / work time is required.'
+          : 'Reason for meeting / offline activity is required.'
+      });
     }
 
     const minutesNum = parseInt(durationMinutes, 10);
@@ -1287,13 +1292,16 @@ exports.submitOfflineRequest = async (req, res) => {
     });
     if (recentDuplicate) {
       return res.status(200).json({
-        message: 'Meeting request submitted successfully!',
+        message: isManual
+          ? 'Missed timer request submitted successfully!'
+          : 'Meeting request submitted successfully!',
         request: recentDuplicate
       });
     }
 
     // 🛡️ Resolve reporting manager and employee ID
     let managerId = null;
+    let managerName = '';
     let empId = req.user.employeeId || '';
     const employeeDoc = await Employee.findOne({ userId: req.user.id });
     if (employeeDoc) {
@@ -1304,30 +1312,56 @@ exports.submitOfflineRequest = async (req, res) => {
       const userDoc = await User.findById(req.user.id);
       if (userDoc?.reportingManager) managerId = userDoc.reportingManager;
     }
+    if (managerId) {
+      const mgrUser = await User.findById(managerId, 'name');
+      if (mgrUser) managerName = mgrUser.name || '';
+    }
 
-    // 🛡️ INACTIVE TIME CEILING VALIDATION:
-    // Check recorded inactive time for this employee on the target date
     const timeTrack = await TimeTrack.findOne({ employeeId: req.user.id, date: targetDate });
-    let recordedInactiveSec = Math.floor(timeTrack?.idleTime || 0);
+    let recordedInactiveMinutes = 0;
 
-    // If currently idle or paused, add the live ongoing idle duration
-    if (timeTrack && (timeTrack.status === 'idle' || timeTrack.status === 'paused') && timeTrack.idleStart) {
-      const ongoing = Math.floor((Date.now() - new Date(timeTrack.idleStart).getTime()) / 1000);
-      recordedInactiveSec += Math.max(0, ongoing);
-    }
+    if (isManual) {
+      // 🛡️ 12 HOURS (720 MINUTES) CEILING ENFORCEMENT
+      const MAX_DAILY_MINUTES = 720;
+      if (minutesNum > MAX_DAILY_MINUTES) {
+        return res.status(400).json({
+          message: `Requested manual time (${minutesNum} mins) exceeds the daily maximum limit of 12 hours (${MAX_DAILY_MINUTES} mins).`
+        });
+      }
 
-    const maxAllowedMinutes = Math.floor(recordedInactiveSec / 60);
+      // Check current tracked active time for that date so total does not exceed 12 hours
+      const currentActiveMins = Math.floor((timeTrack?.activeTime || 0) / 60);
+      if (currentActiveMins + minutesNum > MAX_DAILY_MINUTES) {
+        const remainingAllowed = Math.max(0, MAX_DAILY_MINUTES - currentActiveMins);
+        return res.status(400).json({
+          message: `Total daily active time cannot exceed 12 hours (720 mins). You have already tracked ${currentActiveMins} mins, so you can add at most ${remainingAllowed} mins.`
+        });
+      }
+      recordedInactiveMinutes = MAX_DAILY_MINUTES; // 12h indicator for manual time
+    } else {
+      // 🛡️ INACTIVE TIME CEILING VALIDATION (for idle_conversion):
+      let recordedInactiveSec = Math.floor(timeTrack?.idleTime || 0);
 
-    if (maxAllowedMinutes <= 0) {
-      return res.status(400).json({
-        message: 'No recorded inactive time available to convert for this date. You can only request meeting time if inactive time was recorded.'
-      });
-    }
+      // If currently idle or paused, add the live ongoing idle duration
+      if (timeTrack && (timeTrack.status === 'idle' || timeTrack.status === 'paused') && timeTrack.idleStart) {
+        const ongoing = Math.floor((Date.now() - new Date(timeTrack.idleStart).getTime()) / 1000);
+        recordedInactiveSec += Math.max(0, ongoing);
+      }
 
-    if (minutesNum > maxAllowedMinutes) {
-      return res.status(400).json({
-        message: `Requested duration (${minutesNum} mins) cannot exceed your recorded inactive time of ${maxAllowedMinutes} mins.`
-      });
+      const maxAllowedMinutes = Math.floor(recordedInactiveSec / 60);
+
+      if (maxAllowedMinutes <= 0) {
+        return res.status(400).json({
+          message: 'No recorded inactive time available to convert for this date. You can only request meeting time if inactive time was recorded.'
+        });
+      }
+
+      if (minutesNum > maxAllowedMinutes) {
+        return res.status(400).json({
+          message: `Requested duration (${minutesNum} mins) cannot exceed your recorded inactive time of ${maxAllowedMinutes} mins.`
+        });
+      }
+      recordedInactiveMinutes = maxAllowedMinutes;
     }
 
     const newRequest = await OfflineRequest.create({
@@ -1336,9 +1370,11 @@ exports.submitOfflineRequest = async (req, res) => {
       employeeRole: req.user.role || 'employee',
       empId: empId,
       managerId: managerId,
+      managerName: managerName,
       date: targetDate,
       reason: reason.trim(),
-      recordedInactiveMinutes: maxAllowedMinutes,
+      requestType: isManual ? 'manual_time' : 'idle_conversion',
+      recordedInactiveMinutes: recordedInactiveMinutes,
       requestedDurationMinutes: minutesNum,
       approvedDurationMinutes: 0,
       status: 'pending'
@@ -1346,7 +1382,8 @@ exports.submitOfflineRequest = async (req, res) => {
 
     // 🔔 Notify Manager and HR via Socket.io and Notification Model
     const io = req.app?.get ? req.app.get('io') : null;
-    const notifMessage = `${req.user.name || 'An employee'} submitted a meeting request for ${minutesNum} mins on ${targetDate}.`;
+    const reqTypeLabel = isManual ? 'missed timer / manual work time' : 'meeting';
+    const notifMessage = `${req.user.name || 'An employee'} submitted a ${reqTypeLabel} request for ${minutesNum} mins on ${targetDate}.`;
 
     if (managerId) {
       const mgrNotif = await Notification.create({
@@ -1381,7 +1418,9 @@ exports.submitOfflineRequest = async (req, res) => {
     }
 
     res.status(201).json({
-      message: 'Meeting / Offline request submitted successfully.',
+      message: isManual
+        ? 'Missed timer / manual work time request submitted successfully.'
+        : 'Meeting / Offline request submitted successfully.',
       request: newRequest
     });
   } catch (err) {
@@ -1456,6 +1495,8 @@ exports.getOfflineRequests = async (req, res) => {
 
     const [requests, total] = await Promise.all([
       OfflineRequest.find(query)
+        .populate('managerId', 'name email role employeeId')
+        .populate('reviewedBy', 'name email role employeeId')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limitNum)
@@ -1463,8 +1504,24 @@ exports.getOfflineRequests = async (req, res) => {
       OfflineRequest.countDocuments(query)
     ]);
 
+    const formattedRequests = requests.map(r => {
+      let reviewer = r.reviewerName;
+      if (!reviewer && r.reviewedBy && typeof r.reviewedBy === 'object') {
+        reviewer = r.reviewedBy.name;
+      }
+      let manager = r.managerName;
+      if (!manager && r.managerId && typeof r.managerId === 'object') {
+        manager = r.managerId.name;
+      }
+      return {
+        ...r,
+        reviewerName: reviewer || '',
+        managerName: manager || ''
+      };
+    });
+
     res.json({
-      requests,
+      requests: formattedRequests,
       total,
       page: pageNum,
       totalPages: Math.ceil(total / limitNum) || 1
@@ -1529,17 +1586,28 @@ exports.updateOfflineRequestStatus = async (req, res) => {
     }
 
     if (status === 'approved') {
+      const isManual = request.requestType === 'manual_time';
+
       // 🛡️ Determine final approved duration
       const approvedMins = parseInt(finalMinutes !== undefined ? finalMinutes : request.requestedDurationMinutes, 10);
       if (isNaN(approvedMins) || approvedMins <= 0) {
         return res.status(400).json({ message: 'Approved duration must be a positive number of minutes.' });
       }
 
-      // 🛡️ Inactive Time Ceiling: Approved minutes cannot exceed recorded inactive time
-      if (approvedMins > request.recordedInactiveMinutes) {
-        return res.status(400).json({
-          message: `Approved time (${approvedMins} mins) cannot exceed the recorded inactive time (${request.recordedInactiveMinutes} mins).`
-        });
+      if (isManual) {
+        // Enforce 12-hour limit (720 mins)
+        if (approvedMins > 720) {
+          return res.status(400).json({
+            message: `Approved duration (${approvedMins} mins) cannot exceed the 12-hour limit (720 mins).`
+          });
+        }
+      } else {
+        // 🛡️ Inactive Time Ceiling: Approved minutes cannot exceed recorded inactive time
+        if (approvedMins > request.recordedInactiveMinutes) {
+          return res.status(400).json({
+            message: `Approved time (${approvedMins} mins) cannot exceed the recorded inactive time (${request.recordedInactiveMinutes} mins).`
+          });
+        }
       }
 
       request.status = 'approved';
@@ -1550,39 +1618,93 @@ exports.updateOfflineRequestStatus = async (req, res) => {
       request.reviewedAt = new Date();
       await request.save();
 
-      // 🎯 TRANSFER MATH: Deduct from Inactive Time and Add to Active Work Time in TimeTrack
       const approvedSeconds = approvedMins * 60;
-      const timeTrack = await TimeTrack.findOne({ employeeId: request.employeeId, date: request.date });
-      if (timeTrack) {
-        const actualDeduct = Math.min(timeTrack.idleTime || 0, approvedSeconds);
-        timeTrack.idleTime = Math.max(0, (timeTrack.idleTime || 0) - actualDeduct);
-        timeTrack.activeTime = (timeTrack.activeTime || 0) + approvedSeconds;
-        await timeTrack.save();
+      let timeTrack = await TimeTrack.findOne({ employeeId: request.employeeId, date: request.date });
+
+      if (isManual) {
+        // 🎯 DIRECT ADDITION: Add directly to Active Work Time in TimeTrack
+        if (timeTrack) {
+          timeTrack.activeTime = (timeTrack.activeTime || 0) + approvedSeconds;
+          timeTrack.totalTime = (timeTrack.totalTime || 0) + approvedSeconds;
+          timeTrack.totalActiveTime = (timeTrack.totalActiveTime || 0) + approvedSeconds;
+          if (!timeTrack.sessions) timeTrack.sessions = [];
+          timeTrack.sessions.push({
+            start: new Date(`${request.date}T09:00:00.000Z`),
+            end: new Date(new Date(`${request.date}T09:00:00.000Z`).getTime() + approvedSeconds * 1000)
+          });
+          await timeTrack.save();
+        } else {
+          // Employee never started the tracker at all on that date
+          const startTime = new Date(`${request.date}T09:00:00.000+05:30`);
+          const endTime = new Date(startTime.getTime() + approvedSeconds * 1000);
+          timeTrack = await TimeTrack.create({
+            employeeId: request.employeeId,
+            employeeRole: request.employeeRole || 'employee',
+            managerId: request.managerId,
+            date: request.date,
+            startTime: startTime,
+            endTime: endTime,
+            activeTime: approvedSeconds,
+            idleTime: 0,
+            totalTime: approvedSeconds,
+            totalActiveTime: approvedSeconds,
+            status: 'completed',
+            isRunning: false,
+            sessions: [{
+              start: startTime,
+              end: endTime
+            }]
+          });
+        }
+      } else {
+        // 🎯 TRANSFER MATH: Deduct from Inactive Time and Add to Active Work Time in TimeTrack
+        if (timeTrack) {
+          const actualDeduct = Math.min(timeTrack.idleTime || 0, approvedSeconds);
+          timeTrack.idleTime = Math.max(0, (timeTrack.idleTime || 0) - actualDeduct);
+          timeTrack.activeTime = (timeTrack.activeTime || 0) + approvedSeconds;
+          await timeTrack.save();
+        }
       }
 
       // 🎯 UPDATE ATTENDANCE RECORD (reflects added active work hours)
-      const attendance = await Attendance.findOne({ user: request.employeeId, date: request.date });
+      let attendance = await Attendance.findOne({ user: request.employeeId, date: request.date });
+      const additionalHours = approvedMins / 60;
       if (attendance) {
         const currentWork = parseFloat(attendance.workHours || attendance.totalHours) || 0;
-        const additionalHours = approvedMins / 60;
         const updatedHours = (currentWork + additionalHours).toFixed(2);
         attendance.workHours = updatedHours;
         attendance.totalHours = updatedHours;
         attendance.effectiveHours = updatedHours;
         if (attendance.status === 'Absent' || attendance.status === 'absent') {
-          attendance.status = 'Present';
+          attendance.status = parseFloat(updatedHours) >= 7.5 ? 'Present' : (parseFloat(updatedHours) >= 4 ? 'Half Day' : 'Present');
         }
         await attendance.save();
+      } else {
+        // If employee never clocked in on that date, create attendance record
+        const hours = additionalHours.toFixed(2);
+        await Attendance.create({
+          user: request.employeeId,
+          date: request.date,
+          checkInTime: new Date(`${request.date}T09:00:00.000+05:30`),
+          checkOutTime: new Date(new Date(`${request.date}T09:00:00.000+05:30`).getTime() + approvedSeconds * 1000),
+          clockIn: '09:00',
+          clockOut: '17:00',
+          totalHours: hours,
+          workHours: hours,
+          effectiveHours: hours,
+          status: parseFloat(hours) >= 7.5 ? 'Present' : (parseFloat(hours) >= 4 ? 'Half Day' : 'Present')
+        });
       }
 
       // 🔔 Real-time notification to employee
       const io = req.app?.get ? req.app.get('io') : null;
+      const reqTypeLabel = isManual ? 'missed timer' : 'meeting';
       const empNotif = await Notification.create({
         userId: request.employeeId,
         senderId: req.user.id,
         senderName: req.user.name || 'Manager',
         senderRole: req.user.role || 'manager',
-        message: `Your meeting request for ${request.date} has been approved for ${approvedMins} mins.`,
+        message: `Your ${reqTypeLabel} request for ${request.date} has been approved for ${approvedMins} mins.`,
         type: 'meeting_request_approved'
       });
       if (io) {
@@ -1590,7 +1712,7 @@ exports.updateOfflineRequestStatus = async (req, res) => {
       }
 
       return res.json({
-        message: `Meeting request approved for ${approvedMins} minutes.`,
+        message: `${isManual ? 'Missed timer' : 'Meeting'} request approved for ${approvedMins} minutes.`,
         request
       });
     }

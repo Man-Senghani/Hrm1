@@ -23,6 +23,10 @@ const offlineRequestSchema = new mongoose.Schema({
     ref: 'User',
     default: null
   },
+  managerName: {
+    type: String,
+    default: ''
+  },
   date: {
     type: String, // YYYY-MM-DD
     required: true
@@ -31,6 +35,11 @@ const offlineRequestSchema = new mongoose.Schema({
     type: String,
     required: true,
     trim: true
+  },
+  requestType: {
+    type: String,
+    enum: ['idle_conversion', 'manual_time'],
+    default: 'idle_conversion'
   },
   recordedInactiveMinutes: {
     type: Number,

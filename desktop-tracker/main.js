@@ -25,6 +25,13 @@ app.disableHardwareAcceleration();
 app.commandLine.appendSwitch('disable-gpu');
 app.commandLine.appendSwitch('disable-gpu-rasterization');
 
+// 🚀 ENTERPRISE ANTI-THROTTLING & BACKGROUND RESILIENCY SWITCHES:
+// Prevents Chromium from throttling timers, freezing rendering or sleeping when minimized/occluded
+app.commandLine.appendSwitch('disable-renderer-backgrounding');
+app.commandLine.appendSwitch('disable-background-timer-throttling');
+app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
+app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion');
+
 const http = require('http');
 const store = new Store();
 let mainWindow;
@@ -220,6 +227,39 @@ function createWindow() {
       nodeIntegration: false,
       contextIsolation: true,
       backgroundThrottling: false
+    }
+  });
+
+  // 🛡️ ANTI-WHITE SCREEN WATCHDOG: Auto-recover if renderer crashes in background
+  mainWindow.webContents.on('render-process-gone', (event, details) => {
+    console.error(`[CRITICAL] Renderer process crashed (${details.reason}, exitCode: ${details.exitCode}). Auto-recovering...`);
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      setTimeout(() => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          console.log('[WATCHDOG] Reloading tracker window to clear white screen...');
+          mainWindow.reload();
+        }
+      }, 500);
+    }
+  });
+
+  mainWindow.webContents.on('unresponsive', () => {
+    console.warn('[WARNING] Renderer became unresponsive. Reloading to clear white screen...');
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.reload();
+    }
+  });
+
+  // 🛡️ Force immediate surface redraw on restore to prevent DWM dropped buffer white screen
+  mainWindow.on('restore', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.invalidate();
+    }
+  });
+
+  mainWindow.on('show', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.invalidate();
     }
   });
 

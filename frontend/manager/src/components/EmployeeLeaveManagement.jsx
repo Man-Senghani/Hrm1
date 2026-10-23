@@ -130,7 +130,7 @@ const LeaveManagement = ({ isChild = false }) => {
     isHalfDay: false,
     halfDayType: 'first_half'
   });
-  const [todayAttendanceInfo, setTodayAttendanceInfo] = useState({ hasCheckedIn: false, isPast6PM: false });
+  const [todayAttendanceInfo, setTodayAttendanceInfo] = useState({ hasCheckedIn: false, isPast6PM: false, isPast1PM: false });
   const [formErrors, setFormErrors] = useState({});
 
   // ─── DYNAMIC LEAVE DATE BOUNDS ─────────────────────────
@@ -151,6 +151,10 @@ const LeaveManagement = ({ isChild = false }) => {
   const isPast6PM = useMemo(() => {
     return new Date().getHours() >= 18 || !!todayAttendanceInfo.isPast6PM;
   }, [todayAttendanceInfo.isPast6PM]);
+
+  const isPast1PM = useMemo(() => {
+    return new Date().getHours() >= 13 || !!todayAttendanceInfo.isPast1PM;
+  }, [todayAttendanceInfo.isPast1PM]);
 
   const tomorrowStr = useMemo(() => {
     const tom = new Date();
@@ -184,11 +188,11 @@ const LeaveManagement = ({ isChild = false }) => {
   }, []);
 
   // After 6:00 PM, today cannot be applied:
-  // For General/Casual: earliest selectable date is tomorrow
-  // For Sick: latest selectable date is yesterday
+  // For General/Casual: earliest selectable date is tomorrow if after 1:00 PM or after 6:00 PM
+  // For Sick: latest selectable date is yesterday if after 6:00 PM, otherwise today is permitted
   const minLeaveStartDate = isSickLeave 
     ? pastOneMonthDateStr 
-    : (isPast6PM ? tomorrowStr : todayStr);
+    : ((isPast6PM || isPast1PM) ? tomorrowStr : todayStr);
 
   const maxLeaveStartDate = isSickLeave 
     ? (isPast6PM ? yesterdayStr : todayStr) 
@@ -204,33 +208,86 @@ const LeaveManagement = ({ isChild = false }) => {
     if (isPast6PM && dateString === todayStr) {
       return true;
     }
+    if (!isSickLeave && isPast1PM && dateString === todayStr) {
+      return true;
+    }
     const activeStatuses = ['pending', 'manager_approved', 'hr_approved', 'approved', 'cancellation_pending'];
     const activeLeaves = (leaves || []).filter(l => activeStatuses.includes((l.status || '').toLowerCase()));
-    const hasExistingLeave = activeLeaves.some(l => {
+    const leavesOnDate = activeLeaves.filter(l => {
       const s = typeof l.startDate === 'string' ? l.startDate.split('T')[0] : (l.startDate ? new Date(l.startDate).toISOString().split('T')[0] : '');
       const e = typeof l.endDate === 'string' ? l.endDate.split('T')[0] : (l.endDate ? new Date(l.endDate).toISOString().split('T')[0] : s);
       return s && dateString >= s && dateString <= e;
     });
-    return hasExistingLeave;
+
+    if (leavesOnDate.length === 0) return false;
+
+    // Full day leave on this date blocks the date completely
+    const hasFullDay = leavesOnDate.some(l => !l.isHalfDay && Number(l.totalDays || 1) >= 1);
+    if (hasFullDay) return true;
+
+    // If both halves are taken, blocks the date completely
+    const hasFirst = leavesOnDate.some(l => l.isHalfDay && l.halfDayType === 'first_half');
+    const hasSecond = leavesOnDate.some(l => l.isHalfDay && l.halfDayType === 'second_half');
+    if (hasFirst && hasSecond) return true;
+
+    // If only one half is taken, date remains available for the other half
+    return false;
   };
 
   const getDisabledTitle = (dateString) => {
     if (isPast6PM && dateString === todayStr) {
       return "Today's leave cannot be applied after 6:00 PM";
     }
+    if (!isSickLeave && isPast1PM && dateString === todayStr) {
+      return "Casual leave cannot be applied for today after 1:00 PM. Only Sick Leave is allowed for today.";
+    }
     const activeStatuses = ['pending', 'manager_approved', 'hr_approved', 'approved', 'cancellation_pending'];
     const activeLeaves = (leaves || []).filter(l => activeStatuses.includes((l.status || '').toLowerCase()));
-    const existingLeave = activeLeaves.find(l => {
+    const leavesOnDate = activeLeaves.filter(l => {
       const s = typeof l.startDate === 'string' ? l.startDate.split('T')[0] : (l.startDate ? new Date(l.startDate).toISOString().split('T')[0] : '');
       const e = typeof l.endDate === 'string' ? l.endDate.split('T')[0] : (l.endDate ? new Date(l.endDate).toISOString().split('T')[0] : s);
       return s && dateString >= s && dateString <= e;
     });
-    if (existingLeave) {
-      const type = existingLeave.leaveType ? existingLeave.leaveType.toUpperCase() : 'Leave';
-      return `Already applied for ${type} on this date`;
+
+    if (leavesOnDate.length > 0) {
+      const hasFullDay = leavesOnDate.some(l => !l.isHalfDay && Number(l.totalDays || 1) >= 1);
+      if (hasFullDay) {
+        const type = leavesOnDate[0].leaveType ? leavesOnDate[0].leaveType.toUpperCase() : 'Leave';
+        return `Already applied for ${type} on this date`;
+      }
+      const hasFirst = leavesOnDate.some(l => l.isHalfDay && l.halfDayType === 'first_half');
+      const hasSecond = leavesOnDate.some(l => l.isHalfDay && l.halfDayType === 'second_half');
+      if (hasFirst && hasSecond) {
+        return "Both First and Second Half already applied on this date";
+      }
+      if (hasFirst) {
+        return "First Half already applied on this date (Second Half available)";
+      }
+      if (hasSecond) {
+        return "Second Half already applied on this date (First Half available)";
+      }
     }
     return '';
   };
+
+  const leavesOnSelectedDate = useMemo(() => {
+    if (!formData.startDate) return [];
+    const activeStatuses = ['pending', 'manager_approved', 'hr_approved', 'approved', 'cancellation_pending'];
+    const activeLeaves = (leaves || []).filter(l => activeStatuses.includes((l.status || '').toLowerCase()));
+    return activeLeaves.filter(l => {
+      const s = typeof l.startDate === 'string' ? l.startDate.split('T')[0] : (l.startDate ? new Date(l.startDate).toISOString().split('T')[0] : '');
+      const e = typeof l.endDate === 'string' ? l.endDate.split('T')[0] : (l.endDate ? new Date(l.endDate).toISOString().split('T')[0] : s);
+      return s && formData.startDate >= s && formData.startDate <= e;
+    });
+  }, [leaves, formData.startDate]);
+
+  const hasFirstHalfOnSelectedDate = useMemo(() => {
+    return leavesOnSelectedDate.some(l => l.isHalfDay && (l.halfDayType || 'first_half') === 'first_half');
+  }, [leavesOnSelectedDate]);
+
+  const hasSecondHalfOnSelectedDate = useMemo(() => {
+    return leavesOnSelectedDate.some(l => l.isHalfDay && l.halfDayType === 'second_half');
+  }, [leavesOnSelectedDate]);
 
   const [filterType, setFilterType] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
@@ -309,7 +366,8 @@ const LeaveManagement = ({ isChild = false }) => {
       if (todayAttendanceResponse && todayAttendanceResponse.data) {
         setTodayAttendanceInfo({
           hasCheckedIn: !!todayAttendanceResponse.data.hasCheckedIn,
-          isPast6PM: !!todayAttendanceResponse.data.isPast6PM
+          isPast6PM: !!todayAttendanceResponse.data.isPast6PM,
+          isPast1PM: !!todayAttendanceResponse.data.isPast1PM
         });
       }
 
@@ -417,6 +475,14 @@ const LeaveManagement = ({ isChild = false }) => {
         if (isPast6PM && (formData.startDate === todayStr || formData.endDate === todayStr)) {
           errors.startDate = "Today's leave cannot be applied after 6:00 PM.";
           toast.error("Today's leave cannot be applied after 6:00 PM.");
+        } else if (isPast1PM && (formData.startDate === todayStr || formData.endDate === todayStr)) {
+          if (!isSickLeave) {
+            errors.startDate = "Casual leave cannot be applied for today after 1:00 PM. Only Sick Leave is allowed for today.";
+            toast.error("Casual leave cannot be applied for today after 1:00 PM.");
+          } else if (!formData.isHalfDay) {
+            errors.startDate = "Sick leave applied for today after 1:00 PM can only be for Half Day.";
+            toast.error("Sick leave applied for today after 1:00 PM can only be for Half Day.");
+          }
         } else if (todayAttendanceInfo.hasCheckedIn && (formData.startDate === todayStr || formData.endDate === todayStr) && !formData.isHalfDay) {
           errors.startDate = 'You have already checked in today. Only Half Day leave request is allowed.';
           toast.error('You have already logged in today. Please request a Half Day leave instead.');
@@ -425,12 +491,30 @@ const LeaveManagement = ({ isChild = false }) => {
         const activeStatuses = ['pending', 'manager_approved', 'hr_approved', 'approved', 'cancellation_pending'];
         const activeLeaves = (leaves || []).filter(l => activeStatuses.includes((l.status || '').toLowerCase()));
 
+        const isConflict = (l) => {
+          if (formData.isHalfDay && l.isHalfDay && formData.startDate === (formData.endDate || formData.startDate)) {
+            const lStartStr = typeof l.startDate === 'string' ? l.startDate.split('T')[0] : (l.startDate ? new Date(l.startDate).toISOString().split('T')[0] : '');
+            const lEndStr = typeof l.endDate === 'string' ? l.endDate.split('T')[0] : (l.endDate ? new Date(l.endDate).toISOString().split('T')[0] : lStartStr);
+            if (lStartStr === lEndStr && lStartStr === formData.startDate) {
+              const reqHalf = formData.halfDayType || 'first_half';
+              const existHalf = l.halfDayType || 'first_half';
+              if (reqHalf !== existHalf) {
+                return false; // complementary halves on the same date are allowed!
+              }
+            }
+          }
+          return true;
+        };
+
         const isStartDateUsed = activeLeaves.some(l => {
           const lStart = new Date(l.startDate);
           lStart.setHours(0, 0, 0, 0);
           const lEnd = new Date(l.endDate || l.startDate);
           lEnd.setHours(23, 59, 59, 999);
-          return start >= lStart && start <= lEnd;
+          if (start >= lStart && start <= lEnd) {
+            return isConflict(l);
+          }
+          return false;
         });
 
         const isEndDateUsed = activeLeaves.some(l => {
@@ -438,7 +522,10 @@ const LeaveManagement = ({ isChild = false }) => {
           lStart.setHours(0, 0, 0, 0);
           const lEnd = new Date(l.endDate || l.startDate);
           lEnd.setHours(23, 59, 59, 999);
-          return end >= lStart && end <= lEnd;
+          if (end >= lStart && end <= lEnd) {
+            return isConflict(l);
+          }
+          return false;
         });
 
         const hasOverlap = activeLeaves.some(l => {
@@ -446,7 +533,10 @@ const LeaveManagement = ({ isChild = false }) => {
           lStart.setHours(0, 0, 0, 0);
           const lEnd = new Date(l.endDate || l.startDate);
           lEnd.setHours(23, 59, 59, 999);
-          return lStart <= end && lEnd >= start;
+          if (lStart <= end && lEnd >= start) {
+            return isConflict(l);
+          }
+          return false;
         });
 
         if (isStartDateUsed && isEndDateUsed) {
@@ -1323,67 +1413,6 @@ const LeaveManagement = ({ isChild = false }) => {
             </div>
           </div>
 
-          {/* Upcoming Holidays */}
-          <div className="bg-white dark:bg-[#111c18] rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 p-4 transition-colors duration-300 hover:!border-pink-500 dark:hover:!border-pink-400 flex flex-col flex-1 justify-between">
-            <div className="flex justify-between items-center mb-3.5">
-              <h2 className="text-base font-bold text-gray-900 dark:text-white">Upcoming Holidays</h2>
-              <button onClick={() => setIsHolidaysDrawerOpen(true)} className="text-xs font-bold text-blue-600 hover:text-blue-700 transition-colors">View Calendar</button>
-            </div>
-            <div className="space-y-2.5 flex-1 flex flex-col justify-between">
-              {(() => {
-                const DEFAULT_HOLIDAYS = [
-                  { name: 'Gandhi Jayanti', date: '2026-10-02', isActive: true },
-                  { name: 'Navratri', date: '2026-10-11', isActive: true },
-                  { name: 'Dussehra', date: '2026-10-20', isActive: true },
-                  { name: 'Diwali', date: '2026-11-08', isActive: true },
-                  { name: 'Guru Nanak Jayanti', date: '2026-11-24', isActive: true }
-                ];
-                const today = new Date();
-                today.setHours(0, 0, 0, 0);
-                const listToUse = holidays && holidays.length > 0 ? holidays : DEFAULT_HOLIDAYS;
-                const filtered = listToUse.filter(h => {
-                  if (!h || !h.date || h.isActive === false) return false;
-                  const hDate = new Date(h.date);
-                  return !isNaN(hDate.getTime()) && hDate >= today;
-                });
-                const displayList = filtered.length > 0 ? filtered : DEFAULT_HOLIDAYS;
-
-                return displayList.slice(0, 5).map((h, idx) => {
-                  const hDate = new Date(h.date);
-                  const dateStr = hDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-                  const dayStr = hDate.toLocaleDateString('en-GB', { weekday: 'long' });
-
-                  const accentThemes = [
-                    { pillar: 'bg-purple-500 dark:bg-purple-400', iconBg: 'bg-purple-100 dark:bg-purple-950/70 text-purple-600 dark:text-purple-400', bg: 'bg-slate-50/90 dark:bg-[#162420]/80 hover:bg-purple-50/60 dark:hover:bg-[#1e322c]' },
-                    { pillar: 'bg-indigo-500 dark:bg-indigo-400', iconBg: 'bg-indigo-100 dark:bg-indigo-950/70 text-indigo-600 dark:text-indigo-400', bg: 'bg-slate-50/90 dark:bg-[#162420]/80 hover:bg-indigo-50/60 dark:hover:bg-[#1e322c]' },
-                    { pillar: 'bg-pink-500 dark:bg-pink-400', iconBg: 'bg-pink-100 dark:bg-pink-950/70 text-pink-600 dark:text-pink-400', bg: 'bg-slate-50/90 dark:bg-[#162420]/80 hover:bg-pink-50/60 dark:hover:bg-[#1e322c]' },
-                    { pillar: 'bg-emerald-500 dark:bg-emerald-400', iconBg: 'bg-emerald-100 dark:bg-emerald-950/70 text-emerald-600 dark:text-emerald-400', bg: 'bg-slate-50/90 dark:bg-[#162420]/80 hover:bg-emerald-50/60 dark:hover:bg-[#1e322c]' },
-                    { pillar: 'bg-amber-500 dark:bg-amber-400', iconBg: 'bg-amber-100 dark:bg-amber-950/70 text-amber-600 dark:text-amber-400', bg: 'bg-slate-50/90 dark:bg-[#162420]/80 hover:bg-amber-50/60 dark:hover:bg-[#1e322c]' }
-                  ];
-                  const theme = accentThemes[idx % accentThemes.length];
-
-                  return (
-                    <div key={idx} className={`flex items-center justify-between py-2 px-3 rounded-xl transition-all duration-200 cursor-pointer hover:shadow-md hover:translate-x-0.5 ${theme.bg}`}>
-                      <div className="flex items-center gap-2.5">
-                        <div className={`w-1.5 h-6 rounded-full shrink-0 ${theme.pillar}`} />
-                        <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${theme.iconBg}`}>
-                          <Calendar size={14} />
-                        </div>
-                        <div>
-                          <h4 className="text-xs font-black text-gray-900 dark:text-white leading-tight">{dateStr}</h4>
-                          <p className="text-[9px] text-gray-500 dark:text-gray-400 leading-none mt-0.5">{dayStr}</p>
-                        </div>
-                      </div>
-                      <div className="font-bold text-xs text-gray-900 dark:text-white text-right">
-                        {h.name}
-                      </div>
-                    </div>
-                  );
-                });
-              })()}
-            </div>
-          </div>
-
         </div>
 
       </div>
@@ -1486,21 +1515,47 @@ const LeaveManagement = ({ isChild = false }) => {
                             setFormData(prev => {
                               let newStart = prev.startDate;
                               let newEnd = prev.endDate;
+                              let nextHalfDay = prev.isHalfDay;
+                              let nextHalfDayType = prev.halfDayType || 'first_half';
                               if (isNewSick) {
                                 if (newStart && (newStart > todayStr || newStart < pastOneMonthDateStr)) newStart = '';
                                 if (newEnd && (newEnd > todayStr || newEnd < pastOneMonthDateStr)) newEnd = '';
+                                if (newStart === todayStr && isPast1PM) {
+                                  nextHalfDay = true;
+                                  newEnd = todayStr;
+                                  nextHalfDayType = 'second_half';
+                                }
                               } else {
-                                if (newStart && (newStart < todayStr || newStart > maxFutureDateStr)) newStart = '';
-                                if (newEnd && (newEnd < todayStr || newEnd > maxFutureDateStr)) newEnd = '';
+                                const minCasual = (isPast1PM || isPast6PM) ? tomorrowStr : todayStr;
+                                if (newStart && (newStart < minCasual || newStart > maxFutureDateStr)) newStart = '';
+                                if (newEnd && (newEnd < minCasual || newEnd > maxFutureDateStr)) newEnd = '';
+                                if (prev.startDate === todayStr && isPast1PM) {
+                                  newStart = '';
+                                  newEnd = '';
+                                  setFormErrors(errs => ({ ...errs, leaveType: 'Casual leave cannot be applied for today after 1:00 PM. Only Sick Leave is allowed for today.' }));
+                                }
                               }
-                              return { ...prev, leaveType: val, startDate: newStart, endDate: newEnd };
+                              return { 
+                                ...prev, 
+                                leaveType: val, 
+                                startDate: newStart, 
+                                endDate: newEnd,
+                                isHalfDay: nextHalfDay,
+                                halfDayType: nextHalfDayType
+                              };
                             });
                           }
                         }}
                         placeholder="Choose Leave Type"
                         options={[
                           { value: 'sick', label: 'Sick Leave (SL)' },
-                          { value: 'casual', label: 'Casual Leave (CL)' }
+                          { 
+                            value: 'casual', 
+                            label: (formData.startDate === todayStr && isPast1PM) 
+                              ? 'Casual Leave (CL) - (Unavailable after 1:00 PM)' 
+                              : 'Casual Leave (CL)',
+                            disabled: (formData.startDate === todayStr && isPast1PM)
+                          }
                         ]}
                       />
                       {formErrors.leaveType && (
@@ -1524,12 +1579,35 @@ const LeaveManagement = ({ isChild = false }) => {
                             const newStart = e.target.value;
                             setFormData(prev => {
                               const isToday = newStart === todayStr;
-                              const mustBeHalfDay = isToday && todayAttendanceInfo.hasCheckedIn;
+                              const forceHalfDay = isToday && (todayAttendanceInfo.hasCheckedIn || (isPast1PM && isSickLeave));
+                              const nextHalfDay = forceHalfDay ? true : prev.isHalfDay;
+
+                              // Detect existing half-days on this date
+                              const activeStatuses = ['pending', 'manager_approved', 'hr_approved', 'approved', 'cancellation_pending'];
+                              const dateLeaves = (leaves || []).filter(l => {
+                                if (!activeStatuses.includes((l.status || '').toLowerCase())) return false;
+                                const s = typeof l.startDate === 'string' ? l.startDate.split('T')[0] : (l.startDate ? new Date(l.startDate).toISOString().split('T')[0] : '');
+                                const e = typeof l.endDate === 'string' ? l.endDate.split('T')[0] : (l.endDate ? new Date(l.endDate).toISOString().split('T')[0] : s);
+                                return s && newStart >= s && newStart <= e;
+                              });
+                              const hasFirst = dateLeaves.some(l => l.isHalfDay && (l.halfDayType || 'first_half') === 'first_half');
+                              const hasSecond = dateLeaves.some(l => l.isHalfDay && l.halfDayType === 'second_half');
+
+                              let nextHalfDayType = prev.halfDayType || 'first_half';
+                              if (isToday && isPast1PM) {
+                                nextHalfDayType = 'second_half';
+                              } else if (hasFirst && !hasSecond) {
+                                nextHalfDayType = 'second_half';
+                              } else if (hasSecond && !hasFirst) {
+                                nextHalfDayType = 'first_half';
+                              }
+
                               const updated = { 
                                 ...prev, 
                                 startDate: newStart,
-                                ...(mustBeHalfDay ? { isHalfDay: true, endDate: newStart } : {}),
-                                ...(prev.isHalfDay ? { endDate: newStart } : {})
+                                endDate: (nextHalfDay || forceHalfDay) ? newStart : prev.endDate,
+                                isHalfDay: nextHalfDay,
+                                halfDayType: nextHalfDayType
                               };
                               if (newStart && updated.endDate && new Date(newStart) > new Date(updated.endDate)) {
                                 setFormErrors(errs => ({
@@ -1552,7 +1630,9 @@ const LeaveManagement = ({ isChild = false }) => {
                         <p className="text-[9.5px] font-medium text-slate-400 dark:text-slate-500">
                           {isSickLeave 
                             ? (isPast6PM ? 'Past 1 month up to yesterday (Closed after 6 PM today)' : 'Past 1 month up to today') 
-                            : (isPast6PM ? 'Tomorrow up to 6 months (Today closed after 6 PM)' : 'Up to 6 months in advance')}
+                            : (isPast1PM 
+                                ? 'Tomorrow up to 6 months (Today closed for Casual leave after 1 PM)' 
+                                : (isPast6PM ? 'Tomorrow up to 6 months (Today closed after 6 PM)' : 'Up to 6 months in advance'))}
                         </p>
                       </div>
                       <div className="flex flex-col gap-2">
@@ -1602,71 +1682,95 @@ const LeaveManagement = ({ isChild = false }) => {
                         <div>
                           <label className="text-xs font-bold text-gray-800 dark:text-gray-200 block">Leave Duration</label>
                           <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">
-                            {formData.startDate === todayStr && todayAttendanceInfo.hasCheckedIn 
-                              ? 'Logged in today: Only Half Day leave is permitted' 
-                              : 'Select Full Day or Half Day (0.5 day)'}
+                            {formData.startDate === todayStr && isPast1PM && isSickLeave
+                              ? "After 1:00 PM: Only Half Day is permitted for today's Sick Leave"
+                              : (formData.startDate === todayStr && todayAttendanceInfo.hasCheckedIn 
+                                  ? 'Logged in today: Only Half Day leave is permitted' 
+                                  : 'Select Full Day or Half Day (0.5 day)')}
                           </p>
                         </div>
-                        <div className="grid grid-cols-2 gap-1.5 bg-gray-200 dark:bg-gray-800 p-1 rounded-lg">
-                          <button
-                            type="button"
-                            disabled={formData.startDate === todayStr && todayAttendanceInfo.hasCheckedIn}
-                            onClick={() => {
-                              setFormData(prev => ({ ...prev, isHalfDay: false }));
-                            }}
-                            className={`w-full py-2 text-xs font-bold rounded-md transition-all text-center cursor-pointer ${
-                              !formData.isHalfDay 
-                                ? 'bg-white dark:bg-blue-600 text-blue-600 dark:text-white shadow-xs' 
-                                : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white disabled:opacity-40 disabled:cursor-not-allowed'
-                            }`}
-                          >
-                            Full Day
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setFormData(prev => ({ 
-                                ...prev, 
-                                isHalfDay: true,
-                                endDate: prev.startDate || prev.endDate
-                              }));
-                            }}
-                            className={`w-full py-2 text-xs font-bold rounded-md transition-all text-center cursor-pointer ${
-                              formData.isHalfDay 
-                                ? 'bg-white dark:bg-blue-600 text-blue-600 dark:text-white shadow-xs' 
-                                : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
-                            }`}
-                          >
-                            Half Day
-                          </button>
-                        </div>
+
+                        {formData.startDate === todayStr && isPast1PM && isSickLeave ? (
+                          <div className="grid grid-cols-1 bg-gray-200 dark:bg-gray-800 p-1 rounded-lg">
+                            <button
+                              type="button"
+                              className="w-full py-2 text-xs font-bold rounded-md bg-white dark:bg-blue-600 text-blue-600 dark:text-white shadow-xs text-center cursor-default"
+                            >
+                              Half Day (0.5 Day)
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-2 gap-1.5 bg-gray-200 dark:bg-gray-800 p-1 rounded-lg">
+                            <button
+                              type="button"
+                              disabled={formData.startDate === todayStr && todayAttendanceInfo.hasCheckedIn}
+                              onClick={() => {
+                                if (formData.startDate === todayStr && todayAttendanceInfo.hasCheckedIn) return;
+                                setFormData(prev => ({ ...prev, isHalfDay: false }));
+                              }}
+                              className={`w-full py-2 text-xs font-bold rounded-md transition-all text-center cursor-pointer ${
+                                !formData.isHalfDay 
+                                  ? 'bg-white dark:bg-blue-600 text-blue-600 dark:text-white shadow-xs' 
+                                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white disabled:opacity-40 disabled:cursor-not-allowed'
+                              }`}
+                            >
+                              Full Day
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setFormData(prev => ({ 
+                                  ...prev, 
+                                  isHalfDay: true,
+                                  endDate: prev.startDate || prev.endDate
+                                }));
+                              }}
+                              className={`w-full py-2 text-xs font-bold rounded-md transition-all text-center cursor-pointer ${
+                                formData.isHalfDay 
+                                  ? 'bg-white dark:bg-blue-600 text-blue-600 dark:text-white shadow-xs' 
+                                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                              }`}
+                            >
+                              Half Day
+                            </button>
+                          </div>
+                        )}
                       </div>
 
                       {formData.isHalfDay && (
                         <div className="pt-2 border-t border-gray-200 dark:border-gray-800 flex items-center justify-between">
                           <span className="text-[11px] font-semibold text-gray-700 dark:text-gray-300">Select Session:</span>
-                          <div className="flex gap-2">
-                            <label className="inline-flex items-center gap-1.5 cursor-pointer text-xs font-medium text-gray-700 dark:text-gray-300">
+                          <div className="flex gap-3">
+                            <label className={`inline-flex items-center gap-1.5 text-xs font-medium text-gray-700 dark:text-gray-300 ${(hasFirstHalfOnSelectedDate || (formData.startDate === todayStr && isPast1PM)) ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}
+                              title={hasFirstHalfOnSelectedDate ? 'First Half already applied' : ((formData.startDate === todayStr && isPast1PM) ? 'Morning session passed' : '')}
+                            >
                               <input
                                 type="radio"
                                 name="mgrHalfDayType"
                                 value="first_half"
+                                disabled={hasFirstHalfOnSelectedDate || (formData.startDate === todayStr && isPast1PM)}
                                 checked={formData.halfDayType === 'first_half'}
                                 onChange={() => setFormData(prev => ({ ...prev, halfDayType: 'first_half' }))}
                                 className="text-blue-600 focus:ring-blue-500"
                               />
                               First Half
+                              {hasFirstHalfOnSelectedDate && <span className="text-[9px] text-rose-500 font-bold">(Applied)</span>}
+                              {!hasFirstHalfOnSelectedDate && formData.startDate === todayStr && isPast1PM && <span className="text-[9px] text-amber-500 font-bold">(Passed)</span>}
                             </label>
-                            <label className="inline-flex items-center gap-1.5 cursor-pointer text-xs font-medium text-gray-700 dark:text-gray-300">
+                            <label className={`inline-flex items-center gap-1.5 text-xs font-medium text-gray-700 dark:text-gray-300 ${hasSecondHalfOnSelectedDate ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}
+                              title={hasSecondHalfOnSelectedDate ? 'Second Half already applied' : ''}
+                            >
                               <input
                                 type="radio"
                                 name="mgrHalfDayType"
                                 value="second_half"
+                                disabled={hasSecondHalfOnSelectedDate}
                                 checked={formData.halfDayType === 'second_half'}
                                 onChange={() => setFormData(prev => ({ ...prev, halfDayType: 'second_half' }))}
                                 className="text-blue-600 focus:ring-blue-500"
                               />
                               Second Half
+                              {hasSecondHalfOnSelectedDate && <span className="text-[9px] text-rose-500 font-bold">(Applied)</span>}
                             </label>
                           </div>
                         </div>
