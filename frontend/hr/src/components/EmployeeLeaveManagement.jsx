@@ -753,16 +753,16 @@ const LeaveManagement = ({ isChild = false }) => {
   const calculatedCasualAccrual = Number(((accrualMonths * 1.5) + casualCarryForward).toFixed(1));
   const casualTotal = formatDays(calculatedCasualAccrual);
   const sickTotal = formatDays(QUOTAS.sick || slAllowance || 0);
-  const casualBalance = formatDays(Math.max(0, casualTotal - usedCasual));
-  const sickBalance = formatDays(Math.max(0, sickTotal - usedSick));
-  const annualBalance = formatDays(Math.max(0, (QUOTAS.earned || elAllowance || 0) - usedEarned));
-  const emergencyBalance = formatDays(Math.max(0, (QUOTAS.emergency || 0) - usedEmergency));
-  const compOffBalance = formatDays(Math.max(0, (QUOTAS.compOff || 0) - usedCompOff));
-  const optionalBalance = formatDays(Math.max(0, (QUOTAS.optionalHoliday || 0) - usedOptional));
+  const casualBalance = formatDays(casualTotal - usedCasual);
+  const sickBalance = formatDays(sickTotal - usedSick);
+  const annualBalance = formatDays((QUOTAS.earned || elAllowance || 0) - usedEarned);
+  const emergencyBalance = formatDays((QUOTAS.emergency || 0) - usedEmergency);
+  const compOffBalance = formatDays((QUOTAS.compOff || 0) - usedCompOff);
+  const optionalBalance = formatDays((QUOTAS.optionalHoliday || 0) - usedOptional);
 
   const totalAllocated = formatDays((QUOTAS.earned || 0) + (QUOTAS.sick || 0) + casualTotal + (QUOTAS.emergency || 0) + (QUOTAS.compOff || 0) + (QUOTAS.optionalHoliday || 0));
   const totalUsed = formatDays(usedEarned + usedSick + usedCasual + usedEmergency + usedCompOff + usedOptional);
-  const totalBalance = formatDays(Math.max(0, totalAllocated - totalUsed));
+  const totalBalance = formatDays(totalAllocated - totalUsed);
   const activeLeaveTypesCount = 5;
   const pendingCount = leaves.filter(l => l.status?.toLowerCase() === 'pending' || l.status?.toLowerCase() === 'cancellation_pending').length;
 
@@ -930,7 +930,17 @@ const LeaveManagement = ({ isChild = false }) => {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
         {[
           { title: 'Total Leave Allocated', value: totalAllocated, unit: 'Days', icon: Clock, color: 'text-purple-600 dark:text-purple-400', bg: 'bg-purple-50 dark:bg-purple-950/60 border border-purple-100 dark:border-purple-900/40', borderColor: '#a855f7', glowColor: 'rgba(168, 85, 247, 0.35)', link: 'View Allocation' },
-          { title: 'Total Leave Balance', value: totalBalance, unit: 'Days', icon: Calendar, color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-100 dark:border-emerald-900/40', borderColor: '#10b981', glowColor: 'rgba(16, 185, 129, 0.35)', link: 'View Details' },
+          { 
+            title: 'Total Leave Balance', 
+            value: totalBalance, 
+            unit: 'Days', 
+            icon: Calendar, 
+            color: Number(totalBalance) < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400', 
+            bg: Number(totalBalance) < 0 ? 'bg-rose-50 dark:bg-rose-950/60 border border-rose-100 dark:border-rose-900/40' : 'bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-100 dark:border-emerald-900/40', 
+            borderColor: Number(totalBalance) < 0 ? '#f43f5e' : '#10b981', 
+            glowColor: Number(totalBalance) < 0 ? 'rgba(244, 63, 94, 0.35)' : 'rgba(16, 185, 129, 0.35)', 
+            link: 'View Details' 
+          },
           { title: 'Leaves Taken (YTD)', value: totalUsed, unit: 'Days', icon: CalendarDays, color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-950/60 border border-blue-100 dark:border-blue-900/40', borderColor: '#3b82f6', glowColor: 'rgba(59, 130, 246, 0.35)', link: 'View Report' },
           { title: 'Pending Requests', value: pendingCount, unit: pendingCount === 1 ? 'Request' : 'Requests', icon: User, color: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50 dark:bg-amber-950/60 border border-amber-100 dark:border-amber-900/40', borderColor: '#f59e0b', glowColor: 'rgba(245, 158, 11, 0.35)', link: 'View Requests' }
         ].map((card, idx) => {
@@ -1018,7 +1028,7 @@ const LeaveManagement = ({ isChild = false }) => {
                         </div>
                         <span className="font-semibold text-gray-900 dark:text-gray-200">{row.name}</span>
                       </td>
-                      <td className="px-4 py-2 text-center font-bold text-gray-900 dark:text-gray-200">{row.balance}</td>
+                      <td className={`px-4 py-2 text-center font-bold ${Number(row.balance) < 0 ? 'text-rose-600 dark:text-rose-400 font-extrabold' : 'text-gray-900 dark:text-gray-200'}`}>{row.balance}</td>
                       <td className="px-4 py-2 text-center font-medium text-gray-500">{row.used}</td>
                       <td className="px-4 py-2 text-center font-bold text-gray-900 dark:text-gray-200">{row.total}</td>
                     </tr>

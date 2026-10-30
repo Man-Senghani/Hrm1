@@ -527,7 +527,7 @@ const EmployeeDashboard = () => {
   const approvedLeavesDays = Math.round(approvedLeavesArray.reduce((acc, curr) => acc + getLeaveDays(curr), 0));
   const totalAllocated = Math.round((leaveQuotas.earned || 20) + (leaveQuotas.sick || 10) + (leaveQuotas.casual || 12) + (leaveQuotas.emergency || 5) + (leaveQuotas.compOff || 3) + (leaveQuotas.optionalHoliday || 1));
   const totalUsedLeaves = approvedLeavesDays;
-  const totalLeaveBalance = Math.round(Math.max(0, totalAllocated - totalUsedLeaves));
+  const totalLeaveBalance = Math.round(totalAllocated - totalUsedLeaves);
   const pendingLeaves = leaves.filter(l => l.status?.toLowerCase() === 'pending' || l.status?.toLowerCase() === 'cancellation_pending').length;
   const leavesTakenThisMonth = leaves.filter(l => l.status === 'approved' && new Date(l.startDate).getMonth() === new Date().getMonth()).length;
 

@@ -517,8 +517,9 @@ const checkUserLeaveBalance = async (userId, leaveTypeInput, daysRequested, excl
     effectiveQuota = Math.max(directBalanceVal, policyQuota);
   }
 
-  const remainingBalance = Math.max(0, effectiveQuota - usedDays);
-  const isSufficient = remainingBalance >= daysRequested;
+  const remainingBalance = Number((effectiveQuota - usedDays).toFixed(1));
+  // Negative balance / advance leave is permitted so employees can request more days than available balance
+  const isSufficient = true;
 
   return {
     catKey,
