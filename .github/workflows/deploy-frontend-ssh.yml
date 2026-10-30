@@ -5,6 +5,8 @@ on:
     branches:
       - develop
       - main
+      - Master
+      - master
     paths:
       - 'frontend/**'
       - '.github/workflows/deploy-frontend-ssh.yml'
@@ -27,7 +29,7 @@ jobs:
       - name: 🌐 Determine Target Path and API URL
         id: env_config
         run: |
-          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+          if [ "${{ github.ref }}" = "refs/heads/main" ] || [ "${{ github.ref }}" = "refs/heads/Master" ] || [ "${{ github.ref }}" = "refs/heads/master" ]; then
             echo "Target: PRODUCTION (Live Root)"
             echo "remote_path=${{ secrets.HOSTINGER_PROD_PATH || 'domains/aupanishad.tech/public_html' }}" >> $GITHUB_OUTPUT
             echo "api_url=${{ secrets.PROD_API_URL || 'https://hrm1-1-zli1.onrender.com' }}" >> $GITHUB_OUTPUT
