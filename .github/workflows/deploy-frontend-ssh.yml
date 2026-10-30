@@ -9,7 +9,7 @@ on:
       - master
     paths:
       - 'frontend/**'
-      - '.github/workflows/deploy-frontend-ssh.yml'
+      - '.github/workflows/**'
   workflow_dispatch:
 
 jobs:
