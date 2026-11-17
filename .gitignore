@@ -15,12 +15,14 @@ dist-ssr/
 
 # Env
 .env
+.env.*
+!.env.example
+secrets.env
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
 .env.staging.local
-secrets.env
 
 # Logs
 npm-debug.log*
@@ -37,8 +39,6 @@ frontend/hr/node_modules/
 frontend/manager/node_modules/
 frontend/employee/node_modules/
 
-
-
 # Uploads
 backend/uploads/
 FluidHR-Tracker.zip
@@ -52,6 +52,3 @@ deploy_key*
 
 # Scratch
 scratch/
-
-
-

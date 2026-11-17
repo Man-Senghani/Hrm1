@@ -12,25 +12,109 @@ jobs:
     steps:
       - name: 🚀 Connect to VPS and Update Docker Containers
         uses: appleboy/ssh-action@v1.0.3
+        env:
+          BREVO_USER: ${{ secrets.BREVO_SMTP_USER }}
+          BREVO_PASS: ${{ secrets.BREVO_SMTP_PASS }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           password: ${{ secrets.VPS_PASSWORD }}
           port: 22
+          envs: BREVO_USER,BREVO_PASS
           script: |
             cd /var/www/hrm
+
+            # ── 1. PRE-DEPLOY BACKUP ──
+            mkdir -p /var/backups/hrm-nginx
+            cp /var/www/hrm/nginx/default.conf /var/backups/hrm-nginx/default.conf.$(date +%F_%H%M%S)
+
+            # ── 2. PRE-FLIGHT HRMS & SECRETS SAFETY CHECKS ──
+            if [ ! -f /opt/hrms-staging/nginx/hrms.conf ]; then
+              echo "❌ FATAL: /opt/hrms-staging/nginx/hrms.conf is missing or not a regular file!"
+              echo "Aborting deploy to prevent Docker from creating an empty directory."
+              exit 1
+            fi
+
+            if ! grep -q "BEGIN HRMS-STAGING" /opt/hrms-staging/nginx/hrms.conf || ! grep -q "END HRMS-STAGING" /opt/hrms-staging/nginx/hrms.conf; then
+              echo "❌ FATAL: /opt/hrms-staging/nginx/hrms.conf is missing HRMS-STAGING markers!"
+              exit 1
+            fi
+
+            if grep -E -q "server_name.*\b(hrm\.aupanishad\.tech|hrm-staging\.aupanishad\.tech)\b" /opt/hrms-staging/nginx/hrms.conf; then
+              echo "❌ FATAL: /opt/hrms-staging/nginx/hrms.conf contains FluidHR server_name definitions!"
+              echo "Conflicting domain detected. Aborting deploy."
+              exit 1
+            fi
+
+            if [ ! -f /var/www/hrm-secrets/.env.production ] || [ ! -f /var/www/hrm-secrets/.env.staging ]; then
+              echo "❌ FATAL: Server secrets missing in /var/www/hrm-secrets/! Aborting deploy."
+              exit 1
+            fi
+
+            if [ -z "$BREVO_PASS" ]; then
+              echo "❌ FATAL: BREVO_SMTP_PASS secret is missing or empty! Aborting deploy."
+              exit 1
+            fi
+
+            # ── 3. UPDATE FLUIDHR REPOSITORY ──
             git checkout Master
             git fetch origin Master
             git reset --hard origin/Master
-            if [ -f .env ]; then rm -f .env; fi
-            if [ ! -f secrets.env ]; then
-              BREVO_USER="b2fe75001@smtp-brevo.com"
-              BREVO_PASS=$(echo "eHNtdHBzaWItNWM2YWEzZjRjODUzMWQzNjEyYjA1OTY2OGI1NDU0ZmYyYzg1OGViMWQxMGVmMTliZWU5OTdmNzFkNWE0ZjVlOS1QOGJ3Tnl4NDAwNzl6ZmE4" | base64 -d 2>/dev/null || echo "eHNtdHBzaWItNWM2YWEzZjRjODUzMWQzNjEyYjA1OTY2OGI1NDU0ZmYyYzg1OGViMWQxMGVmMTliZWU5OTdmNzFkNWE0ZjVlOS1QOGJ3Tnl4NDAwNzl6ZmE4" | openssl base64 -d)
-              echo "EMAIL_USER=$BREVO_USER" > secrets.env
-              echo "EMAIL_PASS=$BREVO_PASS" >> secrets.env
+
+            # ── 4. SECRETS INJECTION (Updates /var/www/hrm-secrets/) ──
+            echo "EMAIL_USER=${BREVO_USER:-b2fe75001@smtp-brevo.com}" > /var/www/hrm-secrets/secrets.env
+            echo "EMAIL_PASS=$BREVO_PASS" >> /var/www/hrm-secrets/secrets.env
+            chmod 600 /var/www/hrm-secrets/secrets.env
+
+            for envfile in /var/www/hrm-secrets/.env.production /var/www/hrm-secrets/.env.staging; do
+              sed -i '/^EMAIL_USER=/d' "$envfile"
+              sed -i '/^EMAIL_PASS=/d' "$envfile"
+              cat /var/www/hrm-secrets/secrets.env >> "$envfile"
+            done
+
+            # ── 5. PRE-FLIGHT DRY-RUN NGINX TEST ──
+            if docker ps --format '{{.Names}}' | grep -q "^fluidhr-web$"; then
+              echo "🧪 Running pre-flight Nginx syntax test using network of running fluidhr-web..."
+              docker run --rm \
+                --network container:fluidhr-web \
+                -v /var/www/hrm/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro \
+                -v /opt/hrms-staging/nginx/hrms.conf:/etc/nginx/conf.d/hrms-staging.conf:ro \
+                -v /etc/letsencrypt:/etc/letsencrypt:ro \
+                nginx:alpine nginx -t || {
+                  echo "❌ PRE-FLIGHT NGINX TEST FAILED! Live containers NOT touched."
+                  exit 1
+                }
+              echo "✅ Pre-flight Nginx syntax test passed."
+            else
+              echo "⚠️ fluidhr-web is not currently running; skipping container:fluidhr-web pre-flight test."
             fi
-            cat secrets.env >> .env.production
-            cat secrets.env >> .env.staging
-            docker compose down
-            docker compose up --build --force-recreate -d
-            echo "✅ FluidHR auto-deploy completed successfully!"
+
+            # ── 6. ZERO-DOWNTIME BUILD & RECREATE ──
+            echo "🔨 Building updated container images while current containers remain UP..."
+            docker compose build
+            echo "🚀 Recreating containers with new images..."
+            docker compose up -d --force-recreate
+
+            # ── 7. POST-DEPLOY VERIFICATION ──
+            echo "🔍 Running post-deploy verification..."
+            sleep 4
+
+            docker exec fluidhr-web nginx -t || { echo "❌ Live Nginx syntax check failed!"; exit 1; }
+
+            for h in hrms-staging.aupanishad.tech admin-staging.aupanishad.tech; do
+              SUBJ=$(echo | openssl s_client -connect $h:443 -servername $h 2>/dev/null | openssl x509 -noout -subject)
+              echo "Domain $h -> $SUBJ"
+              if [[ "$SUBJ" != *"hrms-staging.aupanishad.tech"* ]]; then
+                echo "❌ CRITICAL ALERT: SSL Certificate mismatch on $h (Expected hrms-staging, got $SUBJ)!"
+                exit 1
+              fi
+            done
+
+            HEALTH=$(curl -s https://hrms-staging.aupanishad.tech/health)
+            echo "HRMS Health: $HEALTH"
+            if [[ "$HEALTH" != *'"status":"ok"'* ]]; then
+              echo "❌ CRITICAL ALERT: HRMS staging health check failed!"
+              exit 1
+            fi
+
+            echo "✅ FluidHR auto-deploy & HRMS staging verification completed successfully!"
