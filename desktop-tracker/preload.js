@@ -34,5 +34,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Covers ALL apps on the PC — not just the Electron window
   // Payload: { idleSeconds: number, isIdle: boolean }
   onSystemIdleStatus: (callback) =>
-    ipcRenderer.on('system-idle-status', (event, data) => callback(data))
+    ipcRenderer.on('system-idle-status', (event, data) => callback(data)),
+  setIdleThreshold: (seconds) => ipcRenderer.invoke('set-idle-threshold', seconds)
 });

@@ -124,6 +124,10 @@ const MeetingRequestsTable = ({
   const reviewSubmittingRef = useRef(false);
   const rejectSubmittingRef = useRef(false);
 
+  // Bulk Selection state
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [bulkActionLoading, setBulkActionLoading] = useState(false);
+
   const isManualMode = requestType === 'manual_time';
   const isInactiveZero = !isManualMode && availableInactiveMins !== null && availableInactiveMins <= 0;
   const isOverInactive = !isManualMode && availableInactiveMins !== null && availableInactiveMins > 0 && Number(newMinutes) > availableInactiveMins;
@@ -325,6 +329,122 @@ const MeetingRequestsTable = ({
     if (effectiveUserRole === 'manager') return !isOwn && tRole === 'employee';
     return false;
   }, [effectiveUserId, effectiveUserRole]);
+
+  // Reviewable requests on the current page
+  const reviewableRequests = useMemo(() => {
+    return requests.filter(item => checkCanReview(item));
+  }, [requests, checkCanReview]);
+
+  const isAllSelected = reviewableRequests.length > 0 && reviewableRequests.every(r => selectedIds.includes(r._id));
+  const isSomeSelected = selectedIds.length > 0 && !isAllSelected;
+
+  // Clear selections when filter or page changes
+  useEffect(() => {
+    setSelectedIds([]);
+  }, [page, statusFilter, searchQuery, selectedDate]);
+
+  const handleSelectAll = (e) => {
+    e.stopPropagation();
+    if (isAllSelected) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(reviewableRequests.map(r => r._id));
+    }
+  };
+
+  const handleToggleRow = (id, e) => {
+    e.stopPropagation();
+    setSelectedIds(prev => 
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
+
+  // Direct Bulk Approve selected requests
+  const handleBulkApprove = async () => {
+    if (selectedIds.length === 0 || bulkActionLoading) return;
+
+    const itemsToApprove = requests.filter(r => selectedIds.includes(r._id) && checkCanReview(r));
+    if (itemsToApprove.length === 0) {
+      toast.error('No pending reviewable requests selected.');
+      return;
+    }
+
+    setBulkActionLoading(true);
+    const toastId = toast.loading(`Approving ${itemsToApprove.length} selected request(s)...`);
+    const token = sessionStorage.getItem('token');
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const item of itemsToApprove) {
+      try {
+        const finalMins = item.requestedDurationMinutes || 1;
+        await axios.put(`/api/time/offline-request/${item._id}/status`, {
+          status: 'approved',
+          finalMinutes: finalMins,
+          reviewRemarks: 'Bulk approved'
+        }, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        successCount++;
+      } catch (err) {
+        console.error(`Failed to approve request ${item._id}:`, err);
+        failCount++;
+      }
+    }
+
+    setBulkActionLoading(false);
+    toast.dismiss(toastId);
+
+    if (successCount > 0 && failCount === 0) {
+      toast.success(`Successfully approved all ${successCount} selected request(s)!`);
+    } else if (successCount > 0) {
+      toast.success(`Approved ${successCount} request(s). ${failCount} failed.`);
+    } else {
+      toast.error('Failed to approve selected requests.');
+    }
+
+    setSelectedIds([]);
+    fetchRequests();
+    if (onStatusChanged) onStatusChanged();
+  };
+
+  // Bulk Reject selected requests
+  const handleBulkReject = async () => {
+    if (selectedIds.length === 0 || bulkActionLoading) return;
+
+    const itemsToReject = requests.filter(r => selectedIds.includes(r._id) && checkCanReview(r));
+    if (itemsToReject.length === 0) return;
+
+    if (!window.confirm(`Are you sure you want to reject ${itemsToReject.length} selected request(s)?`)) {
+      return;
+    }
+
+    setBulkActionLoading(true);
+    const toastId = toast.loading(`Rejecting ${itemsToReject.length} request(s)...`);
+    const token = sessionStorage.getItem('token');
+    let successCount = 0;
+
+    for (const item of itemsToReject) {
+      try {
+        await axios.put(`/api/time/offline-request/${item._id}/status`, {
+          status: 'rejected',
+          reviewRemarks: 'Bulk rejected'
+        }, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        successCount++;
+      } catch (err) {
+        console.error(`Failed to reject request ${item._id}:`, err);
+      }
+    }
+
+    setBulkActionLoading(false);
+    toast.dismiss(toastId);
+    toast.success(`Rejected ${successCount} request(s).`);
+    setSelectedIds([]);
+    fetchRequests();
+    if (onStatusChanged) onStatusChanged();
+  };
 
   // Open drawer on row click
   const handleRowClick = (item) => {
@@ -529,11 +649,71 @@ const MeetingRequestsTable = ({
         </div>
       )}
 
+      {/* ── Bulk Actions Toolbar (When items are selected) ── */}
+      {isReviewer && selectedIds.length > 0 && (
+        <div className="mb-3.5 p-3 px-4 bg-emerald-50 dark:bg-[#102922] border border-emerald-200 dark:border-[#1a4a3a] rounded-xl flex flex-wrap items-center justify-between gap-3 shadow-xs animate-in fade-in duration-150">
+          <div className="flex items-center gap-3">
+            <span className="w-6 h-6 rounded-lg bg-[#00a76b] text-white flex items-center justify-center font-bold text-xs">
+              {selectedIds.length}
+            </span>
+            <span className="text-xs font-bold text-slate-800 dark:text-white">
+              {selectedIds.length} {selectedIds.length === 1 ? 'request' : 'requests'} selected
+            </span>
+            <span className="text-[11px] text-slate-400 dark:text-slate-400 hidden sm:inline">
+              • Direct bulk review
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              disabled={bulkActionLoading}
+              onClick={handleBulkApprove}
+              className="flex items-center gap-1.5 px-4 py-2 bg-[#00a76b] hover:bg-[#00915c] active:scale-95 text-white font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer disabled:opacity-50 border-none"
+            >
+              {bulkActionLoading ? <RefreshCw size={13} className="animate-spin" /> : <Check size={14} className="stroke-[3]" />}
+              <span>Direct Approve Selected ({selectedIds.length})</span>
+            </button>
+
+            <button
+              type="button"
+              disabled={bulkActionLoading}
+              onClick={handleBulkReject}
+              className="flex items-center gap-1 px-3 py-2 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800/60 font-bold text-xs rounded-xl transition-all cursor-pointer disabled:opacity-50"
+            >
+              <X size={13} />
+              <span>Reject Selected</span>
+            </button>
+
+            <button
+              type="button"
+              disabled={bulkActionLoading}
+              onClick={() => setSelectedIds([])}
+              className="px-2.5 py-1.5 text-xs font-semibold text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-white transition-all cursor-pointer bg-transparent border-none"
+            >
+              Clear
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ── Table Container (Auto Height) ── */}
       <div className="h-auto overflow-x-auto rounded-xl border border-[#e2eae7] dark:border-[#133029]">
         <table className="w-full text-xs text-left">
           <thead>
             <tr className="bg-slate-100 dark:bg-[#0d2a22] border-b border-[#e2eae7] dark:border-[#133029]">
+              {isReviewer && (
+                <th className="w-10 px-3 py-2.5 text-center">
+                  <input
+                    type="checkbox"
+                    title={reviewableRequests.length > 0 ? "Select all pending requests" : "No pending reviewable requests"}
+                    disabled={reviewableRequests.length === 0}
+                    checked={isAllSelected}
+                    onChange={handleSelectAll}
+                    className="w-4 h-4 rounded text-[#00a76b] focus:ring-[#00a76b] border-slate-300 dark:border-[#1a4a3a] cursor-pointer accent-[#00a76b] disabled:opacity-30 disabled:cursor-not-allowed"
+                  />
+                </th>
+              )}
               {isReviewer && (
                 <th className="px-3.5 py-2.5 text-[10px] font-bold text-slate-500 dark:text-[#829e92] uppercase tracking-wider">
                   Employee
@@ -568,7 +748,7 @@ const MeetingRequestsTable = ({
           <tbody className="divide-y divide-[#e2eae7] dark:divide-[#133029]">
             {loading ? (
               <tr>
-                <td colSpan={isReviewer ? 9 : 8} className="py-10 text-center text-slate-400 dark:text-[#829e92]">
+                <td colSpan={isReviewer ? 10 : 8} className="py-10 text-center text-slate-400 dark:text-[#829e92]">
                   <div className="flex items-center justify-center gap-2">
                     <RefreshCw size={16} className="animate-spin text-emerald-500" />
                     <span className="font-semibold">Loading requests...</span>
@@ -577,7 +757,7 @@ const MeetingRequestsTable = ({
               </tr>
             ) : requests.length === 0 ? (
               <tr>
-                <td colSpan={isReviewer ? 9 : 8} className="py-10 text-center">
+                <td colSpan={isReviewer ? 10 : 8} className="py-10 text-center">
                   <div className="flex flex-col items-center justify-center gap-2">
                     <Timer size={28} className="text-slate-300 dark:text-slate-600" />
                     <p className="text-xs font-bold text-slate-500 dark:text-slate-400">No meeting requests found</p>
@@ -610,8 +790,29 @@ const MeetingRequestsTable = ({
                   <tr
                     key={item._id}
                     onClick={() => handleRowClick(item)}
-                    className="hover:bg-slate-50 dark:hover:bg-[#0d2a22]/50 cursor-pointer transition-colors"
+                    className={`hover:bg-slate-50 dark:hover:bg-[#0d2a22]/50 cursor-pointer transition-colors ${
+                      selectedIds.includes(item._id) ? 'bg-emerald-50/60 dark:bg-[#102922]/70' : ''
+                    }`}
                   >
+                    {/* Checkbox for Reviewers */}
+                    {isReviewer && (
+                      <td 
+                        className="w-10 px-3 py-2.5 text-center"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {canReview ? (
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.includes(item._id)}
+                            onChange={(e) => handleToggleRow(item._id, e)}
+                            className="w-4 h-4 rounded text-[#00a76b] focus:ring-[#00a76b] border-slate-300 dark:border-[#1a4a3a] cursor-pointer accent-[#00a76b]"
+                          />
+                        ) : (
+                          <span className="text-slate-300 dark:text-slate-600 font-mono text-xs">-</span>
+                        )}
+                      </td>
+                    )}
+
                     {/* Employee Info */}
                     {isReviewer && (
                       <td className="px-3.5 py-2.5 font-bold text-slate-800 dark:text-white">

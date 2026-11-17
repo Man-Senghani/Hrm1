@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import RolesPermissions from './RolesPermissions';
 import AuditLogs from './AuditLogs';
+import TrackerSettingsCard from '@shared/components/TrackerSettingsCard';
 
 const Settings = () => {
   const location = useLocation();
@@ -177,6 +178,11 @@ const Settings = () => {
                   </div>
                 </div>
               </div>
+            </div>
+
+            {/* Desktop Tracker Rules Card */}
+            <div className="col-span-12">
+              <TrackerSettingsCard />
             </div>
 
             {/* Safety Lock Actions */}

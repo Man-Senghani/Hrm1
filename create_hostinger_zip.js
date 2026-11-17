@@ -30,7 +30,11 @@ for (const mod of distModules) {
 }
 
 // Write .htaccess for SPA routing and HTTPS compatibility
-const htaccessContent = `<IfModule mod_rewrite.c>
+const htaccessContent = `<IfModule mod_headers.c>
+  Header set X-Robots-Tag "noindex, follow"
+</IfModule>
+
+<IfModule mod_rewrite.c>
   RewriteEngine On
   RewriteBase /
 

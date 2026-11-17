@@ -636,6 +636,7 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
           { name: 'Daily Report', path: `${prefix}/daily-report`, icon: FileText },
           { name: 'Notifications', path: `${prefix}/notifications`, icon: Bell },
           { name: 'Screenshots', path: `${prefix}/screenshots`, icon: Camera },
+          { name: 'Company Settings', path: `${prefix}/settings`, icon: Settings },
           { name: 'My Profile', path: `${prefix}/profile`, icon: User },
         ];
       case 'employee':
@@ -652,6 +653,7 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
           { name: 'Leave Management', path: `${prefix}/leave`, icon: ClipboardList },
           { name: 'Daily Report', path: `${prefix}/daily-report`, icon: FileText },
           { name: 'Screenshots', path: `${prefix}/screenshots`, icon: Camera },
+          { name: 'Company Settings', path: `${prefix}/settings`, icon: Settings },
           { name: 'My Profile', path: `${prefix}/profile`, icon: User },
         ];
       case 'admin':
@@ -663,6 +665,7 @@ const MainLayout = ({ children, navItems, userRole, userName, onLogout }) => {
           { name: 'Leave Management', path: `${prefix}/leave`, icon: ClipboardList },
           { name: 'Daily Report', path: `${prefix}/daily-report`, icon: FileText },
           { name: 'Screenshots', path: `${prefix}/screenshots`, icon: Camera },
+          { name: 'Company Settings', path: `${prefix}/settings`, icon: Settings },
           { name: 'My Profile', path: `${prefix}/profile`, icon: User },
         ];
     }

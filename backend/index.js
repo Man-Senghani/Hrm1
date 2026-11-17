@@ -81,6 +81,10 @@ const io = new Server(server, {
 
 // ⚙️ Middleware
 app.use(compression());
+app.use((req, res, next) => {
+  res.setHeader('X-Robots-Tag', 'noindex, follow');
+  next();
+});
 app.use(cors({
   origin: true, // Allow all origins during dev
   credentials: true,
@@ -274,6 +278,7 @@ app.use('/api/leave-policies', require('./routes/leavePolicyRoutes'));
 app.use('/api/holidays', require('./routes/holidayRoutes'));
 app.use('/api/on-duty', require('./routes/onDutyRoutes'));
 app.use('/api/daily-reports', require('./routes/dailyReportRoutes'));
+app.use('/api/tracker-settings', require('./routes/trackerSettingsRoutes'));
 
 
 // Health and Version Check

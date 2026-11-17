@@ -19,6 +19,23 @@ const OfflineRequest = require('../models/OfflineRequest');
 const Notification = require('../models/Notification');
 const Leave = require('../models/Leave');
 const mongoose = require('mongoose');
+const TrackerSettings = require('../models/TrackerSettings');
+
+let cachedIdleThresholdSeconds = 600;
+let lastSettingsCheckTime = 0;
+
+const getDynamicIdleThreshold = async () => {
+  const now = Date.now();
+  if (now - lastSettingsCheckTime < 30000) return cachedIdleThresholdSeconds;
+  try {
+    const settings = await TrackerSettings.findOne().sort({ createdAt: -1 }).lean();
+    if (settings && settings.inactivityTimeoutMinutes) {
+      cachedIdleThresholdSeconds = Math.max(60, settings.inactivityTimeoutMinutes * 60);
+    }
+    lastSettingsCheckTime = now;
+  } catch (e) {}
+  return cachedIdleThresholdSeconds;
+};
 
 // ── CONFIG // Constants for Idle tracking (MUST MATCH DESKTOP APP & WEB APP)
 const IDLE_THRESHOLD_SECONDS = 600; // 10 minutes (600 seconds)
@@ -573,7 +590,8 @@ exports.updateActivity = async (req, res) => {
         // ── Idle transition ──
         if (!session.idleApplied) {
           // Flush active duration up to idle transition, deducting exact idle threshold/duration
-          const idleDuration = Math.max(IDLE_THRESHOLD_SECONDS, parseInt(req.body.idleSeconds || IDLE_THRESHOLD_SECONDS, 10));
+          const currentThreshold = await getDynamicIdleThreshold();
+          const idleDuration = Math.max(currentThreshold, parseInt(req.body.idleSeconds || currentThreshold, 10));
           const segmentDuration = flushSegment(session, now);
           const activeSegment = Math.max(0, segmentDuration - idleDuration);
           session.activeTime += activeSegment;

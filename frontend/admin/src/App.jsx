@@ -27,7 +27,7 @@ import Login from '@shared/pages/Login';
 import ForgotPassword from '@shared/pages/ForgotPassword';
 import ResetPassword from '@shared/pages/ResetPassword';
 import MainLayout from '@shared/layouts/MainLayout';
-import { Users, Calendar, Bell, Camera, User, FileText, ClipboardList, X } from 'lucide-react';
+import { Users, Calendar, Bell, Camera, User, FileText, ClipboardList, X, Settings as SettingsIcon } from 'lucide-react';
 import { syncSessionFromActiveAccount, setupCrossTabSessionSync } from '@shared/utils/sessionSync';
 
 // Route-level pages are lazy-loaded so a role only downloads the code for
@@ -209,6 +209,7 @@ const App = () => {
     { label: 'Leave Management', icon: ClipboardList, path: '/leave' },
     { label: 'Daily Report', icon: FileText, path: '/daily-report' },
     { label: 'Screenshots', icon: Camera, path: '/screenshots' },
+    { label: 'Company Settings', icon: SettingsIcon, path: '/settings' },
     { label: 'My Profile', icon: User, path: '/profile' },
   ];
 
@@ -360,6 +361,8 @@ const App = () => {
             {/* Screenshots */}
             <Route path="screenshots" element={<Screenshots />} />
             <Route path="admin/screenshots" element={<Screenshots />} />
+            <Route path="settings" element={<Settings />} />
+            <Route path="admin/settings" element={<Settings />} />
 
             {/* Profile */}
             <Route path="profile" element={<Profile />} />
@@ -393,6 +396,7 @@ const App = () => {
             <Route path="notifications" element={<Notifications />} />
             <Route path="notifications/all" element={<AllNotifications />} />
             <Route path="screenshots" element={<Screenshots />} />
+            <Route path="settings" element={<Settings />} />
             <Route path="profile" element={<Profile />} />
             <Route path="*" element={<NotFound role="hr" />} />
           </Route>

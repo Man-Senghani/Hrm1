@@ -108,6 +108,7 @@ function App() {
     { label: 'Daily Report', icon: FileText, path: '/daily-report' },
     { label: 'Notifications', icon: Bell, path: '/notifications' },
     { label: 'Screenshots', icon: Camera, path: '/screenshots' },
+    { label: 'Company Settings', icon: SettingsIcon, path: '/settings' },
     { label: 'My Profile', icon: User, path: '/profile' },
   ];
 
@@ -256,6 +257,8 @@ function App() {
             {/* Screenshots */}
             <Route path="/screenshots" element={<Screenshots />} />
             <Route path="/hr/screenshots" element={<Screenshots />} />
+            <Route path="/settings" element={<Settings />} />
+            <Route path="/hr/settings" element={<Settings />} />
 
             {/* Profile */}
             <Route path="/profile" element={<Profile />} />

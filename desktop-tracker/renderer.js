@@ -106,6 +106,39 @@ let API_BASE = `${BACKEND_HOST}/api/time`;
 const POLL_MS = 1000;   // 1s display refresh
 const HEARTBEAT_MS = 10000;  // 10s heartbeat to backend
 
+// ── Dynamic Tracker Settings (Configured via Admin / HR Website) ──
+let currentIdleThresholdSeconds = 600; // default 10 minutes (600s)
+let currentScreenshotIntervalMs = 15 * 60 * 1000; // default 15 minutes
+
+function applyTrackerSettings(settings) {
+  if (!settings) return;
+  if (typeof settings.screenshotIntervalMinutes === 'number' && settings.screenshotIntervalMinutes > 0) {
+    currentScreenshotIntervalMs = settings.screenshotIntervalMinutes * 60 * 1000;
+    console.log(`[SETTINGS] Screenshot interval applied: ${settings.screenshotIntervalMinutes} mins`);
+  }
+  if (typeof settings.inactivityTimeoutMinutes === 'number' && settings.inactivityTimeoutMinutes > 0) {
+    currentIdleThresholdSeconds = settings.inactivityTimeoutMinutes * 60;
+    console.log(`[SETTINGS] Inactivity timeout applied: ${settings.inactivityTimeoutMinutes} mins (${currentIdleThresholdSeconds}s)`);
+    if (window.electronAPI?.setIdleThreshold) {
+      window.electronAPI.setIdleThreshold(currentIdleThresholdSeconds).catch(() => {});
+    }
+  }
+}
+
+async function fetchTrackerSettings() {
+  try {
+    const res = await safeFetch(`${BACKEND_HOST}/api/tracker-settings`, {}, 5000);
+    if (res.ok) {
+      const data = await res.json();
+      if (data?.settings) {
+        applyTrackerSettings(data.settings);
+      }
+    }
+  } catch (err) {
+    console.warn('[SETTINGS] Could not fetch tracker settings:', err.message);
+  }
+}
+
 // ── DOM refs ──────────────────────────────────────────────
 const activeTimerEl = document.getElementById('active-timer');
 const inactiveTimerEl = document.getElementById('inactive-timer');
@@ -168,9 +201,9 @@ if (window.electronAPI?.onSystemIdleStatus) {
 
     // Case 1: Currently ACTIVE — check if user has gone idle (no activity for 10 minutes = 600s)
     if (status === 'ACTIVE' && isSessionRunning) {
-      if (systemIsIdle || idleSeconds >= 600) {
+      if (systemIsIdle || idleSeconds >= currentIdleThresholdSeconds) {
         if (!idleNotificationSent) {
-          triggerIdle(600);
+          triggerIdle(currentIdleThresholdSeconds);
         }
       } else if (idleSeconds < 5) {
         idleNotificationSent = false;
@@ -250,6 +283,7 @@ async function loadSession() {
 
   hideAuthSection();
   await fetchUserProfile();
+  await fetchTrackerSettings();
   initSocket();
   lastStartOrResumeTime = Date.now();
   await pollSessionStatus();
@@ -426,7 +460,7 @@ async function sendHeartbeat() {
 }
 
 // ── Immediately fire idle signal to backend ───────────────
-async function triggerIdle(idleSeconds = 600) {
+async function triggerIdle(idleSeconds = currentIdleThresholdSeconds) {
   if (!authToken || status !== 'ACTIVE') return;
 
   // 🚀 OPTIMISTIC UI: Instantly freeze active timer and lock into IDLE state
@@ -897,7 +931,7 @@ async function handleNetworkRestored() {
           if (offlineStartTime) {
             const elapsedOffline = Math.max(0, Math.floor((Date.now() - offlineStartTime) / 1000));
             // If the user was active on the PC throughout the network drop (< 600s idle), credit as active work
-            if (offlineMaxSystemIdle < 600) {
+            if (offlineMaxSystemIdle < currentIdleThresholdSeconds) {
               offlineActiveSeconds = elapsedOffline;
             }
           }
@@ -1044,6 +1078,7 @@ function stopIdleReminderLoop() {
 // ============================================================
 // 📸 SCREENSHOT ENGINE: 15-Min Random Window (4/hr) + Event Captures
 // ============================================================
+// Screenshot interval defaults to 15 mins and updates dynamically from server
 const FIFTEEN_MINUTES_MS = 15 * 60 * 1000;
 
 async function takeScreenshot(isEventTriggered = false) {
@@ -1085,7 +1120,13 @@ function scheduleNextRandomScreenshot() {
   if (status !== 'ACTIVE' || !isSessionRunning) return;
 
   // Pick a random minute between 1 min and 14 min in the 15-minute slot (4 per hour)
-  const randomMs = Math.floor(60000 + Math.random() * (FIFTEEN_MINUTES_MS - 120000));
+  let minDelayMs = 60000;
+  let maxDelayMs = Math.max(60000, currentScreenshotIntervalMs - 60000);
+  if (maxDelayMs <= minDelayMs) {
+    maxDelayMs = currentScreenshotIntervalMs;
+    minDelayMs = Math.max(10000, Math.floor(currentScreenshotIntervalMs * 0.5));
+  }
+  const randomMs = Math.floor(minDelayMs + Math.random() * (maxDelayMs - minDelayMs));
   console.log(`[SCREENSHOT ENGINE] Next random screenshot scheduled in ${(randomMs / 60000).toFixed(1)} mins`);
   screenshotTimeout = setTimeout(() => {
     takeScreenshot(false);
@@ -1097,7 +1138,7 @@ function initScreenshotLoop(isFirst = false) {
   if (status !== 'ACTIVE') return;
   const randomMs = isFirst
     ? Math.floor(60000 + Math.random() * 300000) // 1-5 mins on start
-    : Math.floor(60000 + Math.random() * (FIFTEEN_MINUTES_MS - 120000));
+    : Math.floor(60000 + Math.random() * (Math.max(70000, currentScreenshotIntervalMs - 60000) - 60000));
   console.log(`[SCREENSHOT ENGINE] Loop started: next capture in ${(randomMs / 60000).toFixed(1)} mins`);
   screenshotTimeout = setTimeout(() => {
     takeScreenshot(false);
@@ -1260,6 +1301,10 @@ async function initSocket() {
       else pollSessionStatus();
     });
     socket.on('timer_update', (data) => { if (data) applyServerState(data); });
+    socket.on('tracker_settings_updated', (settings) => {
+      console.log('[SOCKET] Tracker settings updated in real time:', settings);
+      applyTrackerSettings(settings);
+    });
     socket.on('force_device_logout', (data) => {
       console.warn('[FORCE DEVICE LOGOUT] Another device logged in to this account.');
       showDeviceLogoutModal(data?.message || 'Your account has been logged in on another device. You have been logged out on this machine.');
@@ -1341,6 +1386,7 @@ if (window.electronAPI?.onDeepLinkToken) {
 
     hideAuthSection();
     await fetchUserProfile();
+  await fetchTrackerSettings();
     initSocket();
     await pollSessionStatus();
     startPolling();
@@ -1359,6 +1405,7 @@ if (window.electronAPI?.onDeepLinkAction) {
       if (authToken) {
         hideAuthSection();
         await fetchUserProfile();
+  await fetchTrackerSettings();
         await pollSessionStatus();
         startPolling();
         startHeartbeat();

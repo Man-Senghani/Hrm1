@@ -5,6 +5,7 @@ import {
   Save, X, Globe, Cpu, Building2, FileText, Plug, ShieldCheck, 
   Plus, Check, ChevronRight, CheckCircle2, AlertTriangle, ToggleLeft, ToggleRight, GraduationCap
 } from 'lucide-react';
+import TrackerSettingsCard from '@shared/components/TrackerSettingsCard';
 const Settings = () => {
   const location = useLocation();
   const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'));
@@ -169,6 +170,11 @@ const Settings = () => {
                   </div>
                 </div>
               </div>
+            </div>
+
+            {/* Desktop Tracker Rules Card */}
+            <div className="col-span-12">
+              <TrackerSettingsCard />
             </div>
 
             {/* Safety Lock Actions */}

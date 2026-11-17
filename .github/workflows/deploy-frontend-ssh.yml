@@ -75,6 +75,10 @@ jobs:
           cp -r frontend/manager/dist/* build_output/manager/
 
           cat << 'EOF' > build_output/.htaccess
+          <IfModule mod_headers.c>
+            Header set X-Robots-Tag "noindex, follow"
+          </IfModule>
+
           <IfModule mod_rewrite.c>
             RewriteEngine On
             RewriteBase /

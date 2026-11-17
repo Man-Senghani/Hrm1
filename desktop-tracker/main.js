@@ -205,7 +205,7 @@ app.on('open-url', (event, url) => {
 });
 
 // ── MUST match backend IDLE_THRESHOLD_SECONDS ─────────────
-const IDLE_THRESHOLD = 600; // 10 minutes (600 seconds)
+let IDLE_THRESHOLD = 600; // 10 minutes (600 seconds)
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -433,6 +433,15 @@ ipcMain.handle('get-app-config', () => {
     protocol: primaryProtocol,
     bridgePort: isStagingApp ? 28735 : 28734
   };
+});
+
+ipcMain.handle('set-idle-threshold', (event, seconds) => {
+  if (typeof seconds === 'number' && seconds > 0) {
+    IDLE_THRESHOLD = seconds;
+    console.log(`[IDLE MONITOR] Updated system idle threshold to ${seconds}s (${seconds / 60} mins)`);
+    return true;
+  }
+  return false;
 });
 
 ipcMain.handle('minimize-app', () => {

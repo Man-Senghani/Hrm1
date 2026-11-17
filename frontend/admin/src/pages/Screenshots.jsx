@@ -10,6 +10,7 @@ import {
   ArrowUp, ArrowDown, SlidersHorizontal
 } from 'lucide-react';
 import { API_BASE_URL, getImageUrl } from '@shared/services/api';
+import TrackerSettingsModal from '@shared/components/TrackerSettingsModal';
 
 const getLocalISODate = (date = new Date()) => {
   const year = date.getFullYear();
@@ -63,6 +64,7 @@ const Screenshots = () => {
   const [folderFilterDate, setFolderFilterDate] = useState('all'); // 'all', 'today', 'yesterday', 'last7days'
   const [folderFilterActivity, setFolderFilterActivity] = useState('all'); // 'all', 'active', 'inactive'
   const [folderSortBy, setFolderSortBy] = useState('name-asc'); // 'name-asc', 'name-desc', 'captures-desc', 'captures-asc'
+  const [showTrackerSettings, setShowTrackerSettings] = useState(false);
 
   const activeFolderFiltersCount = [
     folderFilterRole !== 'all',
@@ -662,6 +664,16 @@ const Screenshots = () => {
               </div>
             </>
           )}
+
+          {/* Tracker Configuration Button */}
+          <button 
+            onClick={() => setShowTrackerSettings(true)}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white dark:bg-[#1a1714] border border-slate-200 dark:border-[#38352e] hover:border-[#00a76b] text-slate-700 dark:text-slate-300 transition-all shadow-xs cursor-pointer text-xs font-bold"
+            title="Configure Screenshot & Inactivity Rules"
+          >
+            <SlidersHorizontal size={14} className="text-[#00a76b]" />
+            <span className="hidden sm:inline">Tracker Rules</span>
+          </button>
 
           {/* Refresh Button */}
           <button 
@@ -1299,8 +1311,14 @@ const Screenshots = () => {
         </div>,
         document.body
       )}
+      {/* Tracker Settings Modal */}
+      <TrackerSettingsModal 
+        isOpen={showTrackerSettings} 
+        onClose={() => setShowTrackerSettings(false)} 
+      />
     </div>
   );
 };
 
 export default Screenshots;
+
